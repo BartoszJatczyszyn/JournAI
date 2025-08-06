@@ -1,0 +1,9 @@
+Traceback (most recent call last):
+  File "C:\Users\barto\AI\migrate_garmin_activities.py", line 421, in <module>
+    migrate_activities()
+  File "C:\Users\barto\AI\migrate_garmin_activities.py", line 203, in migrate_activities
+    check_and_create_activities_table()
+  File "C:\Users\barto\AI\migrate_garmin_activities.py", line 128, in check_and_create_activities_table
+    cursor.execute(create_table_sql)
+psycopg2.errors.UndefinedColumn: column "sport" does not exist
+

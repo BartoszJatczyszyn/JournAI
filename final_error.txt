@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "C:\Users\barto\AI\final_activities_check.py", line 91, in <module>
+    cursor.execute("""
+psycopg2.errors.UndefinedFunction: function round(double precision, integer) does not exist
+LINE 6:                     ROUND(distance/1000.0, 1) as distance_km...
+                            ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+

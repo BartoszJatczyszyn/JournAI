@@ -1,0 +1,23 @@
+=== GARMIN ACTIVITIES MIGRATION CHECK ===
+✅ Basic imports work
+✅ Source database exists: 290226176 bytes
+✅ Source activities: 1025
+✅ PostgreSQL connection successful
+✅ garmin_activities table exists
+✅ PostgreSQL activities: 1025
+📊 Migration rate: 100.0%
+🎉 MIGRATION SUCCESSFUL!
+
+🏃 Top activity types:
+  • walking: 647
+  • cycling: 122
+  • running: 100
+  • fitness_equipment: 81
+  • UnknownEnumValue_67: 19
+❌ Error: function round(double precision, integer) does not exist
+LINE 6:                     ROUND(distance/1000.0, 1) as distance_km...
+                            ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+
+
+=== CHECK COMPLETE ===

@@ -1,0 +1,1291 @@
+#!/usr/bin/env python3
+"""
+Enhanced Garmin Data Migration Script with better error handling and SQLAlchemy ORM
+"""
+
+import os
+import json
+import sqlite3
+from datetime import datetime, date
+from pathlib import Path
+from typing import Optional, Dict, Any
+import logging
+
+# Third-party imports
+from sqlalchemy import create_engine, Column, Integer, BigInteger, String, Float, Boolean, Date, DateTime, Text, ForeignKey
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.dialects.postgresql import insert
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv('config.env')
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('migration.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# SQLAlchemy Base
+Base = declarative_base()
+
+class GarminDailySummary(Base):
+    __tablename__ = 'garmin_daily_summaries'
+    
+    day = Column(Date, primary_key=True, index=True)
+    steps = Column(Integer)
+    distance_meters = Column(Float)
+    calories_burned = Column(Integer)
+    active_calories = Column(Integer)
+    calories_bmr_avg = Column(Integer)
+    calories_goal = Column(Integer)
+    floors_climbed = Column(Integer)
+    
+    # Heart rate metrics
+    hr_avg = Column(Integer)
+    hr_min = Column(Integer)
+    hr_max = Column(Integer)
+    resting_heart_rate = Column(Integer)
+    rhr_avg = Column(Integer)
+    rhr_min = Column(Integer)
+    rhr_max = Column(Integer)
+    inactive_hr_avg = Column(Integer)
+    inactive_hr_min = Column(Integer)
+    inactive_hr_max = Column(Integer)
+    
+    # Activity and intensity
+    intensity_time = Column(Integer)
+    moderate_activity_time = Column(Integer)
+    vigorous_activity_time = Column(Integer)
+    activities_calories = Column(Integer)
+    activities_distance = Column(Float)
+    
+    # Health metrics
+    stress_avg = Column(Integer)
+    spo2_avg = Column(Float)
+    spo2_min = Column(Integer)
+    rr_waking_avg = Column(Float)
+    rr_max = Column(Float)
+    rr_min = Column(Float)
+    sweat_loss_avg = Column(Float)
+    sweat_loss = Column(Float)
+    
+    # Body Battery
+    body_battery_max = Column(Integer)
+    body_battery_min = Column(Integer)
+    bb_max = Column(Integer)
+    bb_min = Column(Integer)
+    body_battery_charged = Column(Integer)
+    body_battery_drained = Column(Integer)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship
+    journal = relationship("DailyJournal", back_populates="daily_summary", uselist=False)
+
+class GarminActivity(Base):
+    __tablename__ = 'garmin_activities'
+    
+    activity_id = Column(BigInteger, primary_key=True)
+    day = Column(Date, index=True)
+    activity_type = Column(String(100))
+    activity_name = Column(String(200))
+    start_time = Column(DateTime)
+    duration_seconds = Column(Integer)
+    distance_meters = Column(Float)
+    calories = Column(Integer)
+    avg_heart_rate = Column(Integer)
+    max_heart_rate = Column(Integer)
+    avg_speed = Column(Float)
+    max_speed = Column(Float)
+    elevation_gain = Column(Float)
+    elevation_loss = Column(Float)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class GarminSleepSession(Base):
+    __tablename__ = 'garmin_sleep_sessions'
+    
+    sleep_id = Column(BigInteger, primary_key=True)
+    day = Column(Date, index=True)
+    sleep_start = Column(DateTime)
+    sleep_end = Column(DateTime)
+    sleep_duration_seconds = Column(Integer)
+    deep_sleep_seconds = Column(Integer)
+    light_sleep_seconds = Column(Integer)
+    rem_sleep_seconds = Column(Integer)
+    awake_seconds = Column(Integer)
+    nap_duration_seconds = Column(Integer)
+    sleep_score = Column(Integer)
+    sleep_quality = Column(String(50))
+    # Additional sleep metrics
+    avg_sleep_stress = Column(Float)
+    avg_spo2 = Column(Float)
+    lowest_spo2 = Column(Integer)
+    highest_spo2 = Column(Integer)
+    avg_respiration = Column(Float)
+    awake_count = Column(Integer)
+    sleep_need_baseline = Column(Integer)
+    sleep_need_actual = Column(Integer)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class GarminWeight(Base):
+    __tablename__ = 'garmin_weight'
+    
+    day = Column(Date, primary_key=True, index=True)
+    weight_grams = Column(Float)
+    weight_kg = Column(Float)
+    bmi = Column(Float)
+    body_fat_percentage = Column(Float)
+    muscle_mass_kg = Column(Float)
+    bone_mass_kg = Column(Float)
+    body_water_percentage = Column(Float)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class GarminStressData(Base):
+    __tablename__ = 'garmin_stress_data'
+    
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, index=True)
+    day = Column(Date, index=True)
+    stress_level = Column(Integer)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class GarminHeartRateData(Base):
+    __tablename__ = 'garmin_heart_rate_data'
+    
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, index=True)
+    day = Column(Date, index=True)
+    heart_rate = Column(Integer)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class GarminRespiratoryRateData(Base):
+    __tablename__ = 'garmin_respiratory_rate_data'
+    
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, index=True)
+    day = Column(Date, index=True)
+    respiratory_rate = Column(Float)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class GarminActivity(Base):
+    __tablename__ = 'garmin_activities'
+    
+    activity_id = Column(BigInteger, primary_key=True)
+    name = Column(String(255))
+    description = Column(Text)
+    sport = Column(String(100))
+    sub_sport = Column(String(100))
+    start_time = Column(DateTime, index=True)
+    stop_time = Column(DateTime)
+    day = Column(Date, index=True)
+    
+    # Duration and distance
+    elapsed_time = Column(Integer)  # seconds
+    moving_time = Column(Integer)   # seconds
+    distance = Column(Float)        # meters
+    
+    # Performance metrics
+    calories = Column(Integer)
+    training_load = Column(Float)
+    training_effect = Column(Float)
+    anaerobic_training_effect = Column(Float)
+    self_eval_feel = Column(Integer)
+    self_eval_effort = Column(Integer)
+    
+    # Heart rate
+    avg_hr = Column(Integer)
+    max_hr = Column(Integer)
+    
+    # Speed and pace
+    avg_speed = Column(Float)       # m/s
+    max_speed = Column(Float)       # m/s
+    avg_pace = Column(Float)        # min/km (calculated)
+    
+    # Cadence
+    avg_cadence = Column(Float)     # steps/min or rpm
+    max_cadence = Column(Float)
+    
+    # Elevation
+    ascent = Column(Float)          # meters
+    descent = Column(Float)         # meters
+    
+    # Running dynamics
+    avg_step_length = Column(Float)         # meters
+    avg_vertical_ratio = Column(Float)      # %
+    avg_vertical_oscillation = Column(Float) # cm
+    avg_ground_contact_time = Column(Float)  # ms
+    avg_ground_contact_balance = Column(Float) # %
+    
+    # Temperature
+    avg_temperature = Column(Float)
+    max_temperature = Column(Float)
+    min_temperature = Column(Float)
+    
+    # GPS coordinates
+    start_lat = Column(Float)
+    start_long = Column(Float)
+    stop_lat = Column(Float)
+    stop_long = Column(Float)
+    
+    # Additional metrics
+    cycles = Column(Integer)        # total steps or strokes
+    avg_rr = Column(Float)         # respiratory rate
+    max_rr = Column(Float)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class DailyJournal(Base):
+    __tablename__ = 'daily_journal'
+    
+    day = Column(Date, ForeignKey("garmin_daily_summaries.day"), primary_key=True, index=True, nullable=False)
+    location = Column(String(200))
+    mood = Column(String(100))
+    alcohol = Column(String(100))
+    meditated = Column(Boolean)
+    calories_controlled = Column(Boolean)
+    sweet_cravings = Column(Boolean)
+    night_snacking = Column(Boolean)
+    notes = Column(Text)
+    
+    # Supplements
+    supplement_ashwagandha = Column(Boolean, default=False)
+    supplement_magnesium = Column(Boolean, default=False)
+    supplement_vitamin_d = Column(Boolean, default=False)
+    supplements_taken = Column(String(500))
+    
+    # Sleep environment
+    used_sleep_mask = Column(Boolean)
+    used_ear_plugs = Column(Boolean)
+    bedroom_temp_rating = Column(String(50))
+    read_before_sleep = Column(Boolean)
+    used_phone_before_sleep = Column(Boolean)
+    hot_bath_before_sleep = Column(Boolean)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship
+    daily_summary = relationship("GarminDailySummary", back_populates="journal")
+
+class EnhancedGarminMigrator:
+    def __init__(self):
+        self.health_data_path = Path(os.getenv('HEALTH_DATA_PATH', 'HealthData'))
+        self.setup_database()
+        
+    def setup_database(self):
+        """Setup database connection and create tables"""
+        db_url = f"postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
+        
+        self.engine = create_engine(db_url, echo=False)
+        self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
+        
+        # Create all tables
+        Base.metadata.create_all(bind=self.engine)
+        logger.info("Database tables created/verified")
+
+    def load_json_data(self, file_path: Path) -> Optional[Dict[Any, Any]]:
+        """Load JSON data from file"""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.warning(f"Could not load {file_path}: {e}")
+            return None
+
+    def parse_date_from_filename(self, filename: str) -> Optional[date]:
+        """Extract date from filename like 'sleep_2025-08-04.json'"""
+        try:
+            date_str = filename.split('_')[1].replace('.json', '')
+            return datetime.strptime(date_str, '%Y-%m-%d').date()
+        except Exception as e:
+            logger.warning(f"Could not parse date from {filename}: {e}")
+            return None
+
+    def safe_timestamp_to_datetime(self, timestamp_ms: int) -> Optional[datetime]:
+        """Safely convert timestamp to datetime with validation"""
+        try:
+            # Check if timestamp is reasonable (between 1970 and 2100)
+            if timestamp_ms < 0 or timestamp_ms > 4102444800000:  # Year 2100
+                logger.warning(f"Invalid timestamp: {timestamp_ms}")
+                return None
+            
+            return datetime.fromtimestamp(timestamp_ms / 1000)
+        except (ValueError, OSError, OverflowError) as e:
+            logger.warning(f"Invalid timestamp {timestamp_ms}: {e}")
+            return None
+
+    def safe_int_conversion(self, value: Any, max_value: int = 2147483647) -> Optional[int]:
+        """Safely convert value to integer with range checking"""
+        try:
+            if value is None:
+                return None
+            
+            int_value = int(value)
+            
+            # Check if value fits in PostgreSQL INTEGER range
+            if int_value > max_value or int_value < -2147483648:
+                logger.warning(f"Integer value {int_value} out of range, skipping")
+                return None
+                
+            return int_value
+        except (ValueError, TypeError):
+            return None
+
+    def migrate_sleep_data(self):
+        """Migrate sleep data from JSON files with improved error handling"""
+        sleep_dir = self.health_data_path / "Sleep"
+        if not sleep_dir.exists():
+            logger.warning("Sleep directory not found")
+            return
+            
+        session = self.SessionLocal()
+        migrated_count = 0
+        error_count = 0
+        
+        try:
+            for file_path in sleep_dir.glob("*.json"):
+                try:
+                    day = self.parse_date_from_filename(file_path.name)
+                    if not day:
+                        continue
+                        
+                    data = self.load_json_data(file_path)
+                    if not data or 'dailySleepDTO' not in data:
+                        continue
+                        
+                    sleep_data = data['dailySleepDTO']
+                    
+                    # Safely convert sleep_id to BigInteger
+                    sleep_id = sleep_data.get('id')
+                    if sleep_id is None:
+                        logger.warning(f"No sleep ID found for {day}")
+                        continue
+                    
+                    # Convert timestamps safely
+                    sleep_start = None
+                    sleep_end = None
+                    if sleep_data.get('sleepStartTimestampLocal'):
+                        sleep_start = self.safe_timestamp_to_datetime(sleep_data['sleepStartTimestampLocal'])
+                    if sleep_data.get('sleepEndTimestampLocal'):
+                        sleep_end = self.safe_timestamp_to_datetime(sleep_data['sleepEndTimestampLocal'])
+                    
+                    # Safely convert duration values
+                    sleep_duration = self.safe_int_conversion(sleep_data.get('sleepTimeSeconds'))
+                    nap_duration = self.safe_int_conversion(sleep_data.get('napTimeSeconds'))
+                    
+                    # Extract sleep score safely
+                    sleep_score = None
+                    if sleep_data.get('sleepScores'):
+                        overall_score = sleep_data['sleepScores'].get('overall', {})
+                        if overall_score and 'value' in overall_score:
+                            sleep_score = self.safe_int_conversion(overall_score['value'])
+                    
+                    # Extract detailed sleep stage data
+                    deep_sleep = self.safe_int_conversion(sleep_data.get('deepSleepSeconds'))
+                    light_sleep = self.safe_int_conversion(sleep_data.get('lightSleepSeconds'))
+                    rem_sleep = self.safe_int_conversion(sleep_data.get('remSleepSeconds'))
+                    awake_sleep = self.safe_int_conversion(sleep_data.get('awakeSleepSeconds'))
+                    
+                    # Extract additional sleep metrics
+                    avg_sleep_stress = sleep_data.get('avgSleepStress')
+                    avg_spo2 = sleep_data.get('averageSpO2Value')
+                    lowest_spo2 = self.safe_int_conversion(sleep_data.get('lowestSpO2Value'))
+                    highest_spo2 = self.safe_int_conversion(sleep_data.get('highestSpO2Value'))
+                    avg_respiration = sleep_data.get('averageRespirationValue')
+                    awake_count = self.safe_int_conversion(sleep_data.get('awakeCount'))
+                    
+                    # Extract sleep need data
+                    sleep_need_baseline = None
+                    sleep_need_actual = None
+                    if sleep_data.get('sleepNeed'):
+                        sleep_need_baseline = self.safe_int_conversion(sleep_data['sleepNeed'].get('baseline'))
+                        sleep_need_actual = self.safe_int_conversion(sleep_data['sleepNeed'].get('actual'))
+                    
+                    # Use upsert to handle duplicates
+                    stmt = insert(GarminSleepSession).values(
+                        sleep_id=sleep_id,
+                        day=day,
+                        sleep_start=sleep_start,
+                        sleep_end=sleep_end,
+                        sleep_duration_seconds=sleep_duration,
+                        deep_sleep_seconds=deep_sleep,
+                        light_sleep_seconds=light_sleep,
+                        rem_sleep_seconds=rem_sleep,
+                        awake_seconds=awake_sleep,
+                        nap_duration_seconds=nap_duration,
+                        sleep_score=sleep_score,
+                        avg_sleep_stress=avg_sleep_stress,
+                        avg_spo2=avg_spo2,
+                        lowest_spo2=lowest_spo2,
+                        highest_spo2=highest_spo2,
+                        avg_respiration=avg_respiration,
+                        awake_count=awake_count,
+                        sleep_need_baseline=sleep_need_baseline,
+                        sleep_need_actual=sleep_need_actual
+                    )
+                    stmt = stmt.on_conflict_do_update(
+                        index_elements=['sleep_id'],
+                        set_=dict(
+                            day=stmt.excluded.day,
+                            sleep_start=stmt.excluded.sleep_start,
+                            sleep_end=stmt.excluded.sleep_end,
+                            sleep_duration_seconds=stmt.excluded.sleep_duration_seconds,
+                            deep_sleep_seconds=stmt.excluded.deep_sleep_seconds,
+                            light_sleep_seconds=stmt.excluded.light_sleep_seconds,
+                            rem_sleep_seconds=stmt.excluded.rem_sleep_seconds,
+                            awake_seconds=stmt.excluded.awake_seconds,
+                            nap_duration_seconds=stmt.excluded.nap_duration_seconds,
+                            sleep_score=stmt.excluded.sleep_score,
+                            avg_sleep_stress=stmt.excluded.avg_sleep_stress,
+                            avg_spo2=stmt.excluded.avg_spo2,
+                            lowest_spo2=stmt.excluded.lowest_spo2,
+                            highest_spo2=stmt.excluded.highest_spo2,
+                            avg_respiration=stmt.excluded.avg_respiration,
+                            awake_count=stmt.excluded.awake_count,
+                            sleep_need_baseline=stmt.excluded.sleep_need_baseline,
+                            sleep_need_actual=stmt.excluded.sleep_need_actual
+                        )
+                    )
+                    session.execute(stmt)
+                    migrated_count += 1
+                    
+                except Exception as e:
+                    error_count += 1
+                    logger.error(f"Error processing sleep file {file_path}: {e}")
+                    continue
+                
+            session.commit()
+            logger.info(f"Migrated {migrated_count} sleep records ({error_count} errors)")
+            
+        except Exception as e:
+            logger.error(f"Error migrating sleep data: {e}")
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def migrate_rhr_data(self):
+        """Migrate resting heart rate data with improved error handling"""
+        rhr_dir = self.health_data_path / "RHR"
+        if not rhr_dir.exists():
+            logger.warning("RHR directory not found")
+            return
+            
+        session = self.SessionLocal()
+        migrated_count = 0
+        error_count = 0
+        
+        try:
+            for file_path in rhr_dir.glob("*.json"):
+                try:
+                    day = self.parse_date_from_filename(file_path.name)
+                    if not day:
+                        continue
+                        
+                    data = self.load_json_data(file_path)
+                    if not data or 'allMetrics' not in data:
+                        continue
+                        
+                    metrics = data['allMetrics']['metricsMap']
+                    rhr_data = metrics.get('WELLNESS_RESTING_HEART_RATE', [])
+                    
+                    if rhr_data:
+                        rhr_value = self.safe_int_conversion(rhr_data[0].get('value'))
+                        
+                        if rhr_value is not None:
+                            # Upsert daily summary with RHR
+                            stmt = insert(GarminDailySummary).values(
+                                day=day,
+                                resting_heart_rate=rhr_value
+                            )
+                            stmt = stmt.on_conflict_do_update(
+                                index_elements=['day'],
+                                set_=dict(
+                                    resting_heart_rate=stmt.excluded.resting_heart_rate,
+                                    updated_at=datetime.utcnow()
+                                )
+                            )
+                            session.execute(stmt)
+                            migrated_count += 1
+                        
+                except Exception as e:
+                    error_count += 1
+                    logger.error(f"Error processing RHR file {file_path}: {e}")
+                    continue
+                
+            session.commit()
+            logger.info(f"Migrated {migrated_count} RHR records ({error_count} errors)")
+            
+        except Exception as e:
+            logger.error(f"Error migrating RHR data: {e}")
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def migrate_daily_summary_data(self):
+        """Migrate comprehensive daily summary data from garmin.db"""
+        garmin_db_path = self.health_data_path / "DBs" / "garmin.db"
+        if not garmin_db_path.exists():
+            logger.warning("Garmin database not found")
+            return
+            
+        session = self.SessionLocal()
+        migrated_count = 0
+        
+        try:
+            # Connect to SQLite garmin database
+            sqlite_conn = sqlite3.connect(str(garmin_db_path))
+            sqlite_cursor = sqlite_conn.cursor()
+            
+            # Check if daily_summary table exists
+            sqlite_cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='daily_summary'")
+            if not sqlite_cursor.fetchone():
+                logger.warning("daily_summary table not found in garmin database")
+                sqlite_conn.close()
+                return
+            
+            # Get all available columns
+            sqlite_cursor.execute('PRAGMA table_info(daily_summary)')
+            available_columns = [col[1] for col in sqlite_cursor.fetchall()]
+            logger.info(f"Available columns in daily_summary: {available_columns}")
+            
+            # Map database columns to our model fields based on garmin.db structure
+            column_mapping = {
+                'day': 'day',
+                'steps': 'steps',
+                'distance': 'distance_meters',
+                'calories_total': 'calories_burned',
+                'calories_active': 'active_calories',
+                'calories_bmr': 'calories_bmr_avg',
+                'calories_goal': 'calories_goal',
+                'floors_climbed': 'floors_climbed',
+                'hr_avg': 'hr_avg',
+                'hr_min': 'hr_min', 
+                'hr_max': 'hr_max',
+                'max_heart_rate': 'hr_max',
+                'rhr_avg': 'rhr_avg',
+                'resting_heart_rate': 'resting_heart_rate',
+                'rhr_min': 'rhr_min',
+                'rhr_max': 'rhr_max',
+                'inactive_hr_avg': 'inactive_hr_avg',
+                'inactive_hr_min': 'inactive_hr_min',
+                'inactive_hr_max': 'inactive_hr_max',
+                'intensity_time': 'intensity_time',
+                'moderate_activity_time': 'moderate_activity_time',
+                'vigorous_activity_time': 'vigorous_activity_time',
+                'activities_calories': 'activities_calories',
+                'activities_distance': 'activities_distance',
+                'stress_avg': 'stress_avg',
+                'spo2_avg': 'spo2_avg',
+                'spo2_min': 'spo2_min',
+                'rr_waking_avg': 'rr_waking_avg',
+                'rr_max': 'rr_max',
+                'rr_min': 'rr_min',
+                'sweat_loss_avg': 'sweat_loss_avg',
+                'sweat_loss': 'sweat_loss',
+                'bb_max': 'body_battery_max',
+                'bb_min': 'body_battery_min',
+                'bb_charged': 'body_battery_charged',
+                'body_battery_max': 'body_battery_max',
+                'body_battery_min': 'body_battery_min',
+                'body_battery_charged': 'body_battery_charged',
+                'body_battery_drained': 'body_battery_drained'
+            }
+            
+            # Build query with available columns
+            select_columns = []
+            for db_col, model_field in column_mapping.items():
+                if db_col in available_columns:
+                    select_columns.append(db_col)
+            
+            if not select_columns:
+                logger.warning("No matching columns found in daily_summary")
+                sqlite_conn.close()
+                return
+            
+            # Query data
+            query = f"SELECT {', '.join(select_columns)} FROM daily_summary WHERE day IS NOT NULL"
+            sqlite_cursor.execute(query)
+            
+            for row in sqlite_cursor.fetchall():
+                try:
+                    # Create data dict
+                    data = {}
+                    for i, col_name in enumerate(select_columns):
+                        model_field = column_mapping[col_name]
+                        value = row[i]
+                        
+                        # Convert data types
+                        if col_name == 'day':
+                            if isinstance(value, str):
+                                data[model_field] = datetime.strptime(value, '%Y-%m-%d').date()
+                            else:
+                                continue
+                        elif 'distance' in col_name or 'spo2' in col_name or 'rr_' in col_name or 'sweat' in col_name:
+                            data[model_field] = float(value) if value is not None else None
+                        else:
+                            data[model_field] = self.safe_int_conversion(value)
+                    
+                    if 'day' not in data:
+                        continue
+                    
+                    # Upsert daily summary
+                    stmt = insert(GarminDailySummary).values(**data)
+                    
+                    # Build conflict resolution
+                    update_dict = {k: getattr(stmt.excluded, k) for k in data.keys() if k != 'day'}
+                    update_dict['updated_at'] = datetime.utcnow()
+                    
+                    stmt = stmt.on_conflict_do_update(
+                        index_elements=['day'],
+                        set_=update_dict
+                    )
+                    session.execute(stmt)
+                    migrated_count += 1
+                    
+                except Exception as e:
+                    logger.warning(f"Error processing daily summary row: {e}")
+                    continue
+            
+            sqlite_conn.close()
+            session.commit()
+            logger.info(f"Migrated {migrated_count} daily summary records")
+            
+        except Exception as e:
+            logger.error(f"Error migrating daily summary data: {e}")
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def migrate_stress_data(self):
+        """Migrate minute-by-minute stress data from garmin.db"""
+        garmin_db_path = self.health_data_path / "DBs" / "garmin.db"
+        if not garmin_db_path.exists():
+            logger.warning("Garmin database not found")
+            return
+            
+        session = self.SessionLocal()
+        migrated_count = 0
+        
+        try:
+            # Connect to SQLite garmin database
+            sqlite_conn = sqlite3.connect(str(garmin_db_path))
+            sqlite_cursor = sqlite_conn.cursor()
+            
+            # Check if stress table exists
+            sqlite_cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='stress'")
+            if not sqlite_cursor.fetchone():
+                logger.warning("stress table not found in garmin database")
+                sqlite_conn.close()
+                return
+            
+            # Get table structure
+            sqlite_cursor.execute('PRAGMA table_info(stress)')
+            columns = [col[1] for col in sqlite_cursor.fetchall()]
+            logger.info(f"Available columns in stress table: {columns}")
+            
+            # Look for timestamp and stress level columns
+            timestamp_col = None
+            stress_col = None
+            
+            for col in columns:
+                if 'timestamp' in col.lower() or 'time' in col.lower():
+                    timestamp_col = col
+                if 'stress' in col.lower() and 'level' in col.lower():
+                    stress_col = col
+                elif 'stress' in col.lower() and timestamp_col:  # fallback to any stress column
+                    stress_col = col
+            
+            if not timestamp_col or not stress_col:
+                logger.warning(f"Required columns not found. Available: {columns}")
+                sqlite_conn.close()
+                return
+            
+            logger.info(f"Using columns: timestamp={timestamp_col}, stress={stress_col}")
+            
+            # Query stress data
+            query = f"SELECT {timestamp_col}, {stress_col} FROM stress WHERE {stress_col} IS NOT NULL ORDER BY {timestamp_col}"
+            sqlite_cursor.execute(query)
+            
+            for row in sqlite_cursor.fetchall():
+                try:
+                    timestamp_value, stress_value = row
+                    
+                    # Convert timestamp to datetime
+                    if isinstance(timestamp_value, (int, float)):
+                        # Unix timestamp (seconds or milliseconds)
+                        if timestamp_value > 1e10:  # milliseconds
+                            dt = datetime.fromtimestamp(timestamp_value / 1000)
+                        else:  # seconds
+                            dt = datetime.fromtimestamp(timestamp_value)
+                    elif isinstance(timestamp_value, str):
+                        # String timestamp
+                        try:
+                            dt = datetime.fromisoformat(timestamp_value.replace('Z', '+00:00'))
+                        except:
+                            dt = datetime.strptime(timestamp_value, '%Y-%m-%d %H:%M:%S')
+                    else:
+                        continue
+                    
+                    # Extract day
+                    day = dt.date()
+                    
+                    # Convert stress value
+                    stress_level = self.safe_int_conversion(stress_value)
+                    if stress_level is None:
+                        continue
+                    
+                    # Upsert stress data
+                    stmt = insert(GarminStressData).values(
+                        timestamp=dt,
+                        day=day,
+                        stress_level=stress_level
+                    )
+                    stmt = stmt.on_conflict_do_nothing()  # Avoid duplicates
+                    session.execute(stmt)
+                    migrated_count += 1
+                    
+                    # Commit in batches
+                    if migrated_count % 1000 == 0:
+                        session.commit()
+                        logger.info(f"Migrated {migrated_count} stress records...")
+                    
+                except Exception as e:
+                    logger.warning(f"Error processing stress row {row}: {e}")
+                    continue
+            
+            sqlite_conn.close()
+            session.commit()
+            logger.info(f"Migrated {migrated_count} stress records")
+            
+        except Exception as e:
+            logger.error(f"Error migrating stress data: {e}")
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def migrate_heart_rate_data(self):
+        """Migrate minute-by-minute heart rate data from garmin_monitoring.db"""
+        monitoring_db_path = self.health_data_path / "DBs" / "garmin_monitoring.db"
+        if not monitoring_db_path.exists():
+            logger.warning("Garmin monitoring database not found")
+            return
+            
+        session = self.SessionLocal()
+        migrated_count = 0
+        
+        try:
+            # Connect to SQLite monitoring database
+            sqlite_conn = sqlite3.connect(str(monitoring_db_path))
+            sqlite_cursor = sqlite_conn.cursor()
+            
+            # Check if monitoring_hr table exists
+            sqlite_cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='monitoring_hr'")
+            if not sqlite_cursor.fetchone():
+                logger.warning("monitoring_hr table not found in garmin_monitoring database")
+                sqlite_conn.close()
+                return
+            
+            # Get table structure
+            sqlite_cursor.execute('PRAGMA table_info(monitoring_hr)')
+            columns = [col[1] for col in sqlite_cursor.fetchall()]
+            logger.info(f"Available columns in monitoring_hr table: {columns}")
+            
+            # Look for timestamp and heart rate columns
+            timestamp_col = None
+            hr_col = None
+            
+            for col in columns:
+                if 'timestamp' in col.lower() or 'time' in col.lower():
+                    timestamp_col = col
+                if 'hr' in col.lower() or 'heart' in col.lower():
+                    hr_col = col
+                elif col.lower() in ['rate', 'bpm']:  # fallback names
+                    hr_col = col
+            
+            if not timestamp_col or not hr_col:
+                logger.warning(f"Required columns not found. Available: {columns}")
+                sqlite_conn.close()
+                return
+            
+            logger.info(f"Using columns: timestamp={timestamp_col}, heart_rate={hr_col}")
+            
+            # Query heart rate data
+            query = f"SELECT {timestamp_col}, {hr_col} FROM monitoring_hr WHERE {hr_col} IS NOT NULL AND {hr_col} > 0 ORDER BY {timestamp_col}"
+            sqlite_cursor.execute(query)
+            
+            for row in sqlite_cursor.fetchall():
+                try:
+                    timestamp_value, hr_value = row
+                    
+                    # Convert timestamp to datetime
+                    if isinstance(timestamp_value, (int, float)):
+                        # Unix timestamp (seconds or milliseconds)
+                        if timestamp_value > 1e10:  # milliseconds
+                            dt = datetime.fromtimestamp(timestamp_value / 1000)
+                        else:  # seconds
+                            dt = datetime.fromtimestamp(timestamp_value)
+                    elif isinstance(timestamp_value, str):
+                        # String timestamp
+                        try:
+                            dt = datetime.fromisoformat(timestamp_value.replace('Z', '+00:00'))
+                        except:
+                            dt = datetime.strptime(timestamp_value, '%Y-%m-%d %H:%M:%S')
+                    else:
+                        continue
+                    
+                    # Extract day
+                    day = dt.date()
+                    
+                    # Convert heart rate value
+                    heart_rate = self.safe_int_conversion(hr_value)
+                    if heart_rate is None or heart_rate <= 0:
+                        continue
+                    
+                    # Upsert heart rate data
+                    stmt = insert(GarminHeartRateData).values(
+                        timestamp=dt,
+                        day=day,
+                        heart_rate=heart_rate
+                    )
+                    stmt = stmt.on_conflict_do_nothing()  # Avoid duplicates
+                    session.execute(stmt)
+                    migrated_count += 1
+                    
+                    # Commit in batches
+                    if migrated_count % 1000 == 0:
+                        session.commit()
+                        logger.info(f"Migrated {migrated_count} heart rate records...")
+                    
+                except Exception as e:
+                    logger.warning(f"Error processing heart rate row {row}: {e}")
+                    continue
+            
+            sqlite_conn.close()
+            session.commit()
+            logger.info(f"Migrated {migrated_count} heart rate records")
+            
+        except Exception as e:
+            logger.error(f"Error migrating heart rate data: {e}")
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def migrate_respiratory_rate_data(self):
+        """Migrate minute-by-minute respiratory rate data from garmin_monitoring.db"""
+        monitoring_db_path = self.health_data_path / "DBs" / "garmin_monitoring.db"
+        if not monitoring_db_path.exists():
+            logger.warning("Garmin monitoring database not found")
+            return
+            
+        session = self.SessionLocal()
+        migrated_count = 0
+        
+        try:
+            # Connect to SQLite monitoring database
+            sqlite_conn = sqlite3.connect(str(monitoring_db_path))
+            sqlite_cursor = sqlite_conn.cursor()
+            
+            # Check if monitoring_rr table exists
+            sqlite_cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='monitoring_rr'")
+            if not sqlite_cursor.fetchone():
+                logger.warning("monitoring_rr table not found in garmin_monitoring database")
+                sqlite_conn.close()
+                return
+            
+            # Get table structure
+            sqlite_cursor.execute('PRAGMA table_info(monitoring_rr)')
+            columns = [col[1] for col in sqlite_cursor.fetchall()]
+            logger.info(f"Available columns in monitoring_rr table: {columns}")
+            
+            # Look for timestamp and respiratory rate columns
+            timestamp_col = None
+            rr_col = None
+            
+            for col in columns:
+                if 'timestamp' in col.lower() or 'time' in col.lower():
+                    timestamp_col = col
+                if 'rr' in col.lower() or 'respiratory' in col.lower() or 'respiration' in col.lower():
+                    rr_col = col
+                elif col.lower() in ['rate', 'breathing']:  # fallback names
+                    rr_col = col
+            
+            if not timestamp_col or not rr_col:
+                logger.warning(f"Required columns not found. Available: {columns}")
+                sqlite_conn.close()
+                return
+            
+            logger.info(f"Using columns: timestamp={timestamp_col}, respiratory_rate={rr_col}")
+            
+            # Query respiratory rate data
+            query = f"SELECT {timestamp_col}, {rr_col} FROM monitoring_rr WHERE {rr_col} IS NOT NULL AND {rr_col} > 0 ORDER BY {timestamp_col}"
+            sqlite_cursor.execute(query)
+            
+            for row in sqlite_cursor.fetchall():
+                try:
+                    timestamp_value, rr_value = row
+                    
+                    # Convert timestamp to datetime
+                    if isinstance(timestamp_value, (int, float)):
+                        # Unix timestamp (seconds or milliseconds)
+                        if timestamp_value > 1e10:  # milliseconds
+                            dt = datetime.fromtimestamp(timestamp_value / 1000)
+                        else:  # seconds
+                            dt = datetime.fromtimestamp(timestamp_value)
+                    elif isinstance(timestamp_value, str):
+                        # String timestamp
+                        try:
+                            dt = datetime.fromisoformat(timestamp_value.replace('Z', '+00:00'))
+                        except:
+                            dt = datetime.strptime(timestamp_value, '%Y-%m-%d %H:%M:%S')
+                    else:
+                        continue
+                    
+                    # Extract day
+                    day = dt.date()
+                    
+                    # Convert respiratory rate value
+                    respiratory_rate = float(rr_value) if rr_value is not None else None
+                    if respiratory_rate is None or respiratory_rate <= 0:
+                        continue
+                    
+                    # Upsert respiratory rate data
+                    stmt = insert(GarminRespiratoryRateData).values(
+                        timestamp=dt,
+                        day=day,
+                        respiratory_rate=respiratory_rate
+                    )
+                    stmt = stmt.on_conflict_do_nothing()  # Avoid duplicates
+                    session.execute(stmt)
+                    migrated_count += 1
+                    
+                    # Commit in batches
+                    if migrated_count % 1000 == 0:
+                        session.commit()
+                        logger.info(f"Migrated {migrated_count} respiratory rate records...")
+                    
+                except Exception as e:
+                    logger.warning(f"Error processing respiratory rate row {row}: {e}")
+                    continue
+            
+            sqlite_conn.close()
+            session.commit()
+            logger.info(f"Migrated {migrated_count} respiratory rate records")
+            
+        except Exception as e:
+            logger.error(f"Error migrating respiratory rate data: {e}")
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def migrate_activities_data(self):
+        """Migrate detailed activity data from garmin_activities.db"""
+        activities_db_path = self.health_data_path / "DBs" / "garmin_activities.db"
+        if not activities_db_path.exists():
+            logger.warning("Garmin activities database not found")
+            return
+            
+        session = self.SessionLocal()
+        migrated_count = 0
+        
+        try:
+            # Connect to SQLite activities database
+            sqlite_conn = sqlite3.connect(str(activities_db_path))
+            sqlite_cursor = sqlite_conn.cursor()
+            
+            # Check if activities table exists
+            sqlite_cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='activities'")
+            if not sqlite_cursor.fetchone():
+                logger.warning("activities table not found in garmin_activities database")
+                sqlite_conn.close()
+                return
+            
+            # Get table structure
+            sqlite_cursor.execute('PRAGMA table_info(activities)')
+            columns = [col[1] for col in sqlite_cursor.fetchall()]
+            logger.info(f"Available columns in activities table: {columns}")
+            
+            # Map database columns to our model fields
+            column_mapping = {
+                'activity_id': 'activity_id',
+                'name': 'name',
+                'description': 'description',
+                'sport': 'sport',
+                'sub_sport': 'sub_sport',
+                'start_time': 'start_time',
+                'stop_time': 'stop_time',
+                'elapsed_time': 'elapsed_time',
+                'moving_time': 'moving_time',
+                'distance': 'distance',
+                'calories': 'calories',
+                'training_load': 'training_load',
+                'training_effect': 'training_effect',
+                'anaerobic_training_effect': 'anaerobic_training_effect',
+                'self_eval_feel': 'self_eval_feel',
+                'self_eval_effort': 'self_eval_effort',
+                'avg_hr': 'avg_hr',
+                'max_hr': 'max_hr',
+                'avg_speed': 'avg_speed',
+                'max_speed': 'max_speed',
+                'avg_cadence': 'avg_cadence',
+                'max_cadence': 'max_cadence',
+                'ascent': 'ascent',
+                'descent': 'descent',
+                'avg_step_length': 'avg_step_length',
+                'avg_vertical_ratio': 'avg_vertical_ratio',
+                'avg_vertical_oscillation': 'avg_vertical_oscillation',
+                'avg_ground_contact_time': 'avg_ground_contact_time',
+                'avg_ground_contact_balance': 'avg_ground_contact_balance',
+                'avg_temperature': 'avg_temperature',
+                'max_temperature': 'max_temperature',
+                'min_temperature': 'min_temperature',
+                'start_lat': 'start_lat',
+                'start_long': 'start_long',
+                'stop_lat': 'stop_lat',
+                'stop_long': 'stop_long',
+                'cycles': 'cycles',
+                'avg_rr': 'avg_rr',
+                'max_rr': 'max_rr'
+            }
+            
+            # Build query with available columns
+            select_columns = []
+            for db_col, model_field in column_mapping.items():
+                if db_col in columns:
+                    select_columns.append(db_col)
+            
+            if not select_columns:
+                logger.warning("No matching columns found in activities")
+                sqlite_conn.close()
+                return
+            
+            logger.info(f"Using columns: {select_columns}")
+            
+            # Query activities data
+            query = f"SELECT {', '.join(select_columns)} FROM activities WHERE activity_id IS NOT NULL ORDER BY start_time"
+            sqlite_cursor.execute(query)
+            
+            for row in sqlite_cursor.fetchall():
+                try:
+                    # Create data dict
+                    data = {}
+                    for i, col_name in enumerate(select_columns):
+                        model_field = column_mapping[col_name]
+                        value = row[i]
+                        
+                        # Convert data types
+                        if col_name in ['start_time', 'stop_time']:
+                            if isinstance(value, str):
+                                try:
+                                    data[model_field] = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                                except:
+                                    data[model_field] = datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
+                            elif isinstance(value, (int, float)):
+                                data[model_field] = datetime.fromtimestamp(value)
+                        elif col_name in ['distance', 'avg_speed', 'max_speed', 'training_load', 'training_effect', 
+                                        'anaerobic_training_effect', 'avg_cadence', 'max_cadence', 'ascent', 'descent',
+                                        'avg_step_length', 'avg_vertical_ratio', 'avg_vertical_oscillation', 
+                                        'avg_ground_contact_time', 'avg_ground_contact_balance', 'avg_temperature',
+                                        'max_temperature', 'min_temperature', 'start_lat', 'start_long', 
+                                        'stop_lat', 'stop_long', 'avg_rr', 'max_rr']:
+                            data[model_field] = float(value) if value is not None else None
+                        elif col_name in ['activity_id', 'elapsed_time', 'moving_time', 'calories', 'self_eval_feel',
+                                        'self_eval_effort', 'avg_hr', 'max_hr', 'cycles']:
+                            data[model_field] = self.safe_int_conversion(value)
+                        else:
+                            data[model_field] = value
+                    
+                    if 'activity_id' not in data or data['activity_id'] is None:
+                        continue
+                    
+                    # Calculate derived fields
+                    if 'start_time' in data and data['start_time']:
+                        data['day'] = data['start_time'].date()
+                    
+                    # Calculate pace if we have distance and time
+                    if data.get('distance') and data.get('moving_time') and data['distance'] > 0 and data['moving_time'] > 0:
+                        # Pace in min/km
+                        pace_seconds_per_meter = data['moving_time'] / data['distance']
+                        data['avg_pace'] = pace_seconds_per_meter * 1000 / 60  # min/km
+                    
+                    # Upsert activity
+                    stmt = insert(GarminActivity).values(**data)
+                    stmt = stmt.on_conflict_do_update(
+                        index_elements=['activity_id'],
+                        set_={k: getattr(stmt.excluded, k) for k in data.keys() if k != 'activity_id'}
+                    )
+                    session.execute(stmt)
+                    migrated_count += 1
+                    
+                    # Commit in batches
+                    if migrated_count % 100 == 0:
+                        session.commit()
+                        logger.info(f"Migrated {migrated_count} activities...")
+                    
+                except Exception as e:
+                    logger.warning(f"Error processing activity row: {e}")
+                    continue
+            
+            sqlite_conn.close()
+            session.commit()
+            logger.info(f"Migrated {migrated_count} activities")
+            
+        except Exception as e:
+            logger.error(f"Error migrating activities data: {e}")
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def migrate_weight_data(self):
+        """Migrate weight data"""
+        weight_dir = self.health_data_path / "Weight"
+        if not weight_dir.exists():
+            logger.warning("Weight directory not found")
+            return
+            
+        session = self.SessionLocal()
+        migrated_count = 0
+        
+        try:
+            for file_path in weight_dir.glob("*.json"):
+                day = self.parse_date_from_filename(file_path.name)
+                if not day:
+                    continue
+                    
+                data = self.load_json_data(file_path)
+                if not data or 'dateWeightList' not in data:
+                    continue
+                    
+                weight_list = data['dateWeightList']
+                if weight_list:
+                    weight_data = weight_list[0]  # Take first measurement of the day
+                    
+                    weight_grams = weight_data.get('weight')
+                    weight_kg = weight_grams / 1000 if weight_grams else None
+                    
+                    stmt = insert(GarminWeight).values(
+                        day=day,
+                        weight_grams=weight_grams,
+                        weight_kg=weight_kg,
+                        bmi=weight_data.get('bmi'),
+                        body_fat_percentage=weight_data.get('bodyFat')
+                    )
+                    stmt = stmt.on_conflict_do_update(
+                        index_elements=['day'],
+                        set_=dict(
+                            weight_grams=stmt.excluded.weight_grams,
+                            weight_kg=stmt.excluded.weight_kg,
+                            bmi=stmt.excluded.bmi,
+                            body_fat_percentage=stmt.excluded.body_fat_percentage
+                        )
+                    )
+                    session.execute(stmt)
+                    migrated_count += 1
+                
+            session.commit()
+            logger.info(f"Migrated {migrated_count} weight records")
+            
+        except Exception as e:
+            logger.error(f"Error migrating weight data: {e}")
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def create_journal_entries(self):
+        """Create daily journal entries for all days with Garmin data"""
+        session = self.SessionLocal()
+        
+        try:
+            # Get all unique days from daily summaries
+            days_with_data = session.query(GarminDailySummary.day).all()
+            created_count = 0
+            
+            for (day,) in days_with_data:
+                # Check if journal entry already exists
+                existing = session.query(DailyJournal).filter(DailyJournal.day == day).first()
+                if not existing:
+                    journal_entry = DailyJournal(day=day)
+                    session.add(journal_entry)
+                    created_count += 1
+            
+            session.commit()
+            logger.info(f"Created {created_count} new journal entries")
+            
+        except Exception as e:
+            logger.error(f"Error creating journal entries: {e}")
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def run_migration(self):
+        """Run the complete migration process"""
+        logger.info("Starting enhanced Garmin data migration...")
+        
+        try:
+            # Migrate all data types
+            self.migrate_rhr_data()
+            self.migrate_sleep_data()
+            self.migrate_daily_summary_data()  # This includes steps and much more
+            self.migrate_stress_data()  # Minute-by-minute stress data
+            self.migrate_heart_rate_data()  # Minute-by-minute heart rate data
+            self.migrate_respiratory_rate_data()  # Minute-by-minute respiratory rate data
+            self.migrate_activities_data()  # Detailed activity data
+            self.migrate_weight_data()
+            
+            # Create journal entries for all days with data
+            self.create_journal_entries()
+            
+            logger.info("Migration completed successfully!")
+            
+            # Print summary
+            self.print_migration_summary()
+            
+        except Exception as e:
+            logger.error(f"Migration failed: {e}")
+            raise
+
+    def print_migration_summary(self):
+        """Print migration summary"""
+        session = self.SessionLocal()
+        
+        try:
+            summary_count = session.query(GarminDailySummary).count()
+            sleep_count = session.query(GarminSleepSession).count()
+            weight_count = session.query(GarminWeight).count()
+            journal_count = session.query(DailyJournal).count()
+            
+            print("\n" + "="*50)
+            print("MIGRATION SUMMARY")
+            print("="*50)
+            print(f"Daily Summaries: {summary_count}")
+            print(f"Sleep Sessions: {sleep_count}")
+            print(f"Weight Records: {weight_count}")
+            print(f"Journal Entries: {journal_count}")
+            print("="*50)
+            
+        finally:
+            session.close()
+
+def main():
+    """Main function"""
+    migrator = EnhancedGarminMigrator()
+    migrator.run_migration()
+
+if __name__ == "__main__":
+    main()
