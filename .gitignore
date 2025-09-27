@@ -65,6 +65,11 @@ db.sqlite3-journal
 instance/
 .webassets-cache
 
+# Project logs and artifacts
+*.log
+Diary-AI-BE/scripts/models/*.joblib
+Diary-AI-BE/scripts/analytics/models/*.joblib
+
 # Scrapy stuff:
 .scrapy
 
@@ -205,3 +210,24 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Frontend / Node
+Diary-AI-FE/frontend-react/node_modules/
+Diary-AI-FE/frontend-react/.env.local
+Diary-AI-FE/frontend-react/.env.development.local
+Diary-AI-FE/frontend-react/.env.test.local
+Diary-AI-FE/frontend-react/.env.production.local
+Diary-AI-FE/frontend-react/npm-debug.log*
+Diary-AI-FE/frontend-react/yarn-debug.log*
+Diary-AI-FE/frontend-react/yarn-error.log*
+Diary-AI-FE/frontend-react/pnpm-debug.log*
+Diary-AI-FE/frontend-react/.parcel-cache
+Diary-AI-FE/frontend-react/.next/
+Diary-AI-FE/frontend-react/out/
+Diary-AI-FE/frontend-react/build/
+
+# Local environment & secrets (keep example)
+config.env
+Diary-AI-BE/config.env
+# Allow the template example
+!Diary-AI-BE/config.env.example

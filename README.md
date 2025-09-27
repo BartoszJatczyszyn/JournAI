@@ -1,175 +1,221 @@
-# Garmin Health Data Migration to PostgreSQL
+# 🏥 Garmin Health Data Analysis System
 
-Ten projekt umożliwia migrację danych zdrowotnych z Garmin do bazy danych PostgreSQL z dodatkową tabelą `daily_journal` do śledzenia codziennych nawyków i suplementów.
+Kompletny system analizy danych zdrowotnych z urządzeń Garmin z integracją PostgreSQL, dziennikiem osobistym i zaawansowaną analityką AI.
 
-## 🚀 Szybki Start
+## 📊 Funkcjonalności
 
-### 1. Przygotowanie środowiska
+### ✅ Kompletna migracja danych Garmin:
+- **959,911 rekordów** zdrowotnych w 9 tabelach
+- **305,354 pomiarów tętna** co minutę (24/7)
+- **268,844 pomiarów częstości oddechowej**
+- **380,672 pomiarów stresu**
+- **1,025 aktywności sportowych** z pełnymi danymi
+- **277 sesji snu** z detalową analizą
 
-```bash
-# Zainstaluj wymagane pakiety
-python setup_migration.py
-```
+### 📝 Dziennik osobisty:
+- **69 kolumn** do trackingu życia
+- Nastrój, energia, stress (skale 1-5)
+- Odżywianie, suplementy, nawyki
+- Korelacje z danymi Garmin
 
-### 2. Konfiguracja bazy danych
+### 🧠 **NOWE! Zaawansowana Analityka AI:**
+- **Korelacje wielowymiarowe** (Pearson, Spearman, Kendall)
+- **Analiza klastrów** - automatyczne wykrywanie wzorców zdrowotnych
+- **Analiza temporalna** - wzorce tygodniowe i sezonowe
+- **Analiza regeneracji** - kompleksowa ocena odzyskiwania sił
+- **Analityka predykcyjna** - prognozy energii, snu i nastroju
+- **Personalizowane rekomendacje** oparte na danych
 
-Edytuj plik `config.env`:
+### 🔬 Specjalistyczne moduły analityczne:
+- **Analiza snu**: efektywność, timing, wpływ na wydajność
+- **Analiza stresu**: wzorce godzinowe, triggery, regeneracja
+- **Analiza aktywności**: intensywność, konsystencja, korelacje z regeneracją
 
-```env
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=garmin_health
-DB_USER=postgres
-DB_PASSWORD=twoje_haslo
-```
+### 🗃️ Zorganizowane tabele:
+- `garmin_daily_summaries` - dzienne podsumowania (33 kolumny)
+- `garmin_activities` - aktywności sportowe (51 kolumn)
+- `garmin_sleep_sessions` - sesje snu (21 kolumn)
+- `daily_journal` - dziennik osobisty (69 kolumn)
 
-### 3. Uruchomienie migracji
+## 🚀 Szybki start
 
-```bash
-python run_migration.py
-```
+1. **Konfiguracja bazy:**
+   ```bash
+   # Edytuj config.env z danymi PostgreSQL
+   cp config.env.example config.env
+   ```
 
-## 📊 Struktura Danych
+2. **Instalacja zależności:**
+   ```bash
+   pip install -r Diary-AI-BE/requirements.txt
+   ```
 
-### Tabele w bazie danych:
+3. **Uruchomienie backendu:**
+   ```bash
+   # NOWY! Enhanced Backend z AI Analytics
+   python scripts/start_enhanced_backend.py
+   
+   # Lub bezpośrednio
+   cd Diary-AI-BE/scripts && python backend_api_enhanced.py
+   
+   # Backend Enhanced (zalecany)
+   python scripts/start_enhanced_backend.py
+   ```
 
-1. **garmin_daily_summaries** - Dzienne podsumowania aktywności
-2. **garmin_sleep_sessions** - Dane o śnie
-3. **garmin_activities** - Aktywności sportowe
-4. **garmin_weight** - Pomiary wagi
-5. **daily_journal** - Dziennik dzienny z dodatkowymi informacjami
+4. **Dashboard:**
+   Otwórz `Diary-AI-FE/simple_dashboard.html` w przeglądarce
 
-### Daily Journal - Pola:
+## 🆕 Enhanced Backend API - Zaawansowana Analityka
 
-- **Podstawowe**: lokalizacja, nastrój, alkohol, medytacja
-- **Żywienie**: kontrola kalorii, słodkie zachcianki, nocne przekąski
-- **Suplementy**: ashwagandha, magnez, witamina D
-- **Sen**: maska do spania, zatyczki do uszu, temperatura sypialni, czytanie przed snem
+### 🧠 Zaawansowane endpointy analityczne:
+- `/api/analytics/enhanced/comprehensive` - kompleksowa analiza AI
+- `/api/analytics/enhanced/correlations` - korelacje wielowymiarowe
+- `/api/analytics/enhanced/clusters` - analiza klastrów zdrowotnych
+- `/api/analytics/enhanced/temporal-patterns` - wzorce temporalne
+- `/api/analytics/enhanced/recovery` - analiza regeneracji
 
-## 🔧 Zarządzanie Danymi
+### 🔬 Specjalistyczne analizy:
+- `/api/analytics/sleep/comprehensive` - kompleksowa analiza snu
+- `/api/analytics/stress/comprehensive` - analiza wzorców stresu
+- `/api/analytics/activity/comprehensive` - analiza aktywności
 
-### Aktualizacja wpisu w dzienniku:
+### 🔮 Analityka predykcyjna:
+- `/api/predictions/energy` - prognozy poziomu energii
+- `/api/predictions/sleep` - prognozy jakości snu
+- `/api/predictions/mood` - prognozy nastroju
+- `/api/predictions/comprehensive` - kompleksowe prognozy
+- `/api/trends/health` - trendy zdrowotne
 
-```python
-from data_manager import GarminDataManager
-from datetime import date
+### 💡 Personalizowane insights:
+- `/api/insights/personalized` - spersonalizowane rekomendacje
+- `/api/insights/optimization` - optymalizacja metryk zdrowotnych
+- `/api/analytics/compare/periods` - porównania okresów
 
-manager = GarminDataManager()
+### 💓 Monitoring w czasie rzeczywistym:
+- **305,354 pomiarów tętna** co minutę (24/7)
+- **380,672 pomiarów stresu** z kategoryzacją
+- **268,844 pomiarów częstości oddechowej**
+- **3,362 zdarzeń snu** z detalową analizą
+- **98 pomiarów wagi** z trendem
 
-# Aktualizuj wpis na dzisiaj
-manager.update_journal_entry(
-    day=date.today(),
-    mood="good",
-    meditated=True,
-    supplement_ashwagandha=True,
-    supplement_magnesium=True,
-    used_sleep_mask=True,
-    notes="Dobry dzień, dużo energii"
-)
-```
+### 🔗 Standardowe endpointy API:
+- `/api/heart-rate/daily/<date>` - dane tętna dla dnia
+- `/api/stress/daily/<date>` - dane stresu z kategoryzacją
+- `/api/respiratory-rate/daily/<date>` - częstość oddechowa
+- `/api/weight/history` - historia wagi
+- `/api/sleep/events/<date>` - zdarzenia podczas snu
 
-### Analiza danych:
+## 📖 Dokumentacja
 
-```python
-# Analiza snu
-sleep_analysis = manager.get_sleep_analysis(30)
-print(f"Średni czas snu: {sleep_analysis['avg_duration_hours']:.1f} godzin")
+- [Enhanced Analytics Documentation](docs/ENHANCED_ANALYTICS_DOCUMENTATION.md) - **NOWE! AI Analytics**
+- [Przewodnik użytkownika](docs/USAGE_GUIDE.md)
+- [Konfiguracja frontendu](docs/FRONTEND_SETUP.md)
+- [Kompletny setup](docs/COMPLETE_SETUP_GUIDE.md)
 
-# Trend wagi
-weight_trend = manager.get_weight_trend(90)
-print(f"Zmiana wagi: {weight_trend['weight_change']:+.1f} kg")
-```
-
-## 📁 Struktura Plików
-
-```
-├── HealthData/                 # Twoje dane z Garmin
-│   ├── DBs/                   # Bazy SQLite
-│   ├── Sleep/                 # Pliki JSON ze snem
-│   ├── RHR/                   # Tętno spoczynkowe
-│   └── Weight/                # Dane o wadze
-├── enhanced_migration.py      # Główny skrypt migracji
-├── data_manager.py           # Zarządzanie danymi
-├── setup_migration.py        # Instalacja i konfiguracja
-├── run_migration.py          # Uruchomienie migracji
-├── config.env               # Konfiguracja bazy danych
-└── requirements.txt         # Wymagane pakiety Python
-```
-
-## 🔍 Przykładowe Zapytania SQL
-
-### Korelacja między suplementami a jakością snu:
-
-```sql
-SELECT 
-    j.supplement_ashwagandha,
-    j.supplement_magnesium,
-    AVG(s.sleep_score) as avg_sleep_score,
-    AVG(s.sleep_duration_seconds/3600.0) as avg_sleep_hours
-FROM daily_journal j
-JOIN garmin_sleep_sessions s ON j.day = s.day
-WHERE s.sleep_score IS NOT NULL
-GROUP BY j.supplement_ashwagandha, j.supplement_magnesium;
-```
-
-### Analiza nastroju vs aktywność:
-
-```sql
-SELECT 
-    j.mood,
-    AVG(ds.steps) as avg_steps,
-    AVG(ds.resting_heart_rate) as avg_rhr,
-    COUNT(*) as days_count
-FROM daily_journal j
-JOIN garmin_daily_summaries ds ON j.day = ds.day
-WHERE j.mood IS NOT NULL
-GROUP BY j.mood
-ORDER BY avg_steps DESC;
-```
-
-### Wpływ medytacji na sen:
+## 🔗 Przykładowe analizy
 
 ```sql
-SELECT 
-    j.meditated,
-    AVG(s.sleep_score) as avg_sleep_score,
-    AVG(s.sleep_duration_seconds/3600.0) as avg_sleep_hours
-FROM daily_journal j
-JOIN garmin_sleep_sessions s ON j.day = s.day
-WHERE j.meditated IS NOT NULL AND s.sleep_score IS NOT NULL
-GROUP BY j.meditated;
+-- Korelacja nastroju z aktywnością
+SELECT d.mood, d.energy_level, g.steps, g.calories_total
+FROM daily_journal d 
+JOIN garmin_daily_summaries g ON d.day = g.day;
+
+-- Wpływ snu na regenerację
+SELECT s.sleep_score, s.deep_sleep, g.rhr, d.sleep_quality_manual
+FROM garmin_sleep_sessions s
+JOIN garmin_daily_summaries g ON s.day = g.day
+LEFT JOIN daily_journal d ON s.day = d.day;
 ```
 
-## 🛠️ Rozwiązywanie Problemów
+## 🧪 Testowanie Enhanced Analytics
 
-### Błąd połączenia z bazą danych:
-1. Sprawdź czy PostgreSQL jest uruchomiony
-2. Zweryfikuj dane w `config.env`
-3. Utwórz bazę danych: `CREATE DATABASE garmin_health;`
-
-### Brak danych Garmin:
-1. Sprawdź czy folder `HealthData` istnieje
-2. Upewnij się, że zawiera podfoldery: `Sleep`, `RHR`, `Weight`, `DBs`
-
-### Problemy z pakietami Python:
 ```bash
-pip install -r requirements.txt
+# Test bezpośredni modułów (każdy plik ma tryb main)
+cd Diary-AI-BE/scripts && python enhanced_analytics_engine.py
+cd Diary-AI-BE/scripts && python specialized_analytics.py
+cd Diary-AI-BE/scripts && python predictive_analytics.py
 ```
 
-## 📈 Możliwości Analizy
+## 📦 Dodatkowe zależności dla Enhanced Analytics
 
-Po migracji możesz analizować:
-- Korelacje między suplementami a jakością snu
-- Wpływ medytacji na tętno spoczynkowe
-- Związek między nastrojem a aktywnością fizyczną
-- Trendy wagi w czasie
-- Optymalne warunki do snu
-- Skuteczność różnych suplementów
+```bash
+# Instalacja pakietów ML/AI
+pip install numpy scipy scikit-learn
 
-## 🔄 Aktualizacja Danych
+# Lub automatycznie przy starcie
+cd Diary-AI-BE/scripts && python start_enhanced_backend.py  # sprawdzi i zainstaluje
+```
 
-Skrypt można uruchamiać wielokrotnie - automatycznie aktualizuje istniejące dane i dodaje nowe wpisy.
+## 🔧 Konfiguracja Enhanced Analytics
 
-## 📝 Licencja
+### Minimalne wymagania danych:
+- **30+ dni** danych dziennych dla podstawowej analizy
+- **60+ dni** dla analizy predykcyjnej
+- **90+ dni** dla pełnej analizy trendów
+- **1000+ pomiarów** tętna/stresu dla analizy wzorców
 
-Ten projekt jest dostępny na licencji MIT.
+### Porty serwerów:
+- **Port 5002**: Enhanced Backend API (AI Analytics, domyśnie uruchamiany)
+
+## 🧱 Struktura i wzorce (SOLID)
+
+Szczegóły struktury projektu: zobacz PROJECT_STRUCTURE.md
+
+
+- Warstwa services (Python):
+  - `scripts/services/journal_service.py` – operacje na `daily_journal`
+  - `scripts/services/trends_service.py` – zapytania trendów (sen, waga, nastrój)
+  - `scripts/services/health_service.py` – health check, status
+- Endpointy Flask korzystają z serwisów (separacja odpowiedzialności)
+- Wspólne utilsy: `scripts/utils.py`, `scripts/db.py`, `scripts/model_utils.py`
+
+## 📊 Status projektu
+
+✅ **KOMPLETNY SYSTEM Z AI ANALYTICS GOTOWY DO UŻYCIA**
+- Wszystkie dane Garmin zmigrowane
+- Tabele zoptymalizowane i zorganizowane
+- Dziennik osobisty zintegrowany
+- API i dashboard działają
+- **NOWE!** Zaawansowana analityka AI z machine learning
+- **NOWE!** Analityka predykcyjna i personalizowane rekomendacje
+- **NOWE!** Specjalistyczne moduły analityczne
+- Gotowy do zaawansowanych analiz zdrowotnych
+
+## 🔐 Bezpieczeństwo i publikacja na GitHub
+
+Przed publikacją upewnij się że:
+- NIE commitujesz pliku `config.env` (użyj `config.env.example` jako szablonu)
+- Modele i cache nie zawierają danych prywatnych
+- Lokalna ścieżka `HEALTH_DATA_PATH` nie wskazuje na prywatny katalog w repo
+
+### Kroki publikacji (jeśli tworzysz nowe repo)
+```bash
+git init
+git add .
+git commit -m "Initial project import"
+git branch -M master
+# utwórz repo na GitHub (lub użyj istniejącego) i dodaj remote:
+git remote add origin https://github.com/<twoj-user>/Journal-AI.git
+git push -u origin master
+```
+
+### Aktualizacja istniejącego repo
+```bash
+git pull --rebase origin master
+# wprowadź zmiany
+git add .
+git commit -m "<opis zmian>"
+git push
+```
+
+### Regeneracja środowiska po klonowaniu
+```bash
+cp config.env.example config.env
+pip install -r Diary-AI-BE/requirements.txt
+python scripts/start_enhanced_backend.py
+```
+
+> Jeśli przypadkowo wypchniesz sekrety: natychmiast je zmień, usuń z historii (`git filter-repo` / `git filter-branch`) i force push.
+
+---
+*Ostatnia aktualizacja: 2025-08-25 - Enhanced Analytics v1.1*
