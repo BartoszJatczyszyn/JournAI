@@ -65,6 +65,26 @@ Kompletny system analizy danych zdrowotnych z urządzeń Garmin z integracją Po
 4. **Dashboard:**
    Otwórz `Diary-AI-FE/simple_dashboard.html` w przeglądarce
 
+### 🐳 Alternatywa: uruchomienie przez Docker Compose
+
+Najprostszy sposób aby każdy uruchomił backend + Postgres bez lokalnej instalacji zależności.
+
+```bash
+# Skopiuj zmienne (opcjonalnie)
+cp .env.docker.example .env
+
+# Uruchom stack (baza + backend)
+docker compose up -d --build
+
+# Sprawdź logi
+docker compose logs -f backend
+
+# Przetestuj endpoint
+curl http://localhost:5002/api/predictions/energy?days_ahead=3
+```
+
+Szczegóły: zobacz `DOCKER_SETUP.md`.
+
 ## 🆕 Enhanced Backend API - Zaawansowana Analityka
 
 ### 🧠 Zaawansowane endpointy analityczne:

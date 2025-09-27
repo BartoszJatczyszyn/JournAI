@@ -1,0 +1,46 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: journal_ai_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-diary_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-diary123}
+      POSTGRES_DB: ${DB_NAME:-diary}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: Diary-AI-BE/Dockerfile
+    container_name: journal_ai_backend
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-diary}
+      DB_USER: ${DB_USER:-diary_user}
+      DB_PASSWORD: ${DB_PASSWORD:-diary123}
+      # Additional optional vars
+      PYTHONUNBUFFERED: 1
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "5002:5002"
+    volumes:
+      - ./Diary-AI-BE/config.env.example:/app/config.env:ro
+      - ./Diary-AI-BE/scripts/models:/app/scripts/analytics/models
+    restart: unless-stopped
+
+volumes:
+  pg_data:
