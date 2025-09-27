@@ -85,6 +85,47 @@ curl http://localhost:5002/api/predictions/energy?days_ahead=3
 
 Szczegóły: zobacz `DOCKER_SETUP.md`.
 
+#### Migrowanie danych do bazy w środowisku Docker
+
+Jeśli chcesz wypełnić czystą bazę danymi Garmin/journal:
+
+1. Upewnij się, że stack działa:
+   ```bash
+   docker compose up -d --build
+   docker compose ps
+   ```
+2. Wejdź do kontenera backend lub uruchom komendę bezpośrednio:
+   ```bash
+   # Pełna migracja (wszystkie tabele / zakresy)
+   docker compose exec backend python run_migration.py --subset all
+
+   # Lub migracje częściowe (przykłady):
+   docker compose exec backend python run_migration.py --subset daily
+   docker compose exec backend python run_migration.py --subset sleep
+   docker compose exec backend python run_migration.py --subset activities
+   docker compose exec backend python run_migration.py --subset journal
+   docker compose exec backend python run_migration.py --subset stats  # wyliczenia agregatów minutowych
+   ```
+3. Walidacja po migracji (przykładowe zapytania):
+   ```bash
+   docker compose exec db psql -U diary_user -d diary -c "SELECT COUNT(*) FROM garmin_daily_summaries;"
+   docker compose exec db psql -U diary_user -d diary -c "SELECT COUNT(*) FROM garmin_sleep_sessions;"
+   docker compose exec db psql -U diary_user -d diary -c "SELECT COUNT(*) FROM daily_journal;"
+   ```
+4. Test endpointów po migracji:
+   ```bash
+   curl 'http://localhost:5002/api/analytics/enhanced/correlations?days=30' | head
+   curl 'http://localhost:5002/api/predictions/energy?days_ahead=3'
+   ```
+
+Bezpieczeństwo: plik `config.env` nie jest potrzebny wewnątrz kontenera (zmienne przekazuje compose). Jeśli dodasz własny config – nie commituj go do repo.
+
+Przebudowa po zmianach migratora (`scripts/enhanced_migration.py`):
+```bash
+docker compose build backend
+docker compose exec backend python run_migration.py --subset all
+```
+
 ## 🆕 Enhanced Backend API - Zaawansowana Analityka
 
 ### 🧠 Zaawansowane endpointy analityczne:
