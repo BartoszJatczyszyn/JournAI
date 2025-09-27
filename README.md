@@ -332,6 +332,62 @@ Przed publikacją upewnij się że:
 - Modele i cache nie zawierają danych prywatnych
 - Lokalna ścieżka `HEALTH_DATA_PATH` nie wskazuje na prywatny katalog w repo
 
+## 📂 Folder `HealthData` – co to jest i jak używać
+
+`HealthData/` to **lokalny katalog źródłowy surowych danych Garmin** (eksport / zrzuty / pliki *.db / CSV), z którego migrator pobiera dane i ładuje je do PostgreSQL.
+
+### Dlaczego nie ma go w repo?
+- Zawiera dane wrażliwe / prywatne (tętno, sen, stres, nawyki)
+- Pliki binarne i bazy SQLite powiększyłyby repo i utrudniły historię
+- Dane źródłowe powinny być odtwarzalne z prywatnego archiwum u użytkownika
+
+### Jak wskazać ścieżkę?
+Ustaw zmienną środowiskową (lub wpis w `config.env`):
+```
+HEALTH_DATA_PATH=/absolute/path/do/HealthData
+```
+Jeśli nie ustawisz – migrator spróbuje użyć lokalnie `./HealthData` (i zaloguje ostrzeżenie gdy nie istnieje).
+
+### Struktura oczekiwana (przykład)
+```
+HealthData/
+   Sleep/                    # Pliki snu / JSON / CSV
+   RHR/                      # Resting Heart Rate
+   Weight/                   # Historia wagi
+   DBs/                      # Bazy SQLite (garmin.db, garmin_activities.db itd.)
+   Activities/               # (opcjonalnie) pliki aktywności
+   ...
+```
+
+### Jak sprawdzić czy ścieżka działa
+```bash
+python Diary-AI-BE/run_migration.py --subset sleep
+```
+Jeśli katalog błędny – zobaczysz ostrzeżenie o fallbacku lub brak rekordów w tabeli docelowej.
+
+### W środowisku Docker
+- Domyślnie kontener backend używa ścieżki wewnętrznej (jeśli chciałbyś użyć lokalnych surowych plików, zamontuj je):
+```yaml
+   backend:
+      volumes:
+         - /lokalna/sciezka/HealthData:/app/HealthData:ro
+      environment:
+         HEALTH_DATA_PATH=/app/HealthData
+```
+
+### Dobre praktyki
+- Nigdy nie commituj prawdziwego `HealthData/`
+- Jeśli chcesz udostępnić strukturę, zrób pusty przykład typu `HealthData.example/` (bez realnych danych)
+- Regularnie archiwizuj źródło (zip + szyfrowanie) poza repo
+
+### Szybka diagnostyka (skrypt własny)
+Możesz stworzyć prosty checker (już masz `simple_check.py` / `test_fixed_migration.py`):
+```bash
+python simple_check.py
+```
+Jeśli wszystko ok – zobaczysz ✅ przy podkatalogach (Sleep, RHR, Weight ...)
+
+
 ### Kroki publikacji (jeśli tworzysz nowe repo)
 ```bash
 git init
