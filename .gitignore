@@ -237,3 +237,5 @@ Diary-AI-BE/config.env
 # Allow the template example
 !Diary-AI-BE/config.env.example
 .DS_Store
+backend_run.out
+*.out
