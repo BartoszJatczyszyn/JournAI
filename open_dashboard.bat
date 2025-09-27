@@ -1,3 +1,0 @@
-@echo off
-echo Opening Simple Dashboard...
-start simple_dashboard.html
