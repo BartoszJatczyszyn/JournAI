@@ -226,6 +226,11 @@ Diary-AI-FE/frontend-react/.next/
 Diary-AI-FE/frontend-react/out/
 Diary-AI-FE/frontend-react/build/
 
+# Legacy frontend (accidentally committed previously)
+frontend/
+frontend/node_modules/
+frontend/node_modules/.cache/
+
 # Local environment & secrets (keep example)
 config.env
 Diary-AI-BE/config.env
