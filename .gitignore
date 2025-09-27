@@ -242,3 +242,4 @@ backend_run.out
 
 # Local Python version file
 .python-version
+tmp_rovodev_*
