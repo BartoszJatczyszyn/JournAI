@@ -239,3 +239,6 @@ Diary-AI-BE/config.env
 .DS_Store
 backend_run.out
 *.out
+
+# Local Python version file
+.python-version
