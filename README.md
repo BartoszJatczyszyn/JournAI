@@ -1,4 +1,19 @@
-# 🏥 Garmin Health Data Analysis System
+# 🏥 JournAI – Garmin Health Data Analysis System
+
+"JournAI" to nowa nazwa repozytorium (wcześniej roboczo: Diary-AI / Journal-AI). Nazwy katalogów `Diary-AI-BE/` i `Diary-AI-FE/` pozostają tymczasowo niezmienione (stabilne ścieżki w skryptach). Przy ewentualnym ich refaktorze (np. na `journai-be/`, `journai-fe/`) należy zaktualizować: 
+- odwołania w Dockerfile / docker-compose
+- ścieżki w README / DOCKER_SETUP.md / QUICK_START.md
+- reguły w `.gitignore`
+- komendy w dokumentacji migracji
+
+Jeśli chcesz już teraz zmienić remote po rename w GitHub: 
+```
+git remote set-url origin https://github.com/<twoj-user>/JournAI.git
+```
+albo przez SSH: 
+```
+git remote set-url origin git@github.com:<twoj-user>/JournAI.git
+```
 
 Kompletny system analizy danych zdrowotnych z urządzeń Garmin z integracją PostgreSQL, dziennikiem osobistym i zaawansowaną analityką AI.
 
@@ -414,7 +429,7 @@ git add .
 git commit -m "Initial project import"
 git branch -M master
 # utwórz repo na GitHub (lub użyj istniejącego) i dodaj remote:
-git remote add origin https://github.com/<twoj-user>/Journal-AI.git
+git remote add origin https://github.com/<twoj-user>/JournAI.git
 git push -u origin master
 ```
 
@@ -437,4 +452,4 @@ python scripts/start_enhanced_backend.py
 > Jeśli przypadkowo wypchniesz sekrety: natychmiast je zmień, usuń z historii (`git filter-repo` / `git filter-branch`) i force push.
 
 ---
-*Ostatnia aktualizacja: 2025-09-27 - Enhanced Analytics v1.2 (prediction horizons, admin retrain doc)*
+*Ostatnia aktualizacja: 2025-09-27 - Enhanced Analytics v1.2.1 (rename repo -> JournAI, instrukcje aktualizacji remote)*
