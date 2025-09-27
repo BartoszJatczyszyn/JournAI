@@ -1,0 +1,24 @@
+{
+  "root": true,
+  "env": {
+    "browser": true,
+    "es2022": true,
+    "jest": true
+  },
+  "extends": [
+    "react-app",
+    "react-app/jest",
+    "eslint:recommended",
+    "plugin:react/recommended"
+  ],
+  "plugins": ["react", "react-hooks"],
+  "rules": {
+    "react/prop-types": "off",
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "warn",
+  "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
+  "react/no-unknown-property": "off",
+  "react/no-unescaped-entities": "off",
+  "no-case-declarations": "off"
+  }
+}
