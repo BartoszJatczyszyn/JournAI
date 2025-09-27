@@ -86,10 +86,93 @@ Kompletny system analizy danych zdrowotnych z urządzeń Garmin z integracją Po
 - `/api/predictions/comprehensive` - kompleksowe prognozy
 - `/api/trends/health` - trendy zdrowotne
 
+#### Parametry prognoz (days_ahead)
+Każdy endpoint predykcyjny przyjmuje parametr zapytania `days_ahead` (alias: `days`) określający horyzont prognozy.
+
+Rekomendowane wartości:
+- 1–7 dni: najwyższa trafność (modele RandomForest + cechy krótkoterminowe)
+- 8–14 dni: akceptowalne, ale malejąca pewność (confidence spada liniowo)
+- >14 dni: możliwe, lecz mało wiarygodne (generowane wyłącznie ekstrapolacyjnie – niezalecane)
+
+Każda pojedyncza prognoza zawiera:
+```json
+{
+   "date": "2025-10-02",
+   "predicted_value": 3.87,
+   "confidence": 0.82
+}
+```
+`confidence` maleje wraz z odległością dnia w horyzoncie oraz oceną jakości modelu (`confidence_level`: high / medium / low / very_low).
+
+Fallback: Gdy zbyt mało danych (<30 pełnych rekordów) model przełącza się na tryb bazowy (trend + średnia z ostatnich wartości) i zwraca strukturę z `confidence_level = very_low`.
+
 ### 💡 Personalizowane insights:
 - `/api/insights/personalized` - spersonalizowane rekomendacje
 - `/api/insights/optimization` - optymalizacja metryk zdrowotnych
 - `/api/analytics/compare/periods` - porównania okresów
+
+### 🛠️ Endpoint administracyjny (operacje ML)
+- `POST /api/admin/models/retrain`
+   - Usuwa zapisane artefakty modeli (`energy.joblib`, `sleep.joblib`, `mood.joblib`)
+   - Modele zostaną przebudowane leniwie przy następnym wywołaniu endpointu predykcyjnego
+   - Opcjonalne body JSON do selektywnej kasacji:
+      ```json
+      { "models": ["energy", "sleep"] }
+      ```
+   - Przykład odpowiedzi:
+      ```json
+      {
+         "status": "success",
+         "removed": ["energy.joblib", "sleep.joblib"],
+         "message": "Models deleted; they will be retrained on next prediction request."
+      }
+      ```
+
+### 🔍 Ważne parametry zapytań (query params)
+| Obszar | Parametr | Domyślna | Zakres / Uwagi |
+|--------|----------|----------|----------------|
+| Enhanced analytics | `days` | 90 | 1–365 |
+| Clusters | `clusters` | 3 | 2–15 (większa liczba = większe ryzyko szumu) |
+| Recovery | `compare` | false | `true` dodaje poprzedni okres trendu |
+| Period compare | `period1_days`, `period2_days` | 30 | 1–365 |
+| Period compare | `offset_days` | 30 | odstęp między okresami |
+| Predictions | `days_ahead` (`days`) | 7 | rekomendowane 1–14 |
+| Insights optimization | `metric` | sleep_quality | dowolna nazwa metryki w zbiorze |
+
+### ♻️ Trwałość i retraining modeli
+Modele ML są zapisywane jako pliki `.joblib` w `Diary-AI-BE/scripts/analytics/models/` i są ignorowane przez Git (`.gitignore`).
+
+Strategia:
+- Przy starcie: próba załadowania artefaktu; jeśli niezgodny – automatyczne usunięcie i retraining
+- Przy błędzie ładowania (np. zmiana wersji scikit-learn): wymuszone kasowanie i ponowny trening
+- Retraining następuje tylko jeśli model nie istnieje lub jest niekompatybilny (leniwe podejście)
+
+Confidence logic:
+- Globalna jakość modelu (`confidence_level`) oparta o R² (progi: 0.8 / 0.6 / 0.4)
+- Per-dzień `confidence` maleje liniowo do min. 0.5 przy końcu horyzontu
+
+### 🧪 Przykłady (curl)
+```bash
+# 3-dniowa prognoza energii
+curl 'http://localhost:5002/api/predictions/energy?days_ahead=3'
+
+# 14-dniowa prognoza snu (górna granica rekomendacji)
+curl 'http://localhost:5002/api/predictions/sleep?days_ahead=14'
+
+# Kompleksowe prognozy (mood + energy + sleep)
+curl 'http://localhost:5002/api/predictions/comprehensive?days_ahead=7'
+
+# Porównanie dwóch okresów (30 dni vs 30 dni z 30-dniowym offsetem)
+curl 'http://localhost:5002/api/analytics/compare/periods?period1_days=30&period2_days=30&offset_days=30'
+
+# Recovery z porównaniem poprzedniego okresu
+curl 'http://localhost:5002/api/analytics/enhanced/recovery?days=90&compare=true'
+
+# Kasacja artefaktów modeli (wymuszenie retrainingu)
+curl -X POST 'http://localhost:5002/api/admin/models/retrain' \
+       -H 'Content-Type: application/json' \
+       -d '{"models": ["energy", "sleep"]}'
+```
 
 ### 💓 Monitoring w czasie rzeczywistym:
 - **305,354 pomiarów tętna** co minutę (24/7)
@@ -218,4 +301,4 @@ python scripts/start_enhanced_backend.py
 > Jeśli przypadkowo wypchniesz sekrety: natychmiast je zmień, usuń z historii (`git filter-repo` / `git filter-branch`) i force push.
 
 ---
-*Ostatnia aktualizacja: 2025-08-25 - Enhanced Analytics v1.1*
+*Ostatnia aktualizacja: 2025-09-27 - Enhanced Analytics v1.2 (prediction horizons, admin retrain doc)*
