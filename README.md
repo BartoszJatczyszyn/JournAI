@@ -65,7 +65,26 @@ Kompletny system analizy danych zdrowotnych z urządzeń Garmin z integracją Po
 4. **Dashboard:**
    Otwórz `Diary-AI-FE/simple_dashboard.html` w przeglądarce
 
-### 🐳 Alternatywa: uruchomienie przez Docker Compose
+### � Skrypty start/stop (lokalne środowisko)
+W katalogu głównym są dostępne uproszczone skrypty:
+
+```bash
+./start_all.sh   # uruchamia backend (enhanced) i ewentualne procesy pomocnicze
+./stop_all.sh    # zatrzymuje procesy backendu (wyszukując działające PID)
+```
+
+Zastosowanie:
+- Szybki restart podczas developmentu
+- Pewność, że nie zostanie „wiszący” proces backendu rezerwujący port 5002
+
+Jeśli skrypt nie ma uprawnień wykonywalnych:
+```bash
+chmod +x start_all.sh stop_all.sh
+```
+
+W środowisku Docker zamiast tego używaj `docker compose up` / `down`.
+
+### �🐳 Alternatywa: uruchomienie przez Docker Compose
 
 Najprostszy sposób aby każdy uruchomił backend + Postgres bez lokalnej instalacji zależności.
 
