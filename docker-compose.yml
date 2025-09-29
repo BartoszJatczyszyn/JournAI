@@ -44,5 +44,16 @@ services:
       - ../HealthData:/app/HealthData:ro
     restart: unless-stopped
 
+  frontend:
+    image: nginx:stable-alpine
+    container_name: journal_ai_frontend
+    ports:
+      - "8080:80"
+    volumes:
+      - ./Diary-AI-FE:/usr/share/nginx/html:ro
+    depends_on:
+      - backend
+    restart: unless-stopped
+
 volumes:
   pg_data:
