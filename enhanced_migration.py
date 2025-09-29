@@ -208,6 +208,7 @@ class GarminActivity(Base):
     avg_speed = Column(Float)       # m/s
     max_speed = Column(Float)       # m/s
     avg_pace = Column(Float)        # min/km (calculated)
+    max_pace = Column(Float)        # min/km (reported max pace)
     
     # Cadence
     avg_cadence = Column(Float)     # steps/min or rpm
@@ -239,6 +240,11 @@ class GarminActivity(Base):
     cycles = Column(Integer)        # total steps or strokes
     avg_rr = Column(Float)         # respiratory rate
     max_rr = Column(Float)
+    # steps/view derived metrics
+    steps = Column(Integer)
+    avg_steps_per_min = Column(Float)
+    max_steps_per_min = Column(Float)
+    vo2_max = Column(Float)
     
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -1168,33 +1174,80 @@ class EnhancedGarminMigrator:
                     
                 data = self.load_json_data(file_path)
                 if not data or 'dateWeightList' not in data:
+                    logger.debug(f"No weight data or missing 'dateWeightList' in {file_path}")
                     continue
-                    
-                weight_list = data['dateWeightList']
-                if weight_list:
-                    weight_data = weight_list[0]  # Take first measurement of the day
-                    
-                    weight_grams = weight_data.get('weight')
-                    weight_kg = weight_grams / 1000 if weight_grams else None
-                    
-                    stmt = insert(GarminWeight).values(
-                        day=day,
-                        weight_grams=weight_grams,
-                        weight_kg=weight_kg,
-                        bmi=weight_data.get('bmi'),
-                        body_fat_percentage=weight_data.get('bodyFat')
+
+                weight_list = data.get('dateWeightList') or []
+                if not weight_list:
+                    logger.debug(f"Empty 'dateWeightList' in {file_path}")
+                    continue
+
+                weight_data = weight_list[0]  # Take first measurement of the day
+
+                # Determine numeric weight in grams, accepting several possible keys/units
+                weight_grams = None
+                if isinstance(weight_data, dict):
+                    if 'weight' in weight_data:
+                        weight_grams = weight_data.get('weight')
+                    elif 'weightInGrams' in weight_data:
+                        weight_grams = weight_data.get('weightInGrams')
+                    elif 'weightKg' in weight_data:
+                        try:
+                            kg = float(weight_data.get('weightKg'))
+                            weight_grams = int(round(kg * 1000))
+                        except Exception:
+                            weight_grams = None
+                    elif 'kg' in weight_data:
+                        try:
+                            kg = float(weight_data.get('kg'))
+                            weight_grams = int(round(kg * 1000))
+                        except Exception:
+                            weight_grams = None
+                    elif 'value' in weight_data:
+                        try:
+                            v = float(weight_data.get('value'))
+                            if v < 300:
+                                weight_grams = int(round(v * 1000))
+                            else:
+                                weight_grams = int(round(v))
+                        except Exception:
+                            weight_grams = None
+
+                if weight_grams is None:
+                    try:
+                        # weight_data could be a plain number
+                        w = float(weight_data)
+                        if w < 300:
+                            weight_grams = int(round(w * 1000))
+                        else:
+                            weight_grams = int(round(w))
+                    except Exception:
+                        weight_grams = None
+
+                if weight_grams is None:
+                    logger.warning(f"Could not determine numeric weight from {file_path}: {weight_data}")
+                    continue
+
+                weight_kg = float(weight_grams) / 1000.0
+
+                stmt = insert(GarminWeight).values(
+                    day=day,
+                    weight_grams=weight_grams,
+                    weight_kg=weight_kg,
+                    bmi=weight_data.get('bmi') if isinstance(weight_data, dict) else None,
+                    body_fat_percentage=weight_data.get('bodyFat') if isinstance(weight_data, dict) else None
+                )
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=['day'],
+                    set_=dict(
+                        weight_grams=stmt.excluded.weight_grams,
+                        weight_kg=stmt.excluded.weight_kg,
+                        bmi=stmt.excluded.bmi,
+                        body_fat_percentage=stmt.excluded.body_fat_percentage
                     )
-                    stmt = stmt.on_conflict_do_update(
-                        index_elements=['day'],
-                        set_=dict(
-                            weight_grams=stmt.excluded.weight_grams,
-                            weight_kg=stmt.excluded.weight_kg,
-                            bmi=stmt.excluded.bmi,
-                            body_fat_percentage=stmt.excluded.body_fat_percentage
-                        )
-                    )
-                    session.execute(stmt)
-                    migrated_count += 1
+                )
+                session.execute(stmt)
+                migrated_count += 1
                 
             session.commit()
             logger.info(f"Migrated {migrated_count} weight records")

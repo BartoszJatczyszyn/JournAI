@@ -311,6 +311,7 @@ class GarminActivity(Base):
     avg_speed = Column(Float)       # m/s
     max_speed = Column(Float)       # m/s
     avg_pace = Column(Float)        # min/km (calculated)
+    max_pace = Column(Float)        # min/km (reported max pace)
     
     # Cadence
     avg_cadence = Column(Float)     # steps/min or rpm
@@ -336,6 +337,11 @@ class GarminActivity(Base):
     # Additional metrics
     avg_rr = Column(Float)         # respiratory rate
     max_rr = Column(Float)
+    # Steps and derived per-activity metrics (from views)
+    steps = Column(Integer)
+    avg_steps_per_min = Column(Float)
+    max_steps_per_min = Column(Float)
+    vo2_max = Column(Float)
     
     # Stress during activity
     max_stress = Column(Integer)
@@ -447,11 +453,58 @@ class DailyJournal(Base):
 class EnhancedGarminMigrator:
     def __init__(self):
         # Resolve health data path with safe fallback to project-local HealthData
+        # Resolve health data path robustly.
+        candidates = []
+        # 1) Environment variable provided by runtime
         env_path = os.getenv('HEALTH_DATA_PATH')
-        self.health_data_path = Path(env_path) if env_path else Path('HealthData')
-        if not self.health_data_path.exists():
-            logger.warning(f"HEALTH_DATA_PATH {self.health_data_path} not found. Falling back to ./HealthData")
+        if env_path:
+            candidates.append(Path(env_path))
+
+        # 2) Repo-level config.env if present (search up to 6 parents)
+        repo_root = Path(__file__).resolve()
+        found_cfg = None
+        for _ in range(6):
+            repo_root = repo_root.parent
+            cfg_candidate = repo_root / 'config.env'
+            if cfg_candidate.exists():
+                found_cfg = cfg_candidate
+                break
+        if found_cfg:
+            try:
+                cfg = load_env(str(found_cfg))
+                hp = cfg.get('HEALTH_DATA_PATH')
+                if hp:
+                    hp_path = Path(hp)
+                    if not hp_path.is_absolute():
+                        hp_path = (found_cfg.parent / hp_path).resolve()
+                    candidates.append(hp_path)
+            except Exception:
+                pass
+
+        # 3) Common relative locations around repo root and current working directory
+        candidates.extend([
+            Path('HealthData'),
+            Path('../HealthData'),
+            (Path.cwd() / 'HealthData'),
+            (Path.cwd().parent / 'HealthData'),
+            (Path.home() / 'HealthData'),
+        ])
+
+        # Pick the first existing candidate, else default to Path('HealthData')
+        chosen = None
+        for c in candidates:
+            try:
+                if c and c.exists():
+                    chosen = c.resolve()
+                    break
+            except Exception:
+                continue
+
+        if chosen:
+            self.health_data_path = chosen
+        else:
             self.health_data_path = Path('HealthData')
+            logger.warning(f"HEALTH_DATA_PATH not found in candidates; using fallback {self.health_data_path} (may be missing)")
         self.setup_database()
         
     def setup_database(self):
@@ -569,6 +622,17 @@ class EnhancedGarminMigrator:
                     logger.info(f"Dropped column if existed: garmin_activities.{col}")
             except Exception as e:
                 logger.warning(f"Could not apply schema cleanup: {e}")
+
+            # Ensure new activity columns exist (from views/steps overlays)
+            try:
+                conn.exec_driver_sql("ALTER TABLE garmin_activities ADD COLUMN IF NOT EXISTS max_pace DOUBLE PRECISION;")
+                conn.exec_driver_sql("ALTER TABLE garmin_activities ADD COLUMN IF NOT EXISTS steps INTEGER;")
+                conn.exec_driver_sql("ALTER TABLE garmin_activities ADD COLUMN IF NOT EXISTS avg_steps_per_min DOUBLE PRECISION;")
+                conn.exec_driver_sql("ALTER TABLE garmin_activities ADD COLUMN IF NOT EXISTS max_steps_per_min DOUBLE PRECISION;")
+                conn.exec_driver_sql("ALTER TABLE garmin_activities ADD COLUMN IF NOT EXISTS vo2_max DOUBLE PRECISION;")
+                logger.info("Ensured new garmin_activities columns: max_pace, steps, avg_steps_per_min, max_steps_per_min, vo2_max")
+            except Exception as e:
+                logger.warning(f"Could not ensure new garmin_activities columns: {e}")
 
             # Normalize sentinel temperature values (127) to NULL in activities
             try:
@@ -1638,6 +1702,147 @@ class EnhancedGarminMigrator:
         finally:
             session.close()
 
+    def migrate_sleep_events(self, sqlite_table: str = 'sleep_events', truncate: bool = True):
+        """Migrate sleep event rows from local SQLite (garmin.db) into Postgres table garmin_sleep_events.
+
+        This mirrors the standalone script but is safe to run inside the EnhancedGarminMigrator
+        so the migration is self-contained.
+        """
+        garmin_db_path = self.health_data_path / "DBs" / "garmin.db"
+        if not garmin_db_path.exists():
+            logger.info("garmin.db not found; skipping sleep_events migration")
+            return
+
+        try:
+            sqlite_conn = sqlite3.connect(str(garmin_db_path))
+            sqlite_conn.row_factory = sqlite3.Row
+            cur = sqlite_conn.cursor()
+            # verify source table exists
+            cur.execute("SELECT name FROM sqlite_master WHERE type IN ('table','view') AND name=?", (sqlite_table,))
+            if not cur.fetchone():
+                logger.info(f"SQLite table/view '{sqlite_table}' not found in {garmin_db_path}; skipping sleep_events migration")
+                sqlite_conn.close()
+                return
+
+            cur.execute(f"SELECT timestamp, event, duration FROM {sqlite_table} ORDER BY timestamp")
+            rows = cur.fetchall()
+            total = len(rows)
+            logger.info(f"Fetched {total} rows from SQLite table '{sqlite_table}'.")
+
+            # Ensure target table exists in Postgres
+            with self.engine.begin() as conn:
+                conn.exec_driver_sql(
+                    """
+                    CREATE TABLE IF NOT EXISTS garmin_sleep_events (
+                        timestamp TIMESTAMP WITHOUT TIME ZONE,
+                        event TEXT,
+                        duration TIME WITHOUT TIME ZONE
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_gse_timestamp ON garmin_sleep_events(timestamp);
+                    """
+                )
+                if truncate:
+                    try:
+                        conn.exec_driver_sql("TRUNCATE TABLE garmin_sleep_events;")
+                    except Exception:
+                        # ignore if truncate not permitted
+                        pass
+
+            # Helper: convert duration value to HH:MM:SS or None
+            import re
+            from datetime import timedelta
+
+            def duration_to_time_text(val):
+                if val is None:
+                    return None
+                # numeric seconds
+                try:
+                    if isinstance(val, (int, float)):
+                        secs = int(val)
+                        h = (secs // 3600) % 24
+                        m = (secs % 3600) // 60
+                        s = secs % 60
+                        return f"{h:02d}:{m:02d}:{s:02d}"
+                except Exception:
+                    pass
+                s = str(val).strip()
+                # TIME-like hh:mm:ss
+                if ':' in s:
+                    parts = s.split(':')
+                    try:
+                        parts = [int(p.split('.')[0]) for p in parts]
+                        if len(parts) == 3:
+                            h, m, sec = parts
+                        elif len(parts) == 2:
+                            h, m, sec = 0, parts[0], parts[1]
+                        else:
+                            return None
+                        h = h % 24
+                        return f"{h:02d}:{m:02d}:{sec:02d}"
+                    except Exception:
+                        pass
+                # ISO8601-ish PTnHnMnS
+                m = re.fullmatch(r"P?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", s, flags=re.IGNORECASE)
+                if m and any(m.groups()):
+                    h = int(m.group(1) or 0)
+                    mi = int(m.group(2) or 0)
+                    se = int(m.group(3) or 0)
+                    h = h % 24
+                    return f"{h:02d}:{mi:02d}:{se:02d}"
+                return None
+
+            # Insert rows in batches into Postgres
+            batch = []
+            batch_size = 1000
+            inserted = 0
+            with self.engine.begin() as conn:
+                insert_sql = text("INSERT INTO garmin_sleep_events (timestamp, event, duration) VALUES (:ts, :event, :duration)")
+                for r in rows:
+                    ts = r['timestamp']
+                    ev = r['event']
+                    dur = r['duration']
+                    # normalize timestamp: numeric -> datetime
+                    ts_val = None
+                    try:
+                        if isinstance(ts, (int, float)):
+                            # try seconds then milliseconds
+                            try:
+                                ts_val = datetime.fromtimestamp(int(ts))
+                            except Exception:
+                                ts_val = datetime.fromtimestamp(int(ts) / 1000)
+                        elif isinstance(ts, str):
+                            # try common ISO formats
+                            try:
+                                ts_val = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+                            except Exception:
+                                try:
+                                    ts_val = datetime.strptime(ts, '%Y-%m-%d %H:%M:%S')
+                                except Exception:
+                                    ts_val = None
+                        else:
+                            ts_val = None
+                    except Exception:
+                        ts_val = None
+
+                    dur_text = duration_to_time_text(dur)
+                    batch.append({'ts': ts_val, 'event': ev, 'duration': dur_text})
+                    if len(batch) >= batch_size:
+                        conn.execute(insert_sql, batch)
+                        inserted += len(batch)
+                        batch.clear()
+                if batch:
+                    conn.execute(insert_sql, batch)
+                    inserted += len(batch)
+
+            logger.info(f"Inserted {inserted} rows into Postgres table 'garmin_sleep_events'.")
+        except Exception as e:
+            logger.warning(f"migrate_sleep_events failed: {e}")
+        finally:
+            try:
+                sqlite_conn.close()
+            except Exception:
+                pass
+
     def migrate_activities_data(self):
         """Migrate detailed activity data from garmin_activities.db and compute stress stats per activity"""
         activities_db_path = self.health_data_path / "DBs" / "garmin_activities.db"
@@ -1991,11 +2196,12 @@ class EnhancedGarminMigrator:
                         if aid in vmap:
                             r = vmap[aid]; idx = {c:i for i,c in enumerate(vcols)}
                             # fill selected fields if missing
-                            for k in ['steps','strokes','avg_pace','avg_moving_pace','max_pace','avg_steps_per_min','max_steps_per_min','avg_rpms','max_rpms','avg_step_length','avg_vertical_ratio','avg_vertical_oscillation','avg_ground_contact_time','avg_rr','max_rr']:
+                            for k in ['steps','strokes','avg_pace','avg_moving_pace','max_pace','avg_steps_per_min','max_steps_per_min','avg_rpms','max_rpms','avg_step_length','avg_vertical_ratio','avg_vertical_oscillation','avg_ground_contact_time','avg_rr','max_rr','vo2_max']:
                                 if k in idx:
                                     val = r[idx[k]]
                                     if k in ['steps','strokes']:
-                                        data['cycles'] = data.get('cycles') or self.safe_int_conversion(val)
+                                        # store steps count per activity
+                                        data['steps'] = data.get('steps') or self.safe_int_conversion(val)
                                     elif k in ['avg_rpms','max_rpms']:
                                         # map to cadence if better than existing
                                         mapped = 'avg_cadence' if k=='avg_rpms' else 'max_cadence'
@@ -2005,8 +2211,11 @@ class EnhancedGarminMigrator:
                                     elif k in ['avg_pace','avg_moving_pace','max_pace']:
                                         # convert to minutes per km
                                         pace = parse_pace_to_min_per_km(val)
-                                        if pace is not None and k == 'avg_pace':
-                                            data['avg_pace'] = pace
+                                        if pace is not None:
+                                            if k == 'avg_pace':
+                                                data['avg_pace'] = pace
+                                            elif k == 'max_pace':
+                                                data['max_pace'] = pace
                                     elif k == 'avg_step_length':
                                         sl = normalize_step_length_to_meters(val)
                                         if sl is not None:
@@ -2029,6 +2238,16 @@ class EnhancedGarminMigrator:
                                                 data[k] = float(val)
                                             except Exception:
                                                 pass
+                                    elif k == 'vo2_max':
+                                        try:
+                                            data['vo2_max'] = float(val) if val is not None else None
+                                        except Exception:
+                                            pass
+                                    elif k == 'vo2_max':
+                                        try:
+                                            data['vo2_max'] = float(val) if val is not None else None
+                                        except Exception:
+                                            pass
                     
                     # Calculate derived fields
                     if 'start_time' in data and data['start_time']:
@@ -2261,33 +2480,78 @@ class EnhancedGarminMigrator:
                     
                 data = self.load_json_data(file_path)
                 if not data or 'dateWeightList' not in data:
+                    logger.debug(f"No weight data or missing 'dateWeightList' in {file_path}")
                     continue
-                    
-                weight_list = data['dateWeightList']
-                if weight_list:
-                    weight_data = weight_list[0]  # Take first measurement of the day
-                    
-                    weight_grams = weight_data.get('weight')
-                    weight_kg = weight_grams / 1000 if weight_grams else None
-                    
-                    stmt = insert(GarminWeight).values(
-                        day=day,
-                        weight_grams=weight_grams,
-                        weight_kg=weight_kg,
-                        bmi=weight_data.get('bmi'),
-                        body_fat_percentage=weight_data.get('bodyFat')
+
+                weight_list = data.get('dateWeightList') or []
+                if not weight_list:
+                    logger.debug(f"Empty 'dateWeightList' in {file_path}")
+                    continue
+
+                weight_data = weight_list[0]  # Take first measurement of the day
+
+                weight_grams = None
+                if isinstance(weight_data, dict):
+                    if 'weight' in weight_data:
+                        weight_grams = weight_data.get('weight')
+                    elif 'weightInGrams' in weight_data:
+                        weight_grams = weight_data.get('weightInGrams')
+                    elif 'weightKg' in weight_data:
+                        try:
+                            kg = float(weight_data.get('weightKg'))
+                            weight_grams = int(round(kg * 1000))
+                        except Exception:
+                            weight_grams = None
+                    elif 'kg' in weight_data:
+                        try:
+                            kg = float(weight_data.get('kg'))
+                            weight_grams = int(round(kg * 1000))
+                        except Exception:
+                            weight_grams = None
+                    elif 'value' in weight_data:
+                        try:
+                            v = float(weight_data.get('value'))
+                            if v < 300:
+                                weight_grams = int(round(v * 1000))
+                            else:
+                                weight_grams = int(round(v))
+                        except Exception:
+                            weight_grams = None
+
+                if weight_grams is None:
+                    try:
+                        w = float(weight_data)
+                        if w < 300:
+                            weight_grams = int(round(w * 1000))
+                        else:
+                            weight_grams = int(round(w))
+                    except Exception:
+                        weight_grams = None
+
+                if weight_grams is None:
+                    logger.warning(f"Could not determine numeric weight from {file_path}: {weight_data}")
+                    continue
+
+                weight_kg = float(weight_grams) / 1000.0
+
+                stmt = insert(GarminWeight).values(
+                    day=day,
+                    weight_grams=weight_grams,
+                    weight_kg=weight_kg,
+                    bmi=weight_data.get('bmi') if isinstance(weight_data, dict) else None,
+                    body_fat_percentage=weight_data.get('bodyFat') if isinstance(weight_data, dict) else None
+                )
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=['day'],
+                    set_=dict(
+                        weight_grams=stmt.excluded.weight_grams,
+                        weight_kg=stmt.excluded.weight_kg,
+                        bmi=stmt.excluded.bmi,
+                        body_fat_percentage=stmt.excluded.body_fat_percentage
                     )
-                    stmt = stmt.on_conflict_do_update(
-                        index_elements=['day'],
-                        set_=dict(
-                            weight_grams=stmt.excluded.weight_grams,
-                            weight_kg=stmt.excluded.weight_kg,
-                            bmi=stmt.excluded.bmi,
-                            body_fat_percentage=stmt.excluded.body_fat_percentage
-                        )
-                    )
-                    session.execute(stmt)
-                    migrated_count += 1
+                )
+                session.execute(stmt)
+                migrated_count += 1
                 
             session.commit()
             logger.info(f"Migrated {migrated_count} weight records")
@@ -2716,7 +2980,11 @@ class EnhancedGarminMigrator:
             self.migrate_respiratory_rate_data()
             # Compute day-level stats on the DB from minute tables
             self.compute_minute_level_daily_stats()
-            # Populate last_sleep_phase from sleep events
+            # Migrate sleep events from local SQLite into garmin_sleep_events, then populate last_sleep_phase
+            try:
+                self.migrate_sleep_events()
+            except Exception as e:
+                logger.warning(f"migrate_sleep_events failed: {e}")
             try:
                 self.populate_last_sleep_phase()
             except Exception as e:

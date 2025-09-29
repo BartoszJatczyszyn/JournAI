@@ -325,31 +325,80 @@ class GarminDataMigrator:
                     
                 data = self.load_json_data(file_path)
                 if not data or 'dateWeightList' not in data:
+                    logger.debug(f"No weight data or missing 'dateWeightList' in {file_path}")
                     continue
-                    
-                weight_list = data['dateWeightList']
-                if weight_list:
-                    weight_data = weight_list[0]  # Take first measurement of the day
-                    
-                    weight_grams = weight_data.get('weight')
-                    weight_kg = weight_grams / 1000 if weight_grams else None
-                    
-                    cursor.execute("""
-                        INSERT INTO garmin_weight 
-                        (day, weight_grams, weight_kg, bmi, body_fat_percentage)
-                        VALUES (%s, %s, %s, %s, %s)
-                        ON CONFLICT (day) DO UPDATE SET
-                            weight_grams = EXCLUDED.weight_grams,
-                            weight_kg = EXCLUDED.weight_kg,
-                            bmi = EXCLUDED.bmi,
-                            body_fat_percentage = EXCLUDED.body_fat_percentage
-                    """, (
-                        day,
-                        weight_grams,
-                        weight_kg,
-                        weight_data.get('bmi'),
-                        weight_data.get('bodyFat')
-                    ))
+
+                weight_list = data.get('dateWeightList') or []
+                if not weight_list:
+                    logger.debug(f"Empty 'dateWeightList' in {file_path}")
+                    continue
+
+                weight_data = weight_list[0]  # Take first measurement of the day
+
+                # Accept multiple possible keys and units
+                weight_grams = None
+                # Common keys: 'weight' (grams), 'weightInGrams', 'kg', 'weightKg', 'value'
+                if isinstance(weight_data, dict):
+                    if 'weight' in weight_data:
+                        weight_grams = weight_data.get('weight')
+                    elif 'weightInGrams' in weight_data:
+                        weight_grams = weight_data.get('weightInGrams')
+                    elif 'weightKg' in weight_data:
+                        try:
+                            kg = float(weight_data.get('weightKg'))
+                            weight_grams = int(round(kg * 1000))
+                        except Exception:
+                            weight_grams = None
+                    elif 'kg' in weight_data:
+                        try:
+                            kg = float(weight_data.get('kg'))
+                            weight_grams = int(round(kg * 1000))
+                        except Exception:
+                            weight_grams = None
+                    elif 'value' in weight_data:
+                        # value may be in kg or grams; if < 300 assume kg
+                        try:
+                            v = float(weight_data.get('value'))
+                            if v < 300:
+                                weight_grams = int(round(v * 1000))
+                            else:
+                                weight_grams = int(round(v))
+                        except Exception:
+                            weight_grams = None
+
+                # If still None, try to coerce non-dict formats
+                if weight_grams is None:
+                    try:
+                        w = float(weight_data)
+                        if w < 300:
+                            weight_grams = int(round(w * 1000))
+                        else:
+                            weight_grams = int(round(w))
+                    except Exception:
+                        weight_grams = None
+
+                if weight_grams is None:
+                    logger.warning(f"Could not determine numeric weight from {file_path}: {weight_data}")
+                    continue
+
+                weight_kg = float(weight_grams) / 1000.0 if weight_grams is not None else None
+
+                cursor.execute("""
+                    INSERT INTO garmin_weight 
+                    (day, weight_grams, weight_kg, bmi, body_fat_percentage)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (day) DO UPDATE SET
+                        weight_grams = EXCLUDED.weight_grams,
+                        weight_kg = EXCLUDED.weight_kg,
+                        bmi = EXCLUDED.bmi,
+                        body_fat_percentage = EXCLUDED.body_fat_percentage
+                """, (
+                    day,
+                    weight_grams,
+                    weight_kg,
+                    weight_data.get('bmi') if isinstance(weight_data, dict) else None,
+                    weight_data.get('bodyFat') if isinstance(weight_data, dict) else None
+                ))
                 
             conn.commit()
             logger.info("Weight data migrated successfully")
