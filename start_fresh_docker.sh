@@ -64,19 +64,16 @@ docker compose run --rm -T --entrypoint "" backend python run_migration.py || {
 echo "Starting backend in detached mode..."
 docker compose up -d backend
 
-echo "Starting frontend service via docker compose..."
-docker compose up -d frontend
+echo "Starting frontend static server (nginx) serving Diary-AI-FE on port 8080..."
+# Remove any previous frontend container
+docker rm -f journal_ai_frontend >/dev/null 2>&1 || true
 
-echo "Waiting for frontend to become healthy (up to 60s)..."
-for i in {1..12}; do
-  status=$(docker inspect --format='{{json .State.Health.Status}}' journal_ai_frontend 2>/dev/null || echo 'null')
-  if [[ "$status" == '"healthy"' ]]; then
-    echo "Frontend is healthy"
-    break
-  fi
-  echo -n '.'
-  sleep 5
-done
+docker run -d --name journal_ai_frontend -p 8080:80 \
+  -v "$ROOT_DIR/Diary-AI-FE:/usr/share/nginx/html:ro" \
+  -v "$ROOT_DIR/Diary-AI-FE/default.conf:/etc/nginx/conf.d/default.conf:ro" \
+  --restart unless-stopped nginx:stable-alpine
+
+echo "Frontend started (temporary container)."
 
 echo
 echo "All done. Backend -> http://localhost:5002  Frontend -> http://localhost:8080"
