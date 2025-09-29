@@ -1,3 +1,34 @@
+# JournAI — Najprostsze uruchomienie
+
+Poniżej najkrótsze i sprawdzone kroki, żeby uruchomić aplikację lokalnie.
+
+1) Uruchom backend (Postgres + API) w Dockerze
+
+```bash
+# z katalogu repo
+cp .env.docker.example .env || true
+docker compose up -d --build
+# sprawdź logi backendu
+docker compose logs -f backend
+```
+
+Backend będzie dostępny na: http://localhost:5002
+
+2) Uruchom frontend lokalnie (React dev server)
+
+```bash
+cd Diary-AI-FE/frontend-react
+npm install
+npm start
+```
+
+Frontend dev server: http://localhost:3000
+
+Uwagi:
+- Frontend jest skonfigurowany, aby proxy-ować żądania do backendu pod http://localhost:5002 (development).
+- Nie commituj swoich plików z danymi (`HealthData/`, `config.env`) do repo.
+
+To wszystko — jeśli chcesz, dodam z powrotem więcej szczegółów lub alternatywne sposoby uruchomienia.
 # 🏥 JournAI – Garmin Health Data Analysis System
 
 "JournAI" to nowa nazwa repozytorium (wcześniej roboczo: Diary-AI / Journal-AI). Nazwy katalogów `Diary-AI-BE/` i `Diary-AI-FE/` pozostają tymczasowo niezmienione (stabilne ścieżki w skryptach). Przy ewentualnym ich refaktorze (np. na `journai-be/`, `journai-fe/`) należy zaktualizować: 
