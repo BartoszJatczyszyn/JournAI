@@ -240,6 +240,12 @@ Diary-AI-BE/config.env
 backend_run.out
 *.out
 
+# Local HealthData folder (private large data)
+HealthData/
+
+# Top-level frontend node_modules (if present)
+Diary-AI-FE/node_modules/
+
 # Local Python version file
 .python-version
 tmp_rovodev_*
