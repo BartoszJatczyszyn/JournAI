@@ -283,72 +283,82 @@ curl -X POST 'http://localhost:5002/api/admin/models/retrain' \
 - `/api/weight/history` - historia wagi
 - `/api/sleep/events/<date>` - zdarzenia podczas snu
 
-## 📖 Dokumentacja
-
-- [Enhanced Analytics Documentation](docs/ENHANCED_ANALYTICS_DOCUMENTATION.md) - **NOWE! AI Analytics**
-- [Przewodnik użytkownika](docs/USAGE_GUIDE.md)
-- [Konfiguracja frontendu](docs/FRONTEND_SETUP.md)
-- [Kompletny setup](docs/COMPLETE_SETUP_GUIDE.md)
-
-## 🔗 Przykładowe analizy
-
-```sql
--- Korelacja nastroju z aktywnością
-SELECT d.mood, d.energy_level, g.steps, g.calories_total
-FROM daily_journal d 
-JOIN garmin_daily_summaries g ON d.day = g.day;
-
--- Wpływ snu na regenerację
-SELECT s.sleep_score, s.deep_sleep, g.rhr, d.sleep_quality_manual
-FROM garmin_sleep_sessions s
-JOIN garmin_daily_summaries g ON s.day = g.day
-LEFT JOIN daily_journal d ON s.day = d.day;
-```
-
-## 🧪 Testowanie Enhanced Analytics
-
-```bash
-# Test bezpośredni modułów (każdy plik ma tryb main)
-cd Diary-AI-BE/scripts && python enhanced_analytics_engine.py
-cd Diary-AI-BE/scripts && python specialized_analytics.py
-cd Diary-AI-BE/scripts && python predictive_analytics.py
-```
-
-## 📦 Dodatkowe zależności dla Enhanced Analytics
-
-```bash
-# Instalacja pakietów ML/AI
-pip install numpy scipy scikit-learn
-
-# Lub automatycznie przy starcie
-cd Diary-AI-BE/scripts && python start_enhanced_backend.py  # sprawdzi i zainstaluje
-```
-
-## 🔧 Konfiguracja Enhanced Analytics
-
-### Minimalne wymagania danych:
-- **30+ dni** danych dziennych dla podstawowej analizy
-- **60+ dni** dla analizy predykcyjnej
-- **90+ dni** dla pełnej analizy trendów
-- **1000+ pomiarów** tętna/stresu dla analizy wzorców
-
-### Porty serwerów:
-- **Port 5002**: Enhanced Backend API (AI Analytics, domyśnie uruchamiany)
-
-## 🧱 Struktura i wzorce (SOLID)
-
-Szczegóły struktury projektu: zobacz PROJECT_STRUCTURE.md
-
-
-- Warstwa services (Python):
-  - `scripts/services/journal_service.py` – operacje na `daily_journal`
   - `scripts/services/trends_service.py` – zapytania trendów (sen, waga, nastrój)
-  - `scripts/services/health_service.py` – health check, status
-- Endpointy Flask korzystają z serwisów (separacja odpowiedzialności)
-- Wspólne utilsy: `scripts/utils.py`, `scripts/db.py`, `scripts/model_utils.py`
 
-## 📊 Status projektu
+## \ud83d\ude80 Szybki start
 
+Poni\u017cej znajdziesz najprostszy, przetestowany przep\u0142yw uruchomienia: backend (Postgres + Python API) w Dockerze oraz frontend lokalnie przez npm (u\u017cyteczne podczas developmentu).
+
+1) Uruchom backend + baz\u0119 (Docker)
+
+```bash
+# (opcjonalnie) skopiuj przyk\u0142adowe zmienne do pliku .env
+cp .env.docker.example .env || true
+
+# Z katalogu root repo uruchom stack (Postgres + backend)
+docker compose up -d --build
+
+# Podgl\u0105d log\u00f3w backendu
+docker compose logs -f backend
+```
+
+Backend domy\u015blnie nas\u0142uchuje na: http://localhost:5002
+
+2) Uruchom frontend lokalnie (oddzielnie, npm)
+
+```bash
+# Przejd\u017a do folderu z frontendem React
+cd Diary-AI-FE/frontend-react
+
+# Zainstaluj zale\u017cno\u015bci (macOS / zsh)
+npm install
+
+# Uruchom frontend dev server
+npm start
+```
+
+Frontend dev server uruchomi sie domy\u015blnie na: http://localhost:3000 i ma ustawiony "proxy" do backendu `http://localhost:5002` (zdefiniowane w `Diary-AI-FE/frontend-react/package.json`), dzi\u0119ki czemu wywo\u0142ania API z przegl\u0105darki b\u0119d\u0105 kierowane do lokalnego backendu.
+
+3) Alternatywy
+
+- Je\u015bli wolisz uruchomi\u0107 backend lokalnie bez Dockera:
+
+```bash
+cp config.env.example config.env
+pip install -r Diary-AI-BE/requirements.txt
+python scripts/start_enhanced_backend.py
+```
+
+- Je\u015bli chcesz serwowa\u0107 frontend statycznie w Dockerze, u\u017cyj skryptu `./start_fresh_docker.sh` (uruchomi tymczasowy nginx by podpi\u0107 zawarto\u015b\u0107 `Diary-AI-FE`), lub zbuduj frontend `npm run build` i zamontuj `build/` do kontenera nginx.
+
+4) Testy zdrowia
+
+```bash
+# backend health
+curl http://localhost:5002/api/health
+
+# przyk\u0142adowy endpoint (analytics)
+curl 'http://localhost:5002/api/predictions/energy?days_ahead=3'
+```
+
+Uwagi:
+- Port backendu: 5002
+- Port frontend dev servera: 3000
+- Upewnij si\u0119, \u017ce masz Node.js w wersji zgodnej z `Diary-AI-FE/frontend-react/package.json` (zalecane: Node >=18.18.0 lub >=20)
+
+### Skrypty start/stop (lokalne)
+W katalogu g\u0142\u00f3wnym s\u0105 dost\u0119pne uproszczone skrypty:
+
+```bash
+./start_all.sh   # uruchamia backend (enhanced) i ewentualne procesy pomocnicze
+./stop_all.sh    # zatrzymuje procesy backendu (wariant lokalny)
+```
+
+Je\u015bli skrypt nie ma uprawnie\u0144 wykonywalnych:
+
+```bash
+chmod +x start_all.sh stop_all.sh
+```
 ✅ **KOMPLETNY SYSTEM Z AI ANALYTICS GOTOWY DO UŻYCIA**
 - Wszystkie dane Garmin zmigrowane
 - Tabele zoptymalizowane i zorganizowane

@@ -1,3 +1,60 @@
+## 🚀 Frontend Setup Guide
+
+Ten dokument opisuje jak uruchomić frontend lokalnie (React) podczas developmentu. Frontend znajdujący się w repozytorium: `Diary-AI-FE/frontend-react`.
+Wymagania
+
+- Node.js (zalecane wersje: >=18.18.0 lub >=20.0.0)
+- npm (do zarządzania pakietami)
+
+Sprawdź instalację:
+
+```bash
+node --version
+npm --version
+```
+
+Instalacja i start (macOS / zsh)
+
+```bash
+# Przejdź do katalogu frontendu
+cd Diary-AI-FE/frontend-react
+
+# Zainstaluj zależności
+npm install
+
+# Uruchom dev server
+npm start
+```
+
+Po uruchomieniu zobaczysz:
+
+- Local: http://localhost:3000
+- Frontend jest skonfigurowany z `proxy` wskazującym na `http://localhost:5002`, dzięki czemu wywołania API z frontendu trafią do backendu uruchomionego lokalnie lub w Dockerze.
+
+Uwaga: jeśli chcesz budować produkcyjną wersję frontendu, użyj:
+
+```bash
+npm run build
+# wynik zostanie umieszczony w katalogu `build/`
+```
+
+Problemy i szybkie rozwiązania
+
+- "Port 3000 już zajęty": znajdź proces i zabij go (macOS):
+	```bash
+	lsof -i :3000
+	kill -9 <PID>
+	```
+- "Node/npm nie znaleziono": upewnij się, że Node jest zainstalowany i uruchamiasz nowy terminal (zsh musi mieć poprawny PATH)
+
+Zalecane: uruchom backend (Docker) w osobnym terminalu:
+
+```bash
+# z katalogu repo
+docker compose up -d --build
+```
+
+Frontend i backend będą wtedy komunikować się automatycznie przejściowo przez proxy (dev).
 # 🚀 Frontend Setup Guide
 
 ## Wymagania
