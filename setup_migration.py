@@ -46,7 +46,10 @@ def test_database_connection():
 
 def check_health_data():
     """Check if Garmin health data exists"""
-    health_data_path = Path("C:/Users/barto/HealthData")
+    from dotenv import load_dotenv
+    load_dotenv('config.env')
+    health_data_path = Path(os.getenv('HEALTH_DATA_PATH', '../HealthData'))
+    print(f"ℹ️ Using HEALTH_DATA_PATH: {health_data_path}")
     if not health_data_path.exists():
         print("❌ HealthData directory not found")
         return False

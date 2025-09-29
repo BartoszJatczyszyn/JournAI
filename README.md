@@ -366,6 +366,40 @@ Przed publikacją upewnij się że:
 - Modele i cache nie zawierają danych prywatnych
 - Lokalna ścieżka `HEALTH_DATA_PATH` nie wskazuje na prywatny katalog w repo
 
+## 🧩 Migracja nowych danych (skrót)
+
+Szczegółowa instrukcja: patrz AI/docs/MANUAL_MIGRATION.md
+
+Najkrótsza ścieżka (Docker):
+```bash
+cd AI
+docker compose up -d --build
+# Zamontowałem już lokalny HealthData do kontenera backend w docker-compose.yml
+# Uruchom pełną migrację:
+docker compose exec backend python - <<'PY'
+from enhanced_migration import EnhancedGarminMigrator
+m=EnhancedGarminMigrator()
+m.migrate_sleep_data(); m.migrate_rhr_data(); m.migrate_daily_summary_data(); m.migrate_heart_rate_data(); m.migrate_respiratory_rate_data(); m.migrate_activities_data()
+print('✅ Migracja zakończona')
+PY
+# lub:
+# docker compose exec backend python run_migration.py
+```
+
+Wyniki sprawdzisz m.in. tak:
+```bash
+docker compose exec db psql -U diary_user -d diary -c "SELECT COUNT(*) FROM garmin_sleep_sessions;"
+docker compose exec db psql -U diary_user -d diary -c "SELECT COUNT(*) FROM garmin_activities;"
+```
+
+Jeśli nie chcesz Dockera:
+```bash
+cd AI
+pip install -r requirements.txt
+python setup_migration.py
+python enhanced_migration.py
+```
+
 ## 📂 Folder `HealthData` – co to jest i jak używać
 
 `HealthData/` to **lokalny katalog źródłowy surowych danych Garmin** (eksport / zrzuty / pliki *.db / CSV), z którego migrator pobiera dane i ładuje je do PostgreSQL.

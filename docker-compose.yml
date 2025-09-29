@@ -9,6 +9,7 @@ services:
       POSTGRES_USER: ${DB_USER:-diary_user}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-diary123}
       POSTGRES_DB: ${DB_NAME:-diary}
+      PGDATABASE: ${DB_NAME:-diary}  # default DB for psql inside container
     ports:
       - "5432:5432"
     volumes:
@@ -40,6 +41,7 @@ services:
     volumes:
       - ./Diary-AI-BE/config.env.example:/app/config.env:ro
       - ./Diary-AI-BE/scripts/models:/app/scripts/analytics/models
+      - ../HealthData:/app/HealthData:ro
     restart: unless-stopped
 
 volumes:

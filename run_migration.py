@@ -12,8 +12,11 @@ def check_requirements():
     errors = []
     
     # Check if HealthData directory exists
-    if not Path("C:/Users/barto/HealthData").exists():
-        errors.append("HealthData directory not found")
+    from dotenv import load_dotenv
+    load_dotenv('config.env')
+    health_data = Path(os.getenv('HEALTH_DATA_PATH', '../HealthData'))
+    if not health_data.exists():
+        errors.append(f"HealthData directory not found at {health_data}")
     
     # Check if config file exists
     if not Path("config.env").exists():

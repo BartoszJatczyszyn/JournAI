@@ -10,11 +10,14 @@ try:
     print("✅ Basic imports work")
     
     # Check if source database exists
-    source_db = r'C:\Users\barto\HealthData\DBs\garmin_activities.db'
+    from dotenv import load_dotenv
+    load_dotenv('config.env')
+    health_data = os.getenv('HEALTH_DATA_PATH', '../HealthData')
+    source_db = os.path.join(health_data, 'DBs', 'garmin_activities.db')
     if os.path.exists(source_db):
-        print(f"✅ Source database exists: {os.path.getsize(source_db)} bytes")
+        print(f"✅ Source database exists at {source_db}: {os.path.getsize(source_db)} bytes")
     else:
-        print("❌ Source database not found")
+        print(f"❌ Source database not found at {source_db}")
         sys.exit(1)
     
     # Test SQLite connection
