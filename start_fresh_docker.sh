@@ -56,7 +56,7 @@ docker compose build backend
 
 echo "Running migration inside backend container (this will run run_migration.py)..."
 # Use `run` to execute the migration in a temporary container so that ENTRYPOINT doesn't interfere.
-docker compose run --rm backend python run_migration.py || {
+docker compose run --rm -T backend python run_migration.py || {
   echo "Migration failed. Check logs or run: docker compose run --rm backend python run_migration.py" >&2
   exit 1
 }
