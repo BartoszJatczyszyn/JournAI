@@ -53,6 +53,11 @@ services:
       - ./Diary-AI-FE:/usr/share/nginx/html:ro
     depends_on:
       - backend
+    healthcheck:
+      test: ["CMD-SHELL", "nginx -t >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
 volumes:
