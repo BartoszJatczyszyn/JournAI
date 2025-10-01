@@ -1,32 +1,13 @@
-#!/usr/bin/env python3
-"""Core blueprint: basic stats and health-data endpoints required by frontend dashboard.
-
-Provides lightweight aggregated stats and a daily health data list combining
-garmin_daily_summaries with journal mood/energy (if present).
-
-Endpoints:
-  GET /api/stats
-  GET /api/health-data?days=N
-
-Both are intentionally fast: single SQL each; no heavy joins beyond journal.
-"""
 from __future__ import annotations
-
-from datetime import date
-from flask import Blueprint, jsonify, request
+from fastapi import APIRouter, Query, HTTPException
 from decimal import Decimal
 from contextlib import suppress
 from db import execute_query
 
-core_bp = Blueprint("core", __name__)
+router = APIRouter(tags=["core"], prefix="")
 
-
-@core_bp.get("/stats")
+@router.get("/stats")
 def get_stats():
-    """Return high-level aggregate stats used on dashboard cards.
-
-    Fields chosen to match expected frontend usage (can extend later).
-    """
     try:
         query = """
         WITH valid_days AS (
@@ -50,23 +31,15 @@ def get_stats():
                 data[k] = data[k].isoformat()
         for k, v in list(data.items()):
             if isinstance(v, Decimal):
-                with suppress(Exception):  # type: ignore
+                with suppress(Exception):
                     data[k] = float(v)
-        return jsonify(data)
+        return data
     except Exception as e:  # pragma: no cover
-        return jsonify({'error': str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
-
-@core_bp.get("/health-data")
-def get_health_data():
-    """Return per-day health data rows for last N days (default 30).
-
-    Shape expected by frontend: [{day, steps, calories, rhr, stress_avg, sleep_score,
-    time_in_bed_minutes, mood, energy}]
-    """
+@router.get("/health-data")
+def get_health_data(days: int = Query(30, ge=1, le=365)):
     try:
-        days = request.args.get('days', 30, type=int)
-        days = max(1, min(days, 365))
         query = """
         WITH last_valid_day AS (
           SELECT MAX(day) AS day
@@ -87,17 +60,15 @@ def get_health_data():
         JOIN last_valid_day lvd ON g.day <= lvd.day
         LEFT JOIN garmin_sleep_sessions s ON g.day = s.day
         LEFT JOIN daily_journal d ON g.day = d.day
-    -- Ensure inclusive window of N days (e.g. days=7 returns last 7 calendar days)
-    WHERE g.day >= lvd.day - (%s - 1) * INTERVAL '1 day'
+        WHERE g.day >= lvd.day - (%s - 1) * INTERVAL '1 day'
         ORDER BY g.day DESC
         """
         rows = execute_query(query, (days,)) or []
         result = []
         for r in rows:
             item = dict(r)
-            day_val = item.get('day')
-            if day_val and hasattr(day_val, 'isoformat'):
-                item['day'] = day_val.isoformat()
+            if item.get('day') and hasattr(item['day'], 'isoformat'):
+                item['day'] = item['day'].isoformat()
             for k in ['steps','calories','rhr','stress_avg','sleep_score','time_in_bed_minutes','mood','energy']:
                 if item.get(k) is None:
                     item[k] = 0 if k not in ('mood','energy') else None
@@ -105,12 +76,11 @@ def get_health_data():
                 item['energy_level'] = item.get('energy')
             for k, v in list(item.items()):
                 if isinstance(v, Decimal):
-                    with suppress(Exception):  # type: ignore
+                    with suppress(Exception):
                         item[k] = float(v)
             result.append(item)
-        return jsonify(result)
+        return result
     except Exception as e:  # pragma: no cover
-        return jsonify({'error': str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
-
-__all__ = ["core_bp"]
+__all__ = ["router"]

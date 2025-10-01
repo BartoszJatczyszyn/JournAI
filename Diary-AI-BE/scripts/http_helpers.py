@@ -1,71 +1,76 @@
 #!/usr/bin/env python3
-"""HTTP helpers for parameter parsing and responses.
+"""HTTP helper utilities (FastAPI unified).
 
-These helpers provide small, dependency-free utilities to keep route handlers
-clean and consistent across blueprints.
+Replaces legacy Flask-specific helper. Provides:
+  - http_error() unified error envelope
+  - parse_* helpers raising HTTPException on invalid input
 """
 from __future__ import annotations
 
 from datetime import date
-from typing import Optional
-
-from flask import jsonify, request
-
+from fastapi import HTTPException
+from typing import Optional, Any, Dict
 
 _TRUE_VALUES = {"1", "true", "t", "yes", "y", "on"}
 _FALSE_VALUES = {"0", "false", "f", "no", "n", "off"}
 
+_CODE_MAP = {
+    400: "bad_request",
+    401: "unauthorized",
+    403: "forbidden",
+    404: "not_found",
+    409: "conflict",
+    422: "validation_error",
+    500: "internal_error",
+}
 
-def error_response(message: str, status_code: int = 400):
-    """Return a standardized JSON error response."""
-    return jsonify({"status": "error", "message": message}), status_code
+def http_error(message: str, status_code: int = 400, code: str | None = None) -> Dict[str, Any]:
+    return {
+        "status": "error",
+        "error": {
+            "code": code or _CODE_MAP.get(status_code, "error"),
+            "message": message,
+        },
+        "code": status_code,
+    }
 
-
-def parse_int_arg(name: str, default: Optional[int], min_value: Optional[int] = None, max_value: Optional[int] = None) -> int:
-    """Parse an integer query parameter with validation.
-
-    - If parameter missing and default is not None: returns default
-    - If invalid or out-of-range: raises ValueError with a descriptive message
-    """
-    raw = request.args.get(name, None)
-    if raw is None or raw == "":
+def parse_int_arg(value: str | None, name: str, default: Optional[int], min_value: Optional[int] = None, max_value: Optional[int] = None) -> int:
+    if value is None or value == "":
         if default is None:
-            raise ValueError(f"Missing required parameter: {name}")
-        value = int(default)
+            raise HTTPException(status_code=400, detail=f"Missing required parameter: {name}")
+        iv = int(default)
     else:
         try:
-            value = int(raw)
-        except Exception:
-            raise ValueError(f"Parameter '{name}' must be an integer")
+            iv = int(value)
+        except Exception:  # pragma: no cover
+            raise HTTPException(status_code=400, detail=f"Parameter '{name}' must be an integer")
+    if min_value is not None and iv < min_value:
+        raise HTTPException(status_code=400, detail=f"Parameter '{name}' must be >= {min_value}")
+    if max_value is not None and iv > max_value:
+        raise HTTPException(status_code=400, detail=f"Parameter '{name}' must be <= {max_value}")
+    return iv
 
-    if min_value is not None and value < min_value:
-        raise ValueError(f"Parameter '{name}' must be >= {min_value}")
-    if max_value is not None and value > max_value:
-        raise ValueError(f"Parameter '{name}' must be <= {max_value}")
-    return value
-
-
-def parse_bool_arg(name: str, default: bool = False) -> bool:
-    raw = request.args.get(name, None)
-    if raw is None:
+def parse_bool_arg(value: str | None, default: bool = False) -> bool:
+    if value is None:
         return bool(default)
-    s = str(raw).strip().lower()
+    s = str(value).strip().lower()
     if s in _TRUE_VALUES:
         return True
     if s in _FALSE_VALUES:
         return False
-    # Non-empty, non-recognized: default to False unless default True
     return bool(default)
 
-
-def parse_date_arg(name: str) -> Optional[date]:
-    """Parse a YYYY-MM-DD date argument; returns None if missing.
-    Raises ValueError on invalid format.
-    """
-    raw = request.args.get(name, None)
-    if not raw:
+def parse_date_arg(value: str | None, name: str) -> Optional[date]:
+    if not value:
         return None
     try:
-        return date.fromisoformat(raw)
-    except Exception:
-        raise ValueError(f"Parameter '{name}' must be in YYYY-MM-DD format")
+        return date.fromisoformat(value)
+    except Exception:  # pragma: no cover
+        raise HTTPException(status_code=400, detail=f"Parameter '{name}' must be in YYYY-MM-DD format")
+
+__all__ = [
+    "http_error",
+    "parse_int_arg",
+    "parse_bool_arg",
+    "parse_date_arg",
+]

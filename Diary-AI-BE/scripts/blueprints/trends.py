@@ -1,48 +1,12 @@
-#!/usr/bin/env python3
-"""Trends blueprint: exposes consolidated longitudinal health trend metrics.
-
-Endpoint: /api/trends/health
-
-Computes direction and simple statistics for key metrics (steps, energy_level,
- sleep_score, rhr, stress_avg, mood) over a requested window.
-
-Trend methodology (simple & fast):
- 1. Pull comprehensive health dataset via EnhancedHealthAnalytics (already used elsewhere)
- 2. Build a chronological ascending series (oldest -> newest)
- 3. For each metric:
-    - Compute pct_change = (last - first)/abs(first) if first present
-    - Compute simple linear regression slope per day (least squares) if >=3 points
-    - Classify direction using slope & pct thresholds
- 4. Aggregate an overall_health_direction using weighted signals:
-      improvements: steps↑, energy↑, sleep_score↑, mood↑, rhr↓, stress↓
-    Convert adverse metrics (rhr, stress) by negating slope & pct for score fusion.
-
-Response schema:
-{
-  status: 'success',
-  analysis_type: 'health_trends',
-  period_days: <int>,
-  metrics: {
-    steps: { first, last, pct_change, slope_per_day, direction },
-    ...
-  },
-  overall_health_direction: 'improving' | 'declining' | 'stable',
-  overall_score: float (normalized composite -1..1),
-  timestamp: iso8601
-}
-
-Graceful degradation: if insufficient data (<2 valid points) metric is omitted.
-"""
 from __future__ import annotations
 from datetime import datetime
 from math import sqrt
-from flask import Blueprint, jsonify, request
+from fastapi import APIRouter, Query, HTTPException
 import time
 import os
-
 from enhanced_analytics_engine import EnhancedHealthAnalytics
 
-trends_bp = Blueprint("trends", __name__)
+router = APIRouter(tags=["trends"], prefix="/trends")
 _engine = EnhancedHealthAnalytics()
 
 _BASE_METRICS = [
@@ -54,10 +18,8 @@ _BASE_METRICS = [
     ("mood", "mood", False),
 ]
 
-# Simple in-memory cache { (days): (expires_ts, payload_dict) }
 _CACHE: dict[int, tuple[float, dict]] = {}
-_CACHE_TTL = float(os.getenv("HEALTH_TRENDS_CACHE_TTL", "300"))  # seconds
-
+_CACHE_TTL = float(os.getenv("HEALTH_TRENDS_CACHE_TTL", "300"))
 
 def _linear_regression(points: list[tuple[int, float]]):
     n = len(points)
@@ -73,49 +35,31 @@ def _linear_regression(points: list[tuple[int, float]]):
     slope = (n * sum_xy - sum_x * sum_y) / denom
     return slope
 
-
 def _classify_direction(slope: float | None, pct_change: float | None, std: float | None):
     if slope is None or pct_change is None or std is None:
         return 'stable'
-    # Dynamic thresholds scale with variability: require combined signal magnitude
-    # Base thresholds
-    pct_thr = 0.02 + min(0.08, 0.5 * (std / 100 if std else 0))  # grows slightly with volatility
-    slope_thr = 0.0  # slope already normalized later
+    pct_thr = 0.02 + min(0.08, 0.5 * (std / 100 if std else 0))
+    slope_thr = 0.0
     if slope > slope_thr and pct_change > pct_thr:
         return 'improving'
     if slope < -slope_thr and pct_change < -pct_thr:
         return 'declining'
     return 'stable'
 
-
-@trends_bp.get("/health")
-def health_trends():
+@router.get("/health")
+def health_trends(days: int = Query(90, ge=2, le=365)):
     try:
-        days = request.args.get('days', default=90, type=int) or 90
-        days = max(2, min(365, days))
-        # Cache check
         now = time.time()
         cached = _CACHE.get(days)
         if cached and cached[0] > now:
-            return jsonify(cached[1])
-
+            return cached[1]
         data = _engine.get_comprehensive_health_data_v2(days)
         if not data:
-            return jsonify({
-                'status': 'error',
-                'analysis_type': 'health_trends',
-                'period_days': days,
-                'message': 'No data available'
-            }), 404
-
-        # Ensure chronological ascending (oldest first)
+            raise HTTPException(status_code=404, detail="No data available")
         series = sorted(data, key=lambda r: r.get('day'))
-
         metrics_out = {}
-        overall_components = []  # collect normalized directional scores per metric
+        overall_components = []
         metric_confidences = []
-
-        # Include HRV metric if present in any row (choose smoothed > raw > component ordering of fields)
         hrv_key = None
         candidate_keys = ["hrv_smoothed", "hrv_component", "hrv_raw", "hrv_ms", "hrv"]
         for ck in candidate_keys:
@@ -124,9 +68,7 @@ def health_trends():
                 break
         metrics = list(_BASE_METRICS)
         if hrv_key:
-            # higher is better for HRV
             metrics.append((hrv_key, "hrv", False))
-
         for key, name, invert in metrics:
             vals = []
             for idx, row in enumerate(series):
@@ -144,29 +86,21 @@ def health_trends():
             last = vals[-1][1]
             pct_change = ((last - first) / abs(first)) if first not in (0, None) else None
             slope = _linear_regression(vals)
-            # Dispersion for normalization & dynamic thresholds
             mean = sum(v for _, v in vals) / len(vals)
             variance = sum((v - mean)**2 for _, v in vals) / max(1, (len(vals)-1))
             std = sqrt(variance) if variance > 0 else 0.0
             direction = _classify_direction(slope, pct_change, std if std else None)
-
-            # Score normalization: use tanh-like compression via slope scaled by value dispersion
             if slope is not None and std:
                 scaled = slope / (std if std else 1.0)
             else:
                 scaled = 0.0
-            # Combine with pct_change
             combined = 0.5 * scaled + 0.5 * (pct_change or 0)
             if invert:
                 combined = -combined
             overall_components.append(max(-1.0, min(1.0, combined)))
-
-            # Confidence heuristic: proportion of days with data & series length
             coverage = len(vals) / len(series)
             confidence = min(1.0, 0.5 * coverage + 0.5 * min(1.0, len(vals)/30))
             metric_confidences.append(confidence)
-
-            # Provide compact recent series for sparkline (last 14 points normalized 0..1)
             recent = vals[-14:]
             recent_vals = [v for _, v in recent]
             if recent_vals:
@@ -176,7 +110,6 @@ def health_trends():
                 spark = [round((v - min_v)/span, 4) for v in recent_vals]
             else:
                 spark = []
-
             metrics_out[name] = {
                 'first': first,
                 'last': last,
@@ -188,7 +121,6 @@ def health_trends():
                 'confidence': confidence,
                 'sparkline': spark,
             }
-
         if overall_components:
             overall_score = sum(overall_components) / len(overall_components)
             if overall_score > 0.03:
@@ -200,7 +132,6 @@ def health_trends():
         else:
             overall_score = 0.0
             overall_direction = 'stable'
-
         payload = {
             'status': 'success',
             'analysis_type': 'health_trends',
@@ -212,8 +143,11 @@ def health_trends():
             'timestamp': datetime.now().isoformat(),
             'cache_ttl': _CACHE_TTL,
         }
-        # Store in cache
         _CACHE[days] = (now + _CACHE_TTL, payload)
-        return jsonify(payload)
+        return payload
+    except HTTPException:
+        raise
     except Exception as e:  # pragma: no cover
-        return jsonify({'status': 'error', 'analysis_type': 'health_trends', 'message': str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
+
+__all__ = ["router"]

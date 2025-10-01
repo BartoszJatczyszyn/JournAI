@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
-"""Startup for Enhanced Analytics Backend.
+"""CLI starter for the Enhanced Backend (FastAPI + Uvicorn).
 
-Modernized for Python 3.13 with logging, argparse, and utilities.
+Replaces the old Flask development server with uvicorn. Retains:
+    * Dependency check (minimal)
+    * DB connectivity check
+    * Data availability check
+    * Analytics modules import test
+
+Adds:
+    * --reload flag
+    * --workers support
 """
 from __future__ import annotations
 
@@ -26,8 +34,8 @@ def check_dependencies(auto_install: bool = True) -> bool:
         ("scipy", "scipy"),
         ("sklearn", "scikit-learn"),
         ("psycopg", "psycopg[binary]"),
-        ("flask", "flask"),
-        ("flask_cors", "flask-cors"),
+        ("fastapi", "fastapi"),
+        ("uvicorn", "uvicorn"),
         ("dotenv", "python-dotenv"),
     ]
 
@@ -160,30 +168,41 @@ def test_analytics_modules() -> bool:
     return True
 
 
-def start_enhanced_backend(port: int = 5002, debug: bool = True) -> bool:
-    """Start the enhanced backend server."""
-    LOGGER.info("🚀 Starting Enhanced Analytics Backend on port %d (debug=%s)...", port, debug)
+def start_enhanced_backend(port: int = 5002, reload: bool = False, workers: int | None = None) -> bool:
+    """Start the FastAPI backend via uvicorn."""
+    LOGGER.info("🚀 Starting Enhanced Backend (FastAPI) on port %d ...", port)
     try:
+        import uvicorn  # type: ignore
         from backend_api_enhanced import app
 
-        LOGGER.info("📊 Capabilities:\n   • Advanced correlations\n   • Clustering\n   • Temporal patterns\n   • Recovery analysis\n   • Specialized sleep/stress/activity\n   • Predictive analytics\n   • Personalized insights\n   • Period comparisons")
+        LOGGER.info(
+            "📊 Capabilities:\n   • Advanced correlations\n   • Clustering\n   • Temporal patterns\n   • Recovery analysis\n   • Specialized sleep/stress/activity\n   • Predictive analytics\n   • Personalized insights\n   • Period comparisons\n   • Health trends"
+        )
         LOGGER.info("🌐 Server: http://localhost:%d", port)
-        LOGGER.info("📚 API doc: /api/analytics/info | 🏥 Health: /api/health")
+        LOGGER.info("📚 API docs: /api/docs | 🏥 Health: /api/health")
 
-        app.run(debug=debug, host="0.0.0.0", port=port)
+        uvicorn.run(
+            app,
+            host="0.0.0.0",
+            port=port,
+            reload=reload,
+            workers=workers or 1,
+            log_level="info",
+        )
         return True
     except KeyboardInterrupt:  # pragma: no cover
-        LOGGER.info("👋 Enhanced backend stopped by user")
+        LOGGER.info("👋 Backend stopped by user")
         return False
     except Exception as exc:  # pragma: no cover
-        LOGGER.exception("❌ Failed to start enhanced backend: %s", exc)
+        LOGGER.exception("❌ Failed to start backend: %s", exc)
         return False
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Start Enhanced Backend API")
+    parser = argparse.ArgumentParser(description="Start Enhanced Backend (FastAPI)")
     parser.add_argument("--port", type=int, default=5002, help="HTTP port (default: 5002)")
-    parser.add_argument("--debug", action="store_true", help="Enable Flask debug")
+    parser.add_argument("--reload", action="store_true", help="Enable auto-reload (dev mode)")
+    parser.add_argument("--workers", type=int, default=1, help="Number of worker processes")
     parser.add_argument("--verbose", action="store_true", help="Verbose logging")
     parser.add_argument("--no-install", action="store_true", help="Skip auto-install of missing deps")
     return parser.parse_args()
@@ -207,7 +226,7 @@ def main() -> None:
 
     LOGGER.info("✅ All startup checks passed! ✨")
     time.sleep(1)
-    start_enhanced_backend(port=args.port, debug=args.debug)
+    start_enhanced_backend(port=args.port, reload=args.reload, workers=args.workers)
 
 
 if __name__ == "__main__":

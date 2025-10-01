@@ -1,45 +1,27 @@
 #!/usr/bin/env python3
-"""Blueprint package for the Enhanced Backend API.
+"""Unified routers export (FastAPI).
 
-This package exposes individual Flask blueprints and a helper to register them.
+Provides backward compatibility aliases for legacy *_bp names.
 """
 from __future__ import annotations
 
-from flask import Flask
-
-# Import blueprints
-from .analytics import analytics_bp
-from .predictions import predictions_bp
-from .admin import admin_bp
-from .insights import insights_bp
-from .activities import activities_bp
-from .sleeps import sleeps_bp
-from .core import core_bp
-from .trends import trends_bp
+from .analytics import router as analytics_router  # renamed from analytics_fastapi
+from .predictions import router as predictions_router
+from .admin import router as admin_router
+from .insights import router as insights_router
+from .activities import activities_router
+from .sleeps import sleeps_router
+from .core import router as core_router
+from .trends import router as trends_router
 
 __all__ = [
-    "register_blueprints",
-    "analytics_bp",
-    "predictions_bp",
-    "insights_bp",
-    "activities_bp",
-    "sleeps_bp",
+    "analytics_router",
+    "predictions_router",
+    "admin_router",
+    "insights_router",
+    "activities_router",
+    "sleeps_router",
+    "core_router",
+    "trends_router",
+    # (legacy *_bp aliases removed after full FastAPI migration)
 ]
-
-
-def register_blueprints(app: Flask) -> None:
-    """Register all blueprints on the provided app.
-
-    We keep url_prefix at "/api" for most blueprints to preserve existing
-    public paths exactly as before.
-    """
-    # Note: We keep url_prefix="/api" and define full subpaths inside each blueprint
-    # to avoid changing any externally visible routes.
-    app.register_blueprint(analytics_bp, url_prefix="/api")
-    app.register_blueprint(core_bp, url_prefix="/api")
-    app.register_blueprint(predictions_bp, url_prefix="/api/predictions")
-    app.register_blueprint(admin_bp, url_prefix="/api/admin")
-    app.register_blueprint(insights_bp, url_prefix="/api/insights")
-    app.register_blueprint(activities_bp, url_prefix="/api/activities")
-    app.register_blueprint(sleeps_bp, url_prefix="/api")
-    app.register_blueprint(trends_bp, url_prefix="/api/trends")

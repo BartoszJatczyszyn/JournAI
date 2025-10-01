@@ -34,10 +34,10 @@ USER appuser
 
 ENV PORT=5002 \
     HOST=0.0.0.0 \
-    FLASK_ENV=production \
+    APP_MODULE=scripts.backend_api_enhanced:app \
     PYTHONPATH=/app/scripts
 
 EXPOSE 5002
 
-# Entry: run module directly (no need to copy the script to root)
-ENTRYPOINT ["python", "-m", "scripts.start_enhanced_backend"]
+# Entry: start uvicorn FastAPI server
+ENTRYPOINT ["uvicorn", "scripts.backend_api_enhanced:app", "--host", "0.0.0.0", "--port", "5002"]

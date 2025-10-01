@@ -1,7 +1,12 @@
 # Project requirements (backend + migration)
 # Updated to be compatible with modern Python (3.12/3.13). If you use older Python, pin accordingly.
-flask==2.3.3
-flask-cors==4.0.0
+fastapi==0.115.0
+uvicorn==0.30.6
+orjson==3.10.7
+pydantic==2.8.2
+# (Flask dependencies deprecated after migration; keep temporarily if legacy scripts rely)
+# flask==2.3.3
+# flask-cors==4.0.0
 psycopg[binary]==3.2.9
 python-dotenv==1.0.1
 pandas==2.2.3

@@ -1,20 +1,11 @@
-#!/usr/bin/env python3
-"""Insights blueprint: personalized insights and optimization.
-
-Responsibilities:
-- Provide HTTP routes for insights endpoints
-- Delegate to analytics engines; light param handling only
-"""
 from __future__ import annotations
-
 from datetime import datetime
-from flask import Blueprint, jsonify, request
-
+from fastapi import APIRouter, Query, HTTPException
 from enhanced_analytics_engine import EnhancedHealthAnalytics
 from predictive_analytics import PredictiveHealthAnalytics
 from specialized_analytics import ActivityAnalytics, SleepAnalytics, StressAnalytics
 
-insights_bp = Blueprint("insights", __name__)
+router = APIRouter(tags=["insights"], prefix="/insights")
 
 _enhanced = EnhancedHealthAnalytics()
 _predict = PredictiveHealthAnalytics()
@@ -22,19 +13,14 @@ _sleep = SleepAnalytics()
 _stress = StressAnalytics()
 _activity = ActivityAnalytics()
 
-
-@insights_bp.get("/personalized")
-def personalized_insights():
-    """Get personalized insights built from multiple analytics outputs."""
+@router.get("/personalized")
+def personalized_insights(days: int = Query(60, ge=7, le=365)):
     try:
-        days = request.args.get('days', 60, type=int)
-        # Gather building blocks
         comp = _enhanced.get_comprehensive_insights(days)
         cor = _enhanced.calculate_advanced_correlations(_enhanced.get_comprehensive_health_data_v2(days) or [])
         recov = _enhanced.get_recovery_trend(days) or []
         sleep = _sleep.analyze_sleep_efficiency(min(30, days))
         stress = _stress.analyze_stress_patterns(min(30, days))
-
         personalized = {
             'highlights': comp.get('highlights') if isinstance(comp, dict) else None,
             'top_correlations': cor.get('top') if isinstance(cor, dict) else None,
@@ -42,28 +28,22 @@ def personalized_insights():
             'sleep_focus': sleep.get('insights') if isinstance(sleep, dict) else None,
             'stress_focus': stress.get('insights') if isinstance(stress, dict) else None,
         }
-        return jsonify({
+        return {
             'status': 'success',
             'analysis_type': 'personalized_insights',
             'period_days': days,
             'insights': personalized,
             'timestamp': datetime.now().isoformat(),
-        })
-    except Exception as e:
-        return jsonify({'status': 'error', 'error': str(e)}), 500
+        }
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=str(e))
 
-
-@insights_bp.get("/optimization")
-def optimization_insights():
-    """Suggest optimization ideas for a selected metric using available signals."""
+@router.get("/optimization")
+def optimization_insights(metric: str = Query("sleep_quality"), days: int = Query(60, ge=7, le=365)):
     try:
-        metric = request.args.get('metric', 'sleep_quality')
-        days = request.args.get('days', 60, type=int)
-
         data = _enhanced.get_comprehensive_health_data_v2(days) or []
         cor = _enhanced.calculate_advanced_correlations(data) if data else {}
         top = (cor or {}).get('top') or []
-
         recs = []
         for c in top[:5]:
             try:
@@ -80,13 +60,15 @@ def optimization_insights():
                     })
             except Exception:
                 continue
-        return jsonify({
+        return {
             'status': 'success',
             'analysis_type': 'optimization_insights',
             'period_days': days,
             'metric': metric,
             'optimization_factors': recs,
             'timestamp': datetime.now().isoformat(),
-        })
-    except Exception as e:
-        return jsonify({'status': 'error', 'error': str(e)}), 500
+        }
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=str(e))
+
+__all__ = ["router"]
