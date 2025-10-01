@@ -266,12 +266,3 @@ curl http://localhost:5002/api/stats
 ```
 
 ---
-
-## 17. Disclaimer
-This project is for personal analytics. Use at your own risk. Respect Garmin's terms of service. Do not expose credentials or personal health data publicly.
-
----
-
-Need a slimmer variant, production hardening tips, or CI pipeline instructions? Ask and we can add a focused section.
-
-
