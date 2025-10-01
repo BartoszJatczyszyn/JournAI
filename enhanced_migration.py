@@ -1304,6 +1304,45 @@ class EnhancedGarminMigrator:
                 return
             
             logger.info(f"Using columns: {select_columns}")
+
+            # --- NEW: Preload steps / steps-per-min metrics from steps_activities_view if available ---
+            steps_metrics = {}
+            try:
+                sqlite_cursor.execute("SELECT name, type FROM sqlite_master WHERE (type='view' OR type='table') AND name='steps_activities_view'")
+                if sqlite_cursor.fetchone():
+                    sqlite_cursor.execute("PRAGMA table_info(steps_activities_view)")
+                    steps_view_cols = [c[1] for c in sqlite_cursor.fetchall()]
+                    wanted_cols = []
+                    # Determine available metric columns
+                    has_steps = 'steps' in steps_view_cols
+                    has_avg_spm = 'avg_steps_per_min' in steps_view_cols
+                    has_max_spm = 'max_steps_per_min' in steps_view_cols
+                    if has_steps: wanted_cols.append('steps')
+                    if has_avg_spm: wanted_cols.append('avg_steps_per_min')
+                    if has_max_spm: wanted_cols.append('max_steps_per_min')
+                    if 'activity_id' not in steps_view_cols:
+                        logger.warning("steps_activities_view lacks activity_id column — cannot map metrics")
+                    elif wanted_cols:
+                        cols_sql = ', '.join(['activity_id'] + wanted_cols)
+                        sqlite_cursor.execute(f"SELECT {cols_sql} FROM steps_activities_view WHERE activity_id IS NOT NULL")
+                        for row in sqlite_cursor.fetchall():
+                            activity_id = row[0]
+                            metrics = {}
+                            idx = 1
+                            if has_steps:
+                                metrics['steps'] = int(row[idx]) if row[idx] is not None else None; idx += 1
+                            if has_avg_spm:
+                                metrics['avg_steps_per_min'] = float(row[idx]) if row[idx] is not None else None; idx += 1
+                            if has_max_spm:
+                                metrics['max_steps_per_min'] = float(row[idx]) if row[idx] is not None else None; idx += 1
+                            steps_metrics[activity_id] = metrics
+                        logger.info(f"Loaded steps metrics for {len(steps_metrics)} activities from steps_activities_view (cols: {wanted_cols})")
+                    else:
+                        logger.info("steps_activities_view found but no target metric columns present")
+                else:
+                    logger.info("steps_activities_view not found — skipping steps/min metrics preload")
+            except Exception as e:
+                logger.warning(f"Could not load steps metrics from steps_activities_view: {e}")
             
             # Query activities data
             query = f"SELECT {', '.join(select_columns)} FROM activities WHERE activity_id IS NOT NULL ORDER BY start_time"
@@ -1351,6 +1390,15 @@ class EnhancedGarminMigrator:
                         # Pace in min/km
                         pace_seconds_per_meter = data['moving_time'] / data['distance']
                         data['avg_pace'] = pace_seconds_per_meter * 1000 / 60  # min/km
+
+                    # Merge in steps metrics if present and not already supplied by activities table
+                    sid = data.get('activity_id')
+                    if sid in steps_metrics:
+                        sm = steps_metrics[sid]
+                        # Only set if key absent or None to not overwrite future extension
+                        for k, v in sm.items():
+                            if v is not None and (k not in data or data[k] is None):
+                                data[k] = v
                     
                     # Upsert activity
                     stmt = insert(GarminActivity).values(**data)

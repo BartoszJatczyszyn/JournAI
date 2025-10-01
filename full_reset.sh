@@ -46,36 +46,44 @@ NC='\033[0m'
 #   - Można pominąć przez flagę: --skip-garmindb
 
 if [ $RUN_GARMINDb -eq 1 ]; then
-  echo -e "${BLUE}📥 Wykonuję wstępny etap: garmindb_cli.py (download/import/analyze/latest)...${NC}"
-  GCLI_CANDIDATES=(
-    "${SCRIPT_DIR}/garmindb_cli.py"
-    "${SCRIPT_DIR}/Diary-AI-BE/scripts/cli/garmindb_cli.py"
-  )
-  GCLI_PATH=""
-  for c in "${GCLI_CANDIDATES[@]}"; do
-    if [ -f "$c" ]; then
-      GCLI_PATH="$c"; break
-    fi
-  done
-  if [ -z "$GCLI_PATH" ]; then
-    echo -e "${YELLOW}⚠️  Nie znaleziono garmindb_cli.py (pomijam ten etap). Dodaj --skip-garmindb aby ukryć to ostrzeżenie.${NC}"
+  echo -e "${BLUE}📥 Wykonuję wstępny etap: garmindb (download/import/analyze/latest) – pomijam szukanie lokalnego pliku, używam globalnych poleceń...${NC}"
+
+  # Funkcja pomocnicza: znajdź python z importem garmindb
+  find_python_with_garmindb() {
+    local candidates
+    candidates=("${SCRIPT_DIR}/.venv/bin/python" "python3" "python")
+    for py in "${candidates[@]}"; do
+      if command -v "$py" >/dev/null 2>&1; then
+        if "$py" -c 'import garmindb' >/dev/null 2>&1; then
+          echo "$py"; return 0
+        fi
+      fi
+    done
+    return 1
+  }
+
+  GCLI_STATUS=0
+  if command -v garmindb_cli.py >/dev/null 2>&1; then
+    echo -e "${BLUE}▶️  garmindb_cli.py --all --download --import --analyze --latest${NC}"
+    set +e; garmindb_cli.py --all --download --import --analyze --latest; GCLI_STATUS=$?; set -e
+  elif command -v garmindb >/dev/null 2>&1; then
+    echo -e "${BLUE}▶️  garmindb --all --download --import --analyze --latest${NC}"
+    set +e; garmindb --all --download --import --analyze --latest; GCLI_STATUS=$?; set -e
   else
-    # Użyj lokalnego Pythona; jeśli istnieje .venv to preferuj ją
-    if [ -d "${SCRIPT_DIR}/.venv" ]; then
-      PY_CMD="${SCRIPT_DIR}/.venv/bin/python"
+    PY_CMD="$(find_python_with_garmindb || echo '')"
+    if [ -n "$PY_CMD" ]; then
+      echo -e "${BLUE}▶️  $PY_CMD -m garmindb --all --download --import --analyze --latest${NC}"
+      set +e; "$PY_CMD" -m garmindb --all --download --import --analyze --latest; GCLI_STATUS=$?; set -e
     else
-      PY_CMD="python3"
+      echo -e "${YELLOW}⚠️  Nie znaleziono globalnego polecenia garmindb (pomijam etap). Zainstaluj: pip install garmindb lub użyj --skip-garmindb.${NC}"
+      GCLI_STATUS=0
     fi
-    echo -e "${BLUE}▶️  $PY_CMD $GCLI_PATH --all --download --import --analyze --latest${NC}"
-    set +e
-    $PY_CMD "$GCLI_PATH" --all --download --import --analyze --latest
-    GCLI_STATUS=$?
-    set -e
-    if [ $GCLI_STATUS -ne 0 ]; then
-      echo -e "${RED}⚠️  garmindb_cli.py zakończył się kodem $GCLI_STATUS (kontynuuję reset bazy).${NC}"
-    else
-      echo -e "${GREEN}✅ garmindb_cli.py zakończony sukcesem${NC}"
-    fi
+  fi
+
+  if [ $GCLI_STATUS -ne 0 ]; then
+    echo -e "${RED}⚠️  garmindb zakończył się kodem $GCLI_STATUS (kontynuuję reset bazy).${NC}"
+  else
+    echo -e "${GREEN}✅ garmindb etap zakończony (lub pominięty bez błędu)${NC}"
   fi
 else
   echo -e "${YELLOW}⏭  Pomijam etap garmindb_cli.py (użyto --skip-garmindb)${NC}"
