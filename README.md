@@ -59,6 +59,23 @@ python scripts/setup_garmindb.py \
   --use-password-file \
   --full --latest
 ```
+
+Manual password entry (without password file):
+```bash
+python scripts/setup_garmindb.py \
+   --username you@example.com \
+   --start-date 11/01/2024 \
+   --full --latest
+```
+During the run you will be prompted for the password (hidden). When asked:
+   Zapisać hasło w osobnym pliku (zalecane)? [Y/n]
+answer `n` if you do NOT want a separate password file. In that case the password is stored directly in `GarminConnectConfig.json` (less secure). If you answer `y` or pass `--use-password-file`, it will be written to `~/.GarminDb/password.txt` with permissions `600` and the JSON will only reference the file.
+
+Security trade‑off summary:
+- Password file (recommended): plaintext in dedicated file with `chmod 600`, JSON omits the password.
+- Direct JSON storage: quickest, but any tooling or accidental sharing of the JSON exposes the secret.
+- (Future option) Ephemeral / no storage: not yet implemented; would require passing credentials only at runtime.
+
 Later manual runs:
 ```bash
 python -m garmindb.garmindb_cli --all --download --import --analyze --latest
