@@ -1,196 +1,260 @@
-# JournAI — uruchomienie w 1 min (Docker Compose)
+# JournAI
 
-Ten projekt zawiera backend analityczny (Flask) oraz bazę danych Postgres dla danych Garmin. Poniżej znajdziesz najprostszy możliwy sposób uruchomienia całości przy użyciu Docker Compose.
-
-## Co uruchamia Compose
-- db (Postgres 16, wolumen pg_data)
-- backend (Enhanced Analytics API na porcie 5002)
-
-Uwaga: Frontend (React) nie jest częścią docker-compose w tej wersji. Możesz korzystać bezpośrednio z API.
-
-## Wymagania
-- Docker Desktop (lub Docker + Compose v2)
-
-# JournAI — przegląd projektu i szybkie uruchomienie
-
-To repozytorium zawiera backend analityczny (Flask), skrypty migracyjne oraz prosty frontend React przeznaczony do lokalnego testowania i wizualizacji wyników analizy danych Garmin/HealthData.
-
-W tej wersji preferujemy uruchamianie usług przez Docker Compose. Skrypty `start_all.sh` i `stop_all.sh` zostały zaktualizowane tak, by domyślnie korzystać z dockera — lokalne uruchomienie frontendu pozostaje opcjonalne.
-
-## Co robi projekt
-- Agreguje i analizuje dane zdrowotne w Postgresie.
-- Udostępnia API analityczne (Enhanced Analytics API, domyślnie na porcie 5002).
-- Zawiera narzędzia do migracji/importu danych oraz prosty frontend React do podglądu wyników.
-
-## Główne katalogi
-- `Diary-AI-BE/` — backend (Flask, migracje, skrypty)
-- `Diary-AI-FE/frontend-react/` — frontend React (dev server)
-- `docker-compose.yml` — konfiguracja Postgres + backend (używane przez Docker Compose)
-
-## Wymagania
-- Docker z Compose (zalecane)
-- Python 3 (jeśli uruchamiasz lokalnie)
-- Node.js + npm (jeśli uruchamiasz frontend lokalnie)
-
-## Szybkie uruchomienie (zalecane — Docker Compose)
-
-1) Przejdź do katalogu projektu:
-
-```bash
-cd /path/to/AI
-```
-
-2) Uruchom stack przez Docker Compose (domyślnie uruchamia bazę i backend):
-
-```bash
-docker compose up -d --build
-```
-
-3) Sprawdź, czy backend odpowiada:
-
-```bash
-curl http://localhost:5002/api/stats
-```
-
-4) Zatrzymanie wszystkich kontenerów:
-
-```bash
-docker compose down
-```
-
-## `start_all.sh` — docker-first, z opcją lokalnego frontendu
-
-Nowy `start_all.sh` działa tak:
-- Domyślnie: używa `docker compose up -d --build` (lub `docker-compose` jeśli starsza wersja jest dostępna) i czeka, aż backend odpowie na `/api/stats`.
-- Opcjonalnie: możesz dodać flagę `--with-frontend` aby uruchomić także lokalny dev server React (skrypt zainstaluje zależności i uruchomi `npm start` na pierwszym wolnym porcie z zakresu 3000-3010).
-
-Przykłady:
-
-Uruchom tylko docker stack (domyślnie):
-
-```bash
-./start_all.sh
-```
-
-Uruchom docker stack i lokalny frontend:
-
-```bash
-./start_all.sh --with-frontend
-```
-
-Uwaga: `--with-frontend` jest wygodne podczas developmentu (możesz wtedy korzystać z hot-reload w React), natomiast produkcyjny/deployowany frontend można serwować inaczej.
-
-## `stop_all.sh` — zatrzymanie i czyszczenie
-
-Nowy `stop_all.sh` robi dwie rzeczy:
-- Próbuje zatrzymać stack przez `docker compose down` (lub `docker-compose down`).
-- Dodatkowo czyści lokalne procesy, takie jak `react-scripts` czy lokalny backend uruchomiony skryptem `start_enhanced_backend.py`, oraz zwalnia typowe porty (3000, 5001, 5002) jeśli są zajęte.
-
-Uruchom:
-
-```bash
-./stop_all.sh
-```
-
-Uwaga: skrypt używa `kill -9` do zwalniania portów — to szybkie rozwiązanie podczas developmentu, ale ostrożnie, jeśli na tych portach masz inne usługi.
-
-## Jak sprawdzić, że wszystko działa
-- Health endpoint:
-
-```bash
-curl http://localhost:5002/api/stats
-```
-
-- Przykładowy endpoint analityczny:
-
-```bash
-curl "http://localhost:5002/api/analytics/enhanced/correlations?days=30"
-```
-
-- Frontend (jeśli uruchomiony lokalnie): otwórz adres pokazany przez `start_all.sh` (np. http://localhost:3000).
-
-## Logi i debug
-- Kontener backendu: użyj `docker compose logs backend` lub `docker compose logs -f backend`.
-- Lokalny backend (jeśli uruchamiasz bez dockera): sprawdź `Diary-AI-BE/backend.log`.
-
-## Najczęstsze problemy
-- Port 5002 zajęty — sprawdź, co nasłuchuje na tym porcie i zatrzymaj je, lub użyj innej konfiguracji.
-- Docker nie zainstalowany — jeśli chcesz uruchamiać lokalnie, użyj `./start_all.sh --with-frontend` i upewnij się, że masz Python/Node/npm.
-- Frontend nie startuje — usuń `node_modules` i spróbuj `npm install` ręcznie.
-
-## Migracje i import danych
-- Skrypty migracyjne i importujące dane znajdują się w `Diary-AI-BE/scripts/` oraz w plikach w katalogu głównym (np. `enhanced_migration.py`). Zajrzyj też do `docs/` i `archive/` dla dodatkowych instrukcji.
+A local analytics platform for your Garmin / health data. It ingests, stores, enriches and serves analytics via a lightweight backend API (Flask) and optionally a React frontend. The preferred way to run everything is Docker Compose (Postgres + enhanced backend). A helper script simplifies the initial Garmin data setup.
 
 ---
 
-Jeśli chcesz, mogę:
-- dodać przykładowe cURL-e z odpowiedziami; lub
-- rozbudować sekcję development o instrukcję tworzenia venv i instalacji zależności backendu bez dockera.
+## 1. TL;DR – Run Everything in 3 Commands
+```bash
+# Clone (example path)
+# git clone <your-fork-or-repo-url> && cd AI
 
-Napisz, co wolisz, to dopracuję README dalej.
+# Start database + backend
+docker compose up -d --build
 
-## Pełny reset środowiska i migracja danych (`full_reset.sh`)
+# Check API health
+curl http://localhost:5002/api/stats
+```
+If you see JSON stats, the backend is live.
 
-Skrypt `full_reset.sh` automatyzuje cały cykl: pobranie / odświeżenie danych Garmin (opcjonalnie), pełne wyczyszczenie bazy (kasuje wolumen Postgresa), przebudowę obrazów, start bazy, start backendu, uruchomienie migracji oraz (opcjonalnie) uruchomienie lokalnego frontendu React.
+Optional (React dev frontend – separate repo folder): start later with `./start_all.sh --with-frontend`.
 
-### Użycie podstawowe
+---
+
+## 2. What You Get
+- PostgreSQL 16 for structured long‑term storage.
+- Enhanced Analytics Backend (Flask) on port 5002.
+- Scripts for importing / migrating Garmin-derived datasets.
+- Optional integration with `garmindb` to download raw Garmin data first (SQLite → then enriched into Postgres).
+- Utilities for full resets, selective migrations, and feature view refresh.
+
+---
+
+## 3. Prerequisites
+| Component | Required | Notes |
+|-----------|----------|-------|
+| Docker + Compose v2 | Yes | Primary runtime path |
+| Python 3.10+ | Recommended | For helper scripts outside containers |
+| Node.js (LTS) | Optional | Only if running local React dev frontend |
+
+---
+
+## 4. First-Time Garmin Data Setup (garmindb)
+If you want to pull your own Garmin data locally before analytics, run the interactive setup script. This creates `~/.GarminDb/GarminConnectConfig.json` and (optionally) performs the first full import.
+
+```bash
+python scripts/setup_garmindb.py
+```
+You will be asked for:
+- Garmin username (email)
+- Password (choose: store directly in JSON OR in a protected file with chmod 600)
+- Start date(s) (single date or individual dates for sleep / rhr / monitoring / weight)
+- Whether to immediately run: `--all --download --import --analyze` (+ optionally `--latest`)
+
+Non‑interactive example:
+```bash
+python scripts/setup_garmindb.py \
+  --username you@example.com \
+  --start-date 11/01/2024 \
+  --use-password-file \
+  --full --latest
+```
+Later manual runs:
+```bash
+python -m garmindb.garmindb_cli --all --download --import --analyze --latest
+python -m garmindb.garmindb_cli --backup         # backup local SQLite store
+pip install --upgrade garmindb                  # update tool
+```
+
+If you already have Postgres ingestion scripts, you may skip garmindb entirely and feed your own sources.
+
+---
+
+## 5. Starting & Stopping the Stack
+Basic:
+```bash
+docker compose up -d --build   # start / rebuild if needed
+docker compose down            # stop (keeps volumes)
+docker compose down -v         # stop AND remove database volume (data loss)
+```
+Helper scripts (wrap extra logic):
+```bash
+./start_all.sh                 # docker stack only
+./start_all.sh --with-frontend # also launch React dev server if available
+./stop_all.sh                  # stop stack + clean stray local processes
+```
+
+---
+
+## 6. Full Environment Reset + Fresh Migration
+If you want a clean slate:
 ```bash
 ./full_reset.sh
 ```
-Po zakończeniu backend będzie dostępny pod: http://localhost:5002
-
-### Opcje
-- `--with-frontend` — po migracji uruchamia lokalny dev server React (wyszukiwanie wolnego portu 3000–3010)
-- `--no-cache` — przebudowa obrazów Dockera całkowicie od zera (ignoruje cache warstw)
-- `--skip-garmindb` — pomija wstępny krok wywołania CLI do pobierania/importu danych
-- `--help` — krótka pomoc / nagłówek skryptu
-
-### Krok 0: Pobranie / aktualizacja danych (garmindb_cli)
-Na początku (o ile nie użyto `--skip-garmindb`) skrypt próbuje uruchomić:
+Common flags:
 ```bash
-garmindb_cli.py --all --download --import --analyze --latest
+./full_reset.sh --with-frontend   # also start frontend
+./full_reset.sh --no-cache        # force rebuild images from scratch
+./full_reset.sh --skip-garmindb   # skip initial garmindb CLI call
 ```
-Wyszukiwane ścieżki do tego pliku:
-1. `./garmindb_cli.py`
-2. `./Diary-AI-BE/scripts/cli/garmindb_cli.py`
+What it does (sequence):
+1. (Optional) Runs garmindb CLI to refresh raw data.
+2. `docker compose down -v` (wipe DB volume).
+3. Rebuilds containers.
+4. Starts Postgres, waits for readiness.
+5. Starts backend, waits for `/api/stats`.
+6. Executes full migration script inside backend container.
+7. (Optional) Starts React dev frontend.
 
-Jeśli plik nie istnieje, otrzymasz ostrzeżenie i proces resetu idzie dalej.
+Use this when schema or migration logic changes and you need reproducible state.
 
-### Kolejne kroki wykonywane przez skrypt
-1. `docker compose down -v` — zatrzymanie stacka i usunięcie wolumenów (czyści bazę)
-2. Czyszczenie „dangling images” (jeśli są)
-3. Budowa obrazów (`--no-cache` jeśli podano)
-4. Start samej bazy (`db`) i oczekiwanie na healthcheck
-5. Start backendu i oczekiwanie aż endpoint `/api/stats` będzie odpowiadał
-6. Uruchomienie pełnej migracji: `python run_migration.py --subset all` wewnątrz kontenera backendu
-7. (Opcjonalnie) uruchomienie frontendu React lokalnie
+---
 
-### Typowe scenariusze
-Pełny reset + frontend:
+## 7. Directory Structure (Essentials)
+| Path | Purpose |
+|------|---------|
+| `Diary-AI-BE/` | Backend source (Flask, analytics, migrations) |
+| `Diary-AI-BE/scripts/` | Operational / migration / analytics scripts |
+| `Diary-AI-FE/frontend-react/` | Optional React dev frontend |
+| `docker-compose.yml` | Orchestrates Postgres + backend |
+| `scripts/setup_garmindb.py` | Interactive Garmin data bootstrap |
+| `full_reset.sh` | Clean rebuild & migration pipeline |
+| `start_all.sh` / `stop_all.sh` | Convenience lifecycle scripts |
+| `archive/` | Legacy or reference scripts & docs |
+| `docs/` | Extended guides & internal documentation |
+
+---
+
+## 8. Backend API – Quick Probe
+Health / stats:
 ```bash
-./full_reset.sh --with-frontend
+curl http://localhost:5002/api/stats
 ```
-
-Pełny reset z wymuszoną przebudową obrazów bez cache:
+Example analytics endpoint (adjust days):
 ```bash
-./full_reset.sh --no-cache
+curl "http://localhost:5002/api/analytics/enhanced/correlations?days=30"
 ```
+If you get structured JSON, the service is functioning. More specialized endpoints may exist under `/api/analytics/...` – explore or open the source in `Diary-AI-BE/backend_api_enhanced.py`.
 
-Pominięcie etapu pobierania danych:
+---
+
+## 9. Frontend (Optional)
+Dev-only React UI (hot reload):
 ```bash
-./full_reset.sh --skip-garmindb
+./start_all.sh --with-frontend
+```
+It will look for a free port (3000–3010). For production you can later build and serve static assets separately (`npm run build`). Frontend is not required for API / data workflows.
+
+---
+
+## 10. Typical Daily Flow
+1. Update raw Garmin data (optional):
+   ```bash
+   python -m garmindb.garmindb_cli --all --download --import --analyze --latest
+   ```
+2. Refresh analytics / views (example):
+   ```bash
+   docker exec -it backend python Diary-AI-BE/scripts/refresh_features_view.py
+   ```
+3. Query API or open frontend.
+4. Periodically backup:
+   ```bash
+   python -m garmindb.garmindb_cli --backup
+   docker exec -it db pg_dump -U postgres postgres > pg_backup.sql
+   ```
+
+---
+
+## 11. Maintenance & Updates
+Update analytics code: pull / merge changes then rebuild backend:
+```bash
+git pull
+docker compose up -d --build backend
+```
+Update garmindb:
+```bash
+pip install --upgrade garmindb
+```
+Rotate password (if using password file):
+```bash
+nano ~/.GarminDb/password.txt   # edit
+chmod 600 ~/.GarminDb/password.txt
+```
+If changing username/password in JSON, ensure the backend or CLI is restarted for new sessions.
+
+---
+
+## 12. Backups
+| Layer | Method | Notes |
+|-------|--------|-------|
+| GarminDb SQLite | `python -m garmindb.garmindb_cli --backup` | Stored under `~/.GarminDb` |
+| Postgres | `pg_dump` or volume snapshot | Use host cron / manual scripts |
+| Config | Copy `~/.GarminDb/GarminConnectConfig.json` | Avoid committing secrets |
+
+Consider a simple cron entry for Postgres daily dumps + pruning old files.
+
+---
+
+## 13. Security Notes
+- Avoid committing `GarminConnectConfig.json` (it lives in your HOME dir, not repo).
+- Prefer password file mode (created with `chmod 600`).
+- Do not store real credentials in shared screenshots or logs.
+- For hardened setups, consider: OS keychain, Vault, or environment variable indirection.
+
+---
+
+## 14. Troubleshooting
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `curl /api/stats` hangs | Backend not ready | Check `docker compose logs backend` |
+| DB connection errors | Postgres init lag | Wait; ensure no port conflict |
+| 500 errors on analytics | Missing migrations | Re-run migration script or `full_reset.sh` |
+| garmindb auth fails | Bad credentials / 2FA / locale | Re-run setup script, verify login on web |
+| Frontend not opening | Port in use | Free port 3000 or let script auto-select |
+
+Log inspection:
+```bash
+docker compose logs -f backend
+docker compose logs -f db
 ```
 
-### Dlaczego warto używać `full_reset.sh`?
-- Gwarantuje spójne środowisko testowe (czysta baza + świeża migracja)
-- Szybko diagnozuje problemy (jeśli migracja padnie — od razu wiesz gdzie)
-- Minimalizuje „ukryte” efekty cache Dockera
+---
 
-### Kiedy NIE używać
-- Gdy chcesz tylko zrestartować backend (użyj wtedy `./start_all.sh` albo `docker compose up -d`)
-- Gdy nie chcesz tracić bieżącej zawartości bazy (skrypt usuwa wolumen)
+## 15. Extending / Next Steps
+- Add scheduled refresh (cron + CLI script) for nightly analytics.
+- Add Grafana / BI layer querying Postgres directly.
+- Harden secrets management (Vault, AWS Secrets Manager, etc.).
+- Export derived metrics to external warehouse.
 
-### Rozszerzenia / możliwe usprawnienia
-Można łatwo dodać kolejne opcje (np. `--activities-only`, `--sleep-only` dla selektywnych subsetów migracji) – jeśli będą potrzebne, napisz.
+Open an issue or leave a note if you want automation for any of these.
+
+---
+
+## 16. Minimal Command Reference
+```bash
+# Start core stack
+docker compose up -d --build
+# Stop (keep data)
+docker compose down
+# Stop + wipe data
+docker compose down -v
+# Full clean + migration
+./full_reset.sh
+# Garmin setup (interactive)
+python scripts/setup_garmindb.py
+# Update garmindb
+pip install --upgrade garmindb
+# Health check
+curl http://localhost:5002/api/stats
+```
+
+---
+
+## 17. Disclaimer
+This project is for personal analytics. Use at your own risk. Respect Garmin's terms of service. Do not expose credentials or personal health data publicly.
+
+---
+
+Need a slimmer variant, production hardening tips, or CI pipeline instructions? Ask and we can add a focused section.
 
 
