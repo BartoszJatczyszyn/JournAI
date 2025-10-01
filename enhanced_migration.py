@@ -256,59 +256,59 @@ class DailyJournal(Base):
     day = Column(Date, ForeignKey("garmin_daily_summaries.day"), primary_key=True, index=True, nullable=False)
 
     # Core subjective ratings (1-5)
-    mood = Column(Integer, nullable=True)  # 1 (very low) .. 5 (great)
-    stress_level = Column(Integer, nullable=True)  # perceived stress 1-5
-    energy_level = Column(Integer, nullable=True)  # energy 1-5
-    focus_level = Column(Integer, nullable=True)   # focus 1-5
-    productivity_score = Column(Integer, nullable=True)  # productivity 1-5
-    sleep_quality_rating = Column(Integer, nullable=True)  # subjective sleep quality 1-5
-    soreness_level = Column(Integer, nullable=True)  # DOMS / soreness 1-5
-    social_interactions_quality = Column(Integer, nullable=True)  # 1-5
-    digestion_quality = Column(Integer, nullable=True)  # 1-5
-    workout_intensity_rating = Column(Integer, nullable=True)  # 1-5 subjective
+    mood = Column(Integer, nullable=True, default=None)  # 1 (very low) .. 5 (great)
+    stress_level = Column(Integer, nullable=True, default=None)  # perceived stress 1-5
+    energy_level = Column(Integer, nullable=True, default=None)  # energy 1-5
+    focus_level = Column(Integer, nullable=True, default=None)   # focus 1-5
+    productivity_score = Column(Integer, nullable=True, default=None)  # productivity 1-5
+    sleep_quality_rating = Column(Integer, nullable=True, default=None)  # subjective sleep quality 1-5
+    soreness_level = Column(Integer, nullable=True, default=None)  # DOMS / soreness 1-5
+    social_interactions_quality = Column(Integer, nullable=True, default=None)  # 1-5
+    digestion_quality = Column(Integer, nullable=True, default=None)  # 1-5
+    workout_intensity_rating = Column(Integer, nullable=True, default=None)  # 1-5 subjective
 
     # Lifestyle flags / behaviors
-    meditated = Column(Boolean)
-    alcohol = Column(String(100))  # details string ("0" / type / units)
-    fasting_hours = Column(Float)  # e.g. 16.0
-    calories_controlled = Column(Boolean)
-    night_snacking = Column(Boolean)
-    sweet_cravings = Column(Boolean)
-    steps_goal_achieved = Column(Boolean)
-    journaling_done = Column(Boolean)
-    stretching_mobility_done = Column(Boolean)
+    meditated = Column(Boolean, default=False)
+    alcohol = Column(String(100), default=None)  # details string ("0" / type / units)
+    fasting_hours = Column(Float, default=0.0)  # e.g. 16.0
+    calories_controlled = Column(Boolean, default=False)
+    night_snacking = Column(Boolean, default=False)
+    sweet_cravings = Column(Boolean, default=False)
+    steps_goal_achieved = Column(Boolean, default=False)
+    journaling_done = Column(Boolean, default=False)
+    stretching_mobility_done = Column(Boolean, default=False)
 
     # Nutrition / intake
-    water_intake_ml = Column(Integer)      # daily total
-    caffeine_mg = Column(Integer)
-    supplements_taken = Column(String(500))  # free-form list
+    water_intake_ml = Column(Integer, default=0)      # daily total
+    caffeine_mg = Column(Integer, default=0)
+    supplements_taken = Column(String(500), default=None)  # free-form list
     supplement_ashwagandha = Column(Boolean, default=False)
     supplement_magnesium = Column(Boolean, default=False)
     supplement_vitamin_d = Column(Boolean, default=False)
 
     # Sleep environment / pre-sleep habits
-    used_sleep_mask = Column(Boolean)
-    used_ear_plugs = Column(Boolean)
-    bedroom_temp_rating = Column(String(50))  # e.g. "cool", "warm"
-    read_before_sleep = Column(Boolean)
-    used_phone_before_sleep = Column(Boolean)
-    hot_bath_before_sleep = Column(Boolean)
-    blue_light_blockers = Column(Boolean)
+    used_sleep_mask = Column(Boolean, default=False)
+    used_ear_plugs = Column(Boolean, default=False)
+    bedroom_temp_rating = Column(String(50), default=None)  # e.g. "cool", "warm"
+    read_before_sleep = Column(Boolean, default=False)
+    used_phone_before_sleep = Column(Boolean, default=False)
+    hot_bath_before_sleep = Column(Boolean, default=False)
+    blue_light_blockers = Column(Boolean, default=False)
 
     # Time allocations / exposure
-    screen_time_minutes = Column(Integer)
-    outside_time_minutes = Column(Integer)
-    reading_time_minutes = Column(Integer)
+    screen_time_minutes = Column(Integer, default=0)
+    outside_time_minutes = Column(Integer, default=0)
+    reading_time_minutes = Column(Integer, default=0)
 
     # Body metrics (subjective or quick manual capture)
-    weight_morning_kg = Column(Float)
-    resting_hr_manual = Column(Integer)  # if user self-logs different from device
-    hrv_ms = Column(Integer)  # manual HRV (rMSSD) entry in milliseconds
+    weight_morning_kg = Column(Float, default=None)
+    resting_hr_manual = Column(Integer, default=None)  # if user self-logs different from device
+    hrv_ms = Column(Integer, default=None)  # manual HRV (rMSSD) entry in milliseconds
 
     # Context / qualitative
-    location = Column(String(200))
-    primary_workout_type = Column(String(100))
-    notes = Column(Text)
+    location = Column(String(200), default=None)
+    primary_workout_type = Column(String(100), default=None)
+    notes = Column(Text, default=None)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
