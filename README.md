@@ -11,79 +11,121 @@ Uwaga: Frontend (React) nie jest częścią docker-compose w tej wersji. Możesz
 ## Wymagania
 - Docker Desktop (lub Docker + Compose v2)
 
-## Szybki start (3 kroki)
+# JournAI — przegląd projektu i szybkie uruchomienie
 
-1) (Opcjonalnie) skonfiguruj środowisko przez .env
+To repozytorium zawiera backend analityczny (Flask), skrypty migracyjne oraz prosty frontend React przeznaczony do lokalnego testowania i wizualizacji wyników analizy danych Garmin/HealthData.
+
+W tej wersji preferujemy uruchamianie usług przez Docker Compose. Skrypty `start_all.sh` i `stop_all.sh` zostały zaktualizowane tak, by domyślnie korzystać z dockera — lokalne uruchomienie frontendu pozostaje opcjonalne.
+
+## Co robi projekt
+- Agreguje i analizuje dane zdrowotne w Postgresie.
+- Udostępnia API analityczne (Enhanced Analytics API, domyślnie na porcie 5002).
+- Zawiera narzędzia do migracji/importu danych oraz prosty frontend React do podglądu wyników.
+
+## Główne katalogi
+- `Diary-AI-BE/` — backend (Flask, migracje, skrypty)
+- `Diary-AI-FE/frontend-react/` — frontend React (dev server)
+- `docker-compose.yml` — konfiguracja Postgres + backend (używane przez Docker Compose)
+
+## Wymagania
+- Docker z Compose (zalecane)
+- Python 3 (jeśli uruchamiasz lokalnie)
+- Node.js + npm (jeśli uruchamiasz frontend lokalnie)
+
+## Szybkie uruchomienie (zalecane — Docker Compose)
+
+1) Przejdź do katalogu projektu:
+
 ```bash
-cd AI
-cp .env.docker.example .env  # jeśli chcesz nadpisać domyślne porty/zmienne
+cd /path/to/AI
 ```
 
-2) Uruchom stack
+2) Uruchom stack przez Docker Compose (domyślnie uruchamia bazę i backend):
+
 ```bash
 docker compose up -d --build
 ```
 
-3) Sprawdź działanie backendu
-```bash
-# statystyki / status
-curl http://localhost:5002/api/stats
+3) Sprawdź, czy backend odpowiada:
 
-# przykładowe zapytanie analityczne (skrócone wyjście)
-curl "http://localhost:5002/api/analytics/enhanced/correlations?days=30" | head
+```bash
+curl http://localhost:5002/api/stats
 ```
 
-## Zatrzymanie
+4) Zatrzymanie wszystkich kontenerów:
+
 ```bash
 docker compose down
-# lub całkowicie z usunięciem wolumenów (utracisz dane bazy)
-# docker compose down -v
 ```
 
-## Ścieżki i wolumeny
-- Postgres: dane w wolumenie `pg_data` (utrzymywane między restartami)
-- Modele ML: montowane z hosta `./Diary-AI-BE/scripts/analytics/models` → `/app/scripts/analytics/models`
-  - Dzięki temu obraz jest lżejszy, a artefakty modeli przechowujesz lokalnie
-- HealthData (opcjonalnie): montowane z hosta `../HealthData` → `/app/HealthData` (read-only)
-  - Jeśli nie masz katalogu `HealthData`, usuń/zmień ten wolumen w `docker-compose.yml`
+## `start_all.sh` — docker-first, z opcją lokalnego frontendu
 
-## Konfiguracja
-Backend w kontenerze czyta zmienne z pliku `/app/config.env`.
-Domyślnie montujemy `AI/Diary-AI-BE/config.env.example` jako `config.env` (read‑only). Zmodyfikuj ten plik lub podmień wolumen, jeśli chcesz użyć własnych poświadczeń.
+Nowy `start_all.sh` działa tak:
+- Domyślnie: używa `docker compose up -d --build` (lub `docker-compose` jeśli starsza wersja jest dostępna) i czeka, aż backend odpowie na `/api/stats`.
+- Opcjonalnie: możesz dodać flagę `--with-frontend` aby uruchomić także lokalny dev server React (skrypt zainstaluje zależności i uruchomi `npm start` na pierwszym wolnym porcie z zakresu 3000-3010).
 
-Najważniejsze zmienne (zazwyczaj wystarczą domyślne):
-- DB_HOST=db
-- DB_PORT=5432
-- DB_NAME=diary
-- DB_USER=diary_user
-- DB_PASSWORD=diary123
+Przykłady:
 
-Możesz także użyć `.env` przy Compose, aby nadpisać wartości (np. porty).
-
-## Co jest w środku (skrót)
-- `Diary-AI-BE/` — backend (Flask + analiza), uruchamiany jako `/app` w kontenerze
-- `docker-compose.yml` — definicja usług (db + backend)
-- `DOCKER_SETUP.md` — dodatkowe szczegóły (opcjonalne)
-- `enhanced_migration.py` — jedyny kanoniczny skrypt migracji (poza Compose)
-
-## Jak dołączyć frontend (lokalnie)
-
-Frontend nie jest częścią docker-compose. Możesz uruchomić go lokalnie w drugim terminalu:
+Uruchom tylko docker stack (domyślnie):
 
 ```bash
-cd AI/Diary-AI-FE/frontend-react
-npm install
-npm start
+./start_all.sh
 ```
 
-- Aplikacja wystartuje na http://localhost:3000
-- Proxy w package.json kieruje zapytania API do http://localhost:5002
-- Opcjonalnie możesz wymusić adres backendu:
+Uruchom docker stack i lokalny frontend:
+
 ```bash
-REACT_APP_API_URL=http://localhost:5002 npm start
+./start_all.sh --with-frontend
 ```
+
+Uwaga: `--with-frontend` jest wygodne podczas developmentu (możesz wtedy korzystać z hot-reload w React), natomiast produkcyjny/deployowany frontend można serwować inaczej.
+
+## `stop_all.sh` — zatrzymanie i czyszczenie
+
+Nowy `stop_all.sh` robi dwie rzeczy:
+- Próbuje zatrzymać stack przez `docker compose down` (lub `docker-compose down`).
+- Dodatkowo czyści lokalne procesy, takie jak `react-scripts` czy lokalny backend uruchomiony skryptem `start_enhanced_backend.py`, oraz zwalnia typowe porty (3000, 5001, 5002) jeśli są zajęte.
+
+Uruchom:
+
+```bash
+./stop_all.sh
+```
+
+Uwaga: skrypt używa `kill -9` do zwalniania portów — to szybkie rozwiązanie podczas developmentu, ale ostrożnie, jeśli na tych portach masz inne usługi.
+
+## Jak sprawdzić, że wszystko działa
+- Health endpoint:
+
+```bash
+curl http://localhost:5002/api/stats
+```
+
+- Przykładowy endpoint analityczny:
+
+```bash
+curl "http://localhost:5002/api/analytics/enhanced/correlations?days=30"
+```
+
+- Frontend (jeśli uruchomiony lokalnie): otwórz adres pokazany przez `start_all.sh` (np. http://localhost:3000).
+
+## Logi i debug
+- Kontener backendu: użyj `docker compose logs backend` lub `docker compose logs -f backend`.
+- Lokalny backend (jeśli uruchamiasz bez dockera): sprawdź `Diary-AI-BE/backend.log`.
 
 ## Najczęstsze problemy
-- Port 5002 zajęty: Zmień mapowanie w `docker-compose.yml` lub w `.env`
-- Backend nie wstaje (baza): Poczekaj, aż Postgres będzie healthy (sprawdź `docker compose ps`) i zajrzyj do `docker compose logs -f backend`
-- Brak danych: jeśli chcesz, zamontuj katalog `HealthData` i uruchom migrację ręcznie (poza Compose)
+- Port 5002 zajęty — sprawdź, co nasłuchuje na tym porcie i zatrzymaj je, lub użyj innej konfiguracji.
+- Docker nie zainstalowany — jeśli chcesz uruchamiać lokalnie, użyj `./start_all.sh --with-frontend` i upewnij się, że masz Python/Node/npm.
+- Frontend nie startuje — usuń `node_modules` i spróbuj `npm install` ręcznie.
+
+## Migracje i import danych
+- Skrypty migracyjne i importujące dane znajdują się w `Diary-AI-BE/scripts/` oraz w plikach w katalogu głównym (np. `enhanced_migration.py`). Zajrzyj też do `docs/` i `archive/` dla dodatkowych instrukcji.
+
+---
+
+Jeśli chcesz, mogę:
+- dodać przykładowe cURL-e z odpowiedziami; lub
+- rozbudować sekcję development o instrukcję tworzenia venv i instalacji zależności backendu bez dockera.
+
+Napisz, co wolisz, to dopracuję README dalej.
+

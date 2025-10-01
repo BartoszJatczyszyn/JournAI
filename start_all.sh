@@ -1,163 +1,79 @@
 #!/bin/bash
 set -euo pipefail
 
-# 🏥 Garmin Health Dashboard - Uruchomienie Całego Projektu (Enhanced Backend + Frontend)
-# Uczyń ścieżki względne niezależne od miejsca wywołania
+# start_all.sh — uruchomienie usług przy pomocy Docker Compose
+# Domyślnie: uruchamia stack z `docker compose up -d --build` i czeka na backend.
+# Opcjonalnie: przekazując flagę --with-frontend skrypt uruchomi lokalny dev server React
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR" || exit 1
 
-echo "🏥 Garmin Health Dashboard"
-echo "=========================="
-
-# Kolory dla lepszej czytelności
-RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+RED='\033[0;31m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Funkcja sprawdzania czy port jest wolny
-check_port() {
-    local port=$1
-    if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null ; then
-        return 1
-    else
-        return 0
-    fi
-}
-
-# Sprawdź wymagania
-echo -e "${BLUE}🔍 Sprawdzanie wymagań...${NC}"
-
-# Sprawdź Python
-if ! command -v python3 &> /dev/null; then
-    echo -e "${RED}❌ Python3 nie jest zainstalowany${NC}"
-    exit 1
-fi
-echo -e "${GREEN}✅ Python3: $(python3 --version)${NC}"
-
-# Sprawdź Node.js
-if ! command -v node &> /dev/null; then
-    echo -e "${RED}❌ Node.js nie jest zainstalowany${NC}"
-    exit 1
-fi
-echo -e "${GREEN}✅ Node.js: $(node --version)${NC}"
-
-# Sprawdź npm
-if ! command -v npm &> /dev/null; then
-    echo -e "${RED}❌ npm nie jest zainstalowany${NC}"
-    exit 1
-fi
-echo -e "${GREEN}✅ npm: $(npm --version)${NC}"
-
-# Ścieżki projektów (BE/FE)
-BE_DIR="$SCRIPT_DIR/Diary-AI-BE"
-FE_DIR="$SCRIPT_DIR/Diary-AI-FE"
-
-# Sprawdź porty i przygotuj środowisko
-# Wczytaj zmienne środowiskowe, jeśli istnieją (np. DB, REACT_APP_API_URL)
-if [ -f "$BE_DIR/config.env" ]; then
-  export $(grep -v '^#' "$BE_DIR/config.env" | xargs -I{} echo {}) || true
-fi
-
-# Jeśli frontend ma wskazywać na inny backend, pozwól to nadpisać przez REACT_APP_API_URL
-# Domyślnie frontend użyje proxy z package.json -> http://localhost:5002
-
-# Sprawdź porty
-echo -e "${BLUE}🔍 Sprawdzanie portów...${NC}"
-
-if ! check_port 5002; then
-    echo -e "${YELLOW}⚠️  Port 5002 jest zajęty - zatrzymuję proces...${NC}"
-    pkill -f "python.*backend" || true
-    sleep 2
-fi
-
-# Ustal pierwszy wolny port dla frontendu (3000-3010)
-FRONTEND_PORT=3000
-for p in {3000..3010}; do
-    if check_port $p; then
-        FRONTEND_PORT=$p
-        break
-    fi
-    echo -e "${YELLOW}⚠️  Port $p jest zajęty - sprawdzam kolejny...${NC}"
+WITH_FRONTEND=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --with-frontend) WITH_FRONTEND=1; shift ;;
+        --help|-h) echo "Usage: $0 [--with-frontend]"; exit 0 ;;
+        *) echo "Unknown option: $1"; exit 1 ;;
+    esac
 done
 
-if ! check_port $FRONTEND_PORT; then
-    echo -e "${RED}❌ Brak wolnych portów dla frontendu w zakresie 3000-3010${NC}"
+echo -e "${BLUE}🔧 Uruchamianie usług przez Docker Compose...${NC}"
+
+# Preferuj `docker compose` (compose v2). Jeśli nie ma — spróbuj `docker-compose`.
+if command -v docker &>/dev/null; then
+    DOCKER_CMD="docker compose"
+elif command -v docker-compose &>/dev/null; then
+    DOCKER_CMD="docker-compose"
+else
+    echo -e "${RED}❌ Nie znaleziono docker ani docker-compose. Zainstaluj Docker.${NC}"
     exit 1
 fi
 
-echo -e "${GREEN}✅ Wybrany port dla frontendu: $FRONTEND_PORT${NC}"
+echo -e "${GREEN}✅ Używam: $DOCKER_CMD${NC}"
 
-# Uruchom Backend (Enhanced)
-# Najnowszy backend_enhanced startowany przez scripts/start_enhanced_backend.py
-echo -e "${BLUE}🚀 Uruchamianie Enhanced Backend API...${NC}"
-cd "$BE_DIR/scripts"
+echo -e "${BLUE}� Budowanie i uruchamianie usług (detached)...${NC}"
+($DOCKER_CMD up -d --build) || { echo -e "${RED}❌ Błąd podczas uruchamiania docker compose${NC}"; exit 1; }
 
-# Zainstaluj zależności backendu z głównego pliku (AI/requirements.txt)
-echo -e "${BLUE}📦 Instalowanie zależności Python...${NC}"
-python3 -m pip install -r "$BE_DIR/requirements.txt" --quiet || true
-
-# Uruchomienia z auto-sprawdzeniem zależności i bazy w skrypcie
-echo -e "${BLUE}🔥 Startowanie enhanced backend serwera...${NC}"
-python3 start_enhanced_backend.py > "$BE_DIR/backend.log" 2>&1 &
-BACKEND_PID=$!
-
-# Czekaj na uruchomienie backendu
-echo -e "${YELLOW}⏳ Czekam na uruchomienie backendu...${NC}"
-for i in {1..30}; do
-    if curl -s http://localhost:5002/api/stats > /dev/null 2>&1; then
-        echo -e "${GREEN}✅ Backend uruchomiony na http://localhost:5002${NC}"
+# Czekaj na backend (endpoint health)
+echo -e "${YELLOW}⏳ Czekam na dostępność backendu na http://localhost:5002/api/stats ...${NC}"
+for i in {1..60}; do
+    if curl -s http://localhost:5002/api/stats >/dev/null 2>&1; then
+        echo -e "${GREEN}✅ Backend gotowy na http://localhost:5002${NC}"
         break
     fi
     sleep 1
-    if [ $i -eq 30 ]; then
-        echo -e "${RED}❌ Backend nie uruchomił się w czasie 30 sekund${NC}"
-        echo -e "${YELLOW}💡 Sprawdź logi: tail -f $BE_DIR/backend.log${NC}"
+    if [ $i -eq 60 ]; then
+        echo -e "${RED}❌ Backend nie odpowiedział w ciągu 60s. Sprawdź logi kontenera: $DOCKER_CMD logs <backend>${NC}"
         exit 1
     fi
 done
 
-# Przejdź do katalogu React (frontend)
-cd "$FE_DIR/frontend-react"
-# Sprawdź czy node_modules istnieją
-if [ ! -d "node_modules" ]; then
-    echo -e "${BLUE}📦 Instalowanie zależności React...${NC}"
-    npm install
-fi
-
-# Uruchom React
-echo -e "${BLUE}🚀 Uruchamianie React Frontend...${NC}"
-echo -e "${GREEN}🌐 Frontend będzie dostępny na: http://localhost:$FRONTEND_PORT${NC}"
-echo -e "${GREEN}🔗 Backend API (Enhanced) dostępne na: http://localhost:5002${NC}"
-if [ -n "${REACT_APP_API_URL:-}" ]; then
-  echo -e "${YELLOW}ℹ️  Frontend będzie korzystał z REACT_APP_API_URL=${REACT_APP_API_URL}${NC}"
-else
-  echo -e "${YELLOW}ℹ️  Frontend użyje proxy z package.json -> http://localhost:5002${NC}"
-fi
-echo -e "${YELLOW}💡 Aby zatrzymać serwery, naciśnij Ctrl+C${NC}"
-
-# Funkcja czyszczenia przy wyjściu
-cleanup() {
-    echo -e "\n${YELLOW}🛑 Zatrzymywanie serwerów...${NC}"
-    if kill -0 $BACKEND_PID 2>/dev/null; then
-      kill $BACKEND_PID 2>/dev/null || true
+if [ "$WITH_FRONTEND" -eq 1 ]; then
+    echo -e "${BLUE}🚀 Uruchamiam lokalny dev server React (opcjonalnie)...${NC}"
+    FE_DIR="$SCRIPT_DIR/Diary-AI-FE/frontend-react"
+    cd "$FE_DIR"
+    # wybierz pierwszy wolny port 3000-3010
+    for p in {3000..3010}; do
+        if ! lsof -Pi :$p -sTCP:LISTEN -t >/dev/null; then
+            FRONTEND_PORT=$p
+            break
+        fi
+    done
+    echo -e "${GREEN}🌐 Frontend będzie dostępny: http://localhost:${FRONTEND_PORT}${NC}"
+    if [ ! -d node_modules ]; then
+        echo -e "${BLUE}📦 Instaluję zależności frontendu...${NC}"
+        npm install
     fi
-    pkill -f "start_enhanced_backend.py" || true
-    echo -e "${GREEN}✅ Serwery zatrzymane${NC}"
-    exit 0
-}
-
-# Przechwytuj sygnały wyjścia
-trap cleanup SIGINT SIGTERM
-
-# Uruchom React (w foreground)
-if [ -n "${REACT_APP_API_URL:-}" ]; then
-  echo -e "${BLUE}🌐 Ustawiam REACT_APP_API_URL=${REACT_APP_API_URL}${NC}"
-  REACT_APP_API_URL="$REACT_APP_API_URL" PORT=$FRONTEND_PORT npm start
+    echo -e "${YELLOW}ℹ️  Aby zatrzymać frontend naciśnij Ctrl+C${NC}"
+    trap 'echo -e "${YELLOW}\n🛑 Zatrzymywanie lokalnego frontendu...${NC}"; pkill -f "react-scripts" || true; exit 0' SIGINT SIGTERM
+    PORT=$FRONTEND_PORT npm start
 else
-  PORT=$FRONTEND_PORT npm start
+    echo -e "${GREEN}✅ Usługi uruchomione przez Docker Compose. Backend powinien być dostępny na http://localhost:5002${NC}"
+    echo -e "${YELLOW}ℹ️  Jeśli chcesz także lokalny frontend, uruchom: ./start_all.sh --with-frontend${NC}"
 fi
-
-# Jeśli React się zakończy, zatrzymaj backend
-cleanup
