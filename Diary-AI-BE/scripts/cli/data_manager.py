@@ -16,19 +16,27 @@ from sqlalchemy.orm import sessionmaker
 # Import our models
 # Support both module (AI/scripts) and direct script execution imports
 try:
-    from scripts.enhanced_migration import (
+    from scripts.migrations.enhanced_migration import (
         DailyJournal,
         GarminDailySummary,
         GarminSleepSession,
         GarminWeight,
     )
 except Exception:
-    from enhanced_migration import (
-        DailyJournal,
-        GarminDailySummary,
-        GarminSleepSession,
-        GarminWeight,
-    )
+    try:
+        from migrations.enhanced_migration import (
+            DailyJournal,
+            GarminDailySummary,
+            GarminSleepSession,
+            GarminWeight,
+        )
+    except Exception:
+        from enhanced_migration import (
+            DailyJournal,
+            GarminDailySummary,
+            GarminSleepSession,
+            GarminWeight,
+        )
 
 load_dotenv('config.env')
 

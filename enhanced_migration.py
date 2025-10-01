@@ -38,101 +38,102 @@ Base = declarative_base()
 class GarminDailySummary(Base):
     __tablename__ = 'garmin_daily_summaries'
     
+    # Identity
     day = Column(Date, primary_key=True, index=True)
+    
+    # Activity totals
     steps = Column(Integer)
     distance_meters = Column(Float)
+    floors_climbed = Column(Integer)
+    
+    # Calories
     calories_burned = Column(Integer)
     active_calories = Column(Integer)
     calories_bmr_avg = Column(Integer)
     calories_goal = Column(Integer)
-    floors_climbed = Column(Integer)
+    activities_calories = Column(Integer)
     
     # Heart rate metrics
-    hr_avg = Column(Integer)
     hr_min = Column(Integer)
+    hr_avg = Column(Integer)
     hr_max = Column(Integer)
     resting_heart_rate = Column(Integer)
-    rhr_avg = Column(Integer)
     rhr_min = Column(Integer)
+    rhr_avg = Column(Integer)
     rhr_max = Column(Integer)
-    inactive_hr_avg = Column(Integer)
     inactive_hr_min = Column(Integer)
+    inactive_hr_avg = Column(Integer)
     inactive_hr_max = Column(Integer)
     
-    # Activity and intensity
+    # Intensity/activity time
     intensity_time = Column(Integer)
     moderate_activity_time = Column(Integer)
     vigorous_activity_time = Column(Integer)
-    activities_calories = Column(Integer)
     activities_distance = Column(Float)
     
-    # Health metrics
+    # Health
     stress_avg = Column(Integer)
-    spo2_avg = Column(Float)
     spo2_min = Column(Integer)
+    spo2_avg = Column(Float)
+    rr_min = Column(Float)
     rr_waking_avg = Column(Float)
     rr_max = Column(Float)
-    rr_min = Column(Float)
-    sweat_loss_avg = Column(Float)
     sweat_loss = Column(Float)
+    sweat_loss_avg = Column(Float)
     
     # Body Battery
-    body_battery_max = Column(Integer)
     body_battery_min = Column(Integer)
-    bb_max = Column(Integer)
-    bb_min = Column(Integer)
+    body_battery_max = Column(Integer)
     body_battery_charged = Column(Integer)
     body_battery_drained = Column(Integer)
     
+    # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationship
     journal = relationship("DailyJournal", back_populates="daily_summary", uselist=False)
 
-class GarminActivity(Base):
-    __tablename__ = 'garmin_activities'
-    
-    activity_id = Column(BigInteger, primary_key=True)
-    day = Column(Date, index=True)
-    activity_type = Column(String(100))
-    activity_name = Column(String(200))
-    start_time = Column(DateTime)
-    duration_seconds = Column(Integer)
-    distance_meters = Column(Float)
-    calories = Column(Integer)
-    avg_heart_rate = Column(Integer)
-    max_heart_rate = Column(Integer)
-    avg_speed = Column(Float)
-    max_speed = Column(Float)
-    elevation_gain = Column(Float)
-    elevation_loss = Column(Float)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
 class GarminSleepSession(Base):
     __tablename__ = 'garmin_sleep_sessions'
     
+    # Identity
     sleep_id = Column(BigInteger, primary_key=True)
     day = Column(Date, index=True)
+    
+    # Window
     sleep_start = Column(DateTime)
     sleep_end = Column(DateTime)
+    
+    # Durations summary
     sleep_duration_seconds = Column(Integer)
+    nap_duration_seconds = Column(Integer)
+    
+    # Stage durations
     deep_sleep_seconds = Column(Integer)
     light_sleep_seconds = Column(Integer)
     rem_sleep_seconds = Column(Integer)
     awake_seconds = Column(Integer)
-    nap_duration_seconds = Column(Integer)
+    
+    # Scores/quality
     sleep_score = Column(Integer)
     sleep_quality = Column(String(50))
-    # Additional sleep metrics
-    avg_sleep_stress = Column(Float)
+    
+    # Oxygen/respiration
     avg_spo2 = Column(Float)
     lowest_spo2 = Column(Integer)
     highest_spo2 = Column(Integer)
     avg_respiration = Column(Float)
+    
+    # Other metrics
+    avg_sleep_stress = Column(Float)
     awake_count = Column(Integer)
+    
+    # Sleep need
     sleep_need_baseline = Column(Integer)
     sleep_need_actual = Column(Integer)
+    
+    # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class GarminWeight(Base):
@@ -598,8 +599,7 @@ class EnhancedGarminMigrator:
                 'rr_min': 'rr_min',
                 'sweat_loss_avg': 'sweat_loss_avg',
                 'sweat_loss': 'sweat_loss',
-                'bb_max': 'body_battery_max',
-                'bb_min': 'body_battery_min',
+                
                 'bb_charged': 'body_battery_charged',
                 'body_battery_max': 'body_battery_max',
                 'body_battery_min': 'body_battery_min',

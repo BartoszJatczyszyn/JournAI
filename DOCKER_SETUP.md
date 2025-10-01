@@ -3,9 +3,9 @@
 ## Overview
 This setup lets anyone start the Postgres database and the enhanced backend API (`Port 5002`) with a single command using `docker-compose`.
 
-## Files Added
+## Files
 - `docker-compose.yml` – Services: `db` (Postgres 16), `backend` (Flask AI analytics)
-- `Diary-AI-BE/Dockerfile` – Builds backend image (Python 3.13 slim)
+- `Diary-AI-BE/Dockerfile` – Backend image (Python 3.13 slim)
 - `.env.docker.example` – Example root-level env file for overrides
 - `DOCKER_SETUP.md` – This guide
 
@@ -36,8 +36,8 @@ docker compose down -v
 
 ## Dane trwałe
 - Wolumen `pg_data` przechowuje dane Postgresa między restartami.
-- Modele ML (`*.joblib`) montowane z hosta: `./Diary-AI-BE/scripts/models` -> `/app/scripts/analytics/models`.
-  - Pozwala zachować modele między przebudowami kontenera backend.
+- Modele ML (`*.joblib`) montowane z hosta: `./Diary-AI-BE/scripts/analytics/models` -> `/app/scripts/analytics/models`.
+  - Dzięki temu modele nie są budowane w obrazie (zmniejszony rozmiar), a ich stan utrzymujesz na hoście.
 
 ## Zmiana portów
 W pliku `.env` możesz ustawić:
@@ -61,6 +61,13 @@ docker compose build backend
 # lub z wymuszeniem bez cache
 docker compose build --no-cache backend
 ```
+
+## Entry point (zmiana)
+Obraz backendu uruchamia teraz bezpośrednio moduł:
+```
+ENTRYPOINT ["python", "-m", "scripts.start_enhanced_backend"]
+```
+Wcześniej kopiowaliśmy skrypt do katalogu głównego obrazu i uruchamialiśmy `python start_enhanced_backend.py`. Ta zmiana upraszcza obraz i zmniejsza liczbę kopiowanych plików.
 
 ## Debug / Interactive
 ```bash

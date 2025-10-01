@@ -24,8 +24,9 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 COPY Diary-AI-BE/scripts ./scripts
 COPY Diary-AI-BE/backend_api_enhanced.py ./backend_api_enhanced.py
 COPY Diary-AI-BE/run_migration.py ./run_migration.py
-COPY Diary-AI-BE/setup_migration.py ./setup_migration.py
 COPY Diary-AI-BE/config.env.example ./config.env.example
+# Drop heavy model artifacts from image (mounted as volume at runtime)
+RUN rm -rf ./scripts/analytics/models/* || true
 
 # Non-root user for security
 RUN useradd -m appuser && chown -R appuser:appuser /app
@@ -38,8 +39,5 @@ ENV PORT=5002 \
 
 EXPOSE 5002
 
-COPY Diary-AI-BE/scripts/start_enhanced_backend.py ./start_enhanced_backend.py
-COPY Diary-AI-BE/scripts/setup_python_env.sh ./setup_python_env.sh
-
-# Entry script (defined below in separate file if needed)
-ENTRYPOINT ["python", "start_enhanced_backend.py"]
+# Entry: run module directly (no need to copy the script to root)
+ENTRYPOINT ["python", "-m", "scripts.start_enhanced_backend"]

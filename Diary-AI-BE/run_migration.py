@@ -65,7 +65,7 @@ def _check_dependencies() -> None:
 _ensure_db_driver_env()
 _check_dependencies()
 
-from scripts.enhanced_migration import EnhancedGarminMigrator  # noqa: E402
+from scripts.migrations.enhanced_migration import EnhancedGarminMigrator  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
