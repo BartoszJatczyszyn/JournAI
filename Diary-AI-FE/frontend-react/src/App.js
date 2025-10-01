@@ -11,6 +11,7 @@ import Sleeps from './pages/Sleeps';
 import SleepDetail from './pages/SleepDetail';
 import Days from './pages/Days';
 import DayDetail from './pages/DayDetail';
+import Today from './pages/Today';
 import Stress from './pages/Stress';
 import Activity from './pages/Activity';
 import ActivityDetail from './pages/ActivityDetail';
@@ -78,6 +79,7 @@ function App() {
                   <Route path="/sleep/:id" element={<SleepDetail />} />
                   <Route path="/days" element={<Days />} />
                   <Route path="/days/:day" element={<DayDetail />} />
+                  <Route path="/today" element={<Today />} />
                   <Route path="/stress" element={<Stress />} />
                   <Route path="/activity" element={<Activity />} />
                   <Route path="/activity/:id" element={<ActivityDetail />} />

@@ -1109,7 +1109,7 @@ class RecoveryPatternAnalytics:
         """Enhanced recovery pattern analysis with improved HRV handling.
 
         Changes vs legacy implementation:
-        - Incorporates manual HRV (daily_journal.hrv_ms) with forward-fill (optional HRV_FFILL_MAX_DAYS limit)
+    - Incorporates manual HRV (daily_journal.hrv_manual) with forward-fill (optional HRV_FFILL_MAX_DAYS limit)
         - Fallback to proxy STDDEV(bpm) only when no manual/ffill value available
         - Winsorization of HRV distribution (5–95%) prior to deriving percentile-based cap
         - Adaptive baseline: rolling median (window 14, using only prior values)
@@ -1135,7 +1135,7 @@ class RecoveryPatternAnalytics:
             s.light_sleep_seconds as light_sec,
             s.rem_sleep_seconds as rem_sec,
             s.awake_seconds as awake_sec,
-            d.hrv_ms AS hrv_manual,
+            d.hrv_manual AS hrv_manual,
             proxy.hr_variability AS hrv_proxy
         FROM garmin_daily_summaries g
         LEFT JOIN garmin_sleep_sessions s ON g.day = s.day

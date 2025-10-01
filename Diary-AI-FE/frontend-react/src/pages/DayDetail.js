@@ -15,6 +15,7 @@ import {
 } from 'recharts';
 import { ComposedChart, Area } from 'recharts';
 import { monitoringAPI, sleepsAPI, journalAPI, healthAPI2 } from '../services';
+import JournalEditor from '../components/JournalEditor';
 
 const DayDetail = () => {
   const { day } = useParams();
@@ -500,9 +501,11 @@ const DayDetail = () => {
 
         <div className="card" style={{ padding: 16 }}>
           <h3 style={{ marginTop: 0 }}>Journal Entry</h3>
-          {journal ? (
-            <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(journal, null, 2)}</pre>
-          ) : (<div style={{ color: '#64748b' }}>No journal entry for this day.</div>)}
+          <JournalEditor
+            day={day}
+            initialData={journal || {}}
+            onSaved={(entry) => setJournal(entry)}
+          />
         </div>
       </div>
     </div>

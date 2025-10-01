@@ -1,8 +1,11 @@
 import React from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { useHealthData } from '../context/HealthDataContext';
 
 const Navbar = ({ onToggleSidebar, onToggleDarkMode, darkMode }) => {
   const { loading, refreshAllData } = useHealthData();
+  const location = useLocation();
+  const isToday = location.pathname === '/today';
 
   return (
     <nav className="navbar">
@@ -34,6 +37,12 @@ const Navbar = ({ onToggleSidebar, onToggleDarkMode, darkMode }) => {
               Garmin Health Analytics
             </h1>
             <span className="brand-subtitle">Enhanced AI Insights</span>
+          </div>
+          <div className="nav-quick-links">
+            <Link to="/today" className={`quick-link ${isToday ? 'active' : ''}`} title="Dzisiejszy dziennik">
+              <span className="ql-emoji">📝</span>
+              <span className="ql-text">Today</span>
+            </Link>
           </div>
         </div>
 
@@ -203,6 +212,20 @@ const Navbar = ({ onToggleSidebar, onToggleDarkMode, darkMode }) => {
           display: flex;
           align-items: center;
           gap: 12px;
+        }
+
+        .nav-quick-links { display:flex; align-items:center; gap:8px; margin-left:16px; }
+        .quick-link { display:inline-flex; align-items:center; gap:6px; font-size:0.75rem; font-weight:600; letter-spacing:.5px; text-transform:uppercase; padding:6px 10px; border-radius:24px; background:rgba(255,255,255,0.4); color:#1e293b; text-decoration:none; line-height:1; transition:all .25s ease; border:1px solid rgba(0,0,0,0.05); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); }
+        .quick-link:hover { background:#f1f5f9; color:#0f172a; }
+        .quick-link.active { background:#0f172a; color:#f1f5f9; box-shadow:0 4px 12px rgba(15,23,42,0.3); }
+        .dark .quick-link { background:rgba(255,255,255,0.06); color:#e2e8f0; border:1px solid rgba(255,255,255,0.08); }
+        .dark .quick-link:hover { background:#334155; color:#f8fafc; }
+        .dark .quick-link.active { background:#2563eb; color:#f8fafc; border-color:#1d4ed8; }
+        .ql-emoji { font-size:1rem; }
+        .ql-text { letter-spacing:.5px; }
+
+        @media (max-width: 840px){
+          .nav-quick-links { display:none; }
         }
 
         .navbar-btn {

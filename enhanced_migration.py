@@ -303,7 +303,7 @@ class DailyJournal(Base):
     # Body metrics (subjective or quick manual capture)
     weight_morning_kg = Column(Float, default=None)
     resting_hr_manual = Column(Integer, default=None)  # if user self-logs different from device
-    hrv_ms = Column(Integer, default=None)  # manual HRV (rMSSD) entry in milliseconds
+    hrv_manual = Column(Integer, default=None)  # manual HRV (rMSSD) entry in milliseconds
 
     # Context / qualitative
     location = Column(String(200), default=None)
@@ -336,7 +336,7 @@ class DailyJournal(Base):
         CheckConstraint('screen_time_minutes IS NULL OR (screen_time_minutes >= 0 AND screen_time_minutes <= 2000)', name='ck_dj_screen_time'),
         CheckConstraint('outside_time_minutes IS NULL OR (outside_time_minutes >= 0 AND outside_time_minutes <= 1440)', name='ck_dj_outside_time'),
         CheckConstraint('reading_time_minutes IS NULL OR (reading_time_minutes >= 0 AND reading_time_minutes <= 1440)', name='ck_dj_reading_time'),
-        CheckConstraint('hrv_ms IS NULL OR (hrv_ms >= 0 AND hrv_ms <= 400)', name='ck_dj_hrv_ms_range'),
+    CheckConstraint('hrv_manual IS NULL OR (hrv_manual >= 0 AND hrv_manual <= 400)', name='ck_dj_hrv_manual_range'),
         Index('ix_daily_journal_mood', 'mood'),
         Index('ix_daily_journal_energy_focus', 'energy_level', 'focus_level')
     )
@@ -472,7 +472,7 @@ class EnhancedGarminMigrator:
                 'reading_time_minutes': 'INTEGER',
                 'weight_morning_kg': 'DOUBLE PRECISION',
                 'resting_hr_manual': 'INTEGER',
-                'hrv_ms': 'INTEGER',
+                'hrv_manual': 'INTEGER',
                 'primary_workout_type': 'VARCHAR(100)',
                 'blue_light_blockers': 'BOOLEAN'
             }

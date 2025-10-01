@@ -158,8 +158,8 @@ class EnhancedHealthAnalytics:
             hr_stats.avg_hr,
             hr_stats.min_hr,
             hr_stats.max_hr,
-            COALESCE(d.hrv_ms, hr_stats.hr_variability) as hr_variability,
-            d.hrv_ms AS hrv_ms_manual,
+            COALESCE(d.hrv_manual, hr_stats.hr_variability) as hr_variability,
+            d.hrv_manual AS hrv_manual_value,
             hr_stats.hr_variability AS hrv_variability_proxy,
             stress_stats.avg_stress,
             stress_stats.stress_variability,
@@ -249,8 +249,8 @@ class EnhancedHealthAnalytics:
             hr_stats.avg_hr,
             hr_stats.min_hr,
             hr_stats.max_hr,
-            COALESCE(d.hrv_ms, hr_stats.hr_variability) as hr_variability,
-            d.hrv_ms AS hrv_ms_manual,
+            COALESCE(d.hrv_manual, hr_stats.hr_variability) as hr_variability,
+            d.hrv_manual AS hrv_manual_value,
             hr_stats.hr_variability AS hrv_variability_proxy,
             stress_stats.avg_stress,
             stress_stats.stress_variability,
@@ -419,8 +419,8 @@ class EnhancedHealthAnalytics:
             hr_stats.avg_hr,
             hr_stats.min_hr,
             hr_stats.max_hr,
-            COALESCE(d.hrv_ms, hr_stats.hr_variability) as hr_variability,
-            d.hrv_ms AS hrv_ms_manual,
+            COALESCE(d.hrv_manual, hr_stats.hr_variability) as hr_variability,
+            d.hrv_manual AS hrv_manual_value,
             hr_stats.hr_variability AS hrv_variability_proxy,
             stress_stats.avg_stress,
             stress_stats.stress_variability,
@@ -871,7 +871,7 @@ class EnhancedHealthAnalytics:
             return {}
         
         recovery_data = []
-        # Forward-fill manual HRV logic: use last provided manual hrv_ms for subsequent days
+    # Forward-fill manual HRV logic: use last provided hrv_manual for subsequent days
         # until next manual value appears (optionally capped by HRV_FFILL_MAX_DAYS env var).
         from datetime import date as _date, datetime as _dt
         ffill_limit_env = os.getenv('HRV_FFILL_MAX_DAYS')
@@ -891,7 +891,7 @@ class EnhancedHealthAnalytics:
             if row.get('rhr'):
                 recovery_metrics['rhr'] = float(row['rhr'])
             # HRV selection with forward-fill preference for manual entries
-            hrv_manual = row.get('hrv_ms_manual')
+            hrv_manual = row.get('hrv_manual_value')
             hrv_proxy = row.get('hrv_variability_proxy')  # STDDEV(bpm) legacy proxy
             chosen_hrv = None
             hrv_source = None

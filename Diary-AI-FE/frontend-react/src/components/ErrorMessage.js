@@ -7,6 +7,15 @@ const ErrorMessage = ({
   showIcon = true,
   className = ''
 }) => {
+  // Normalize message in case an object slipped through (to prevent [object Object])
+  let displayMessage = message;
+  if (displayMessage && typeof displayMessage === 'object') {
+    try {
+      displayMessage = JSON.stringify(displayMessage, null, 2);
+    } catch (_) {
+      displayMessage = String(displayMessage);
+    }
+  }
   const getTypeConfig = () => {
     switch (type) {
       case 'warning':
@@ -65,7 +74,7 @@ const ErrorMessage = ({
             {type === 'success' && 'Success'}
             {type === 'error' && 'Error'}
           </div>
-          <div className="error-message-text">{message}</div>
+          <div className="error-message-text">{displayMessage}</div>
         </div>
       </div>
       

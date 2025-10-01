@@ -78,6 +78,7 @@ from blueprints import (
     admin_router,
     insights_router,
     trends_router,
+    journal_router,
 )
 
 # Include routers preserving original external paths
@@ -89,6 +90,7 @@ app.include_router(insights_router, prefix="/api")
 app.include_router(activities_router, prefix="/api")
 app.include_router(sleeps_router, prefix="/api")
 app.include_router(trends_router, prefix="/api")
+app.include_router(journal_router, prefix="/api")
 
 
 @app.get("/api/health", tags=["system"], summary="Service health check")
