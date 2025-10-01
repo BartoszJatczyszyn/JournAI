@@ -44,6 +44,9 @@ Diary-AI-FE/frontend-react/pnpm-debug.log*
 # Backend models (kept on host, mounted in container)
 Diary-AI-BE/scripts/analytics/models/*.joblib
 
+# ML model artifacts (general)
+*.joblib
+
 # Misc
 .python-version
 
