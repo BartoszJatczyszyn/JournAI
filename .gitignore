@@ -47,5 +47,14 @@ Diary-AI-BE/scripts/analytics/models/*.joblib
 # Misc
 .python-version
 
+# Temporary synthetic data / helper scripts (ignore)
+Diary-AI-BE/scripts/temp_fill_daily_journal.py
+Diary-AI-BE/scripts/temp_quick_check_journal.py
+Diary-AI-BE/scripts/temp_list_journal_columns.py
+# Deprecated aliases
+Diary-AI-BE/scripts/fill_daily_journal_temp.py
+Diary-AI-BE/scripts/_quick_check_journal.py
+Diary-AI-BE/scripts/_list_journal_columns.py
+
 # Archive folder
 archive/
