@@ -129,3 +129,68 @@ Jeśli chcesz, mogę:
 
 Napisz, co wolisz, to dopracuję README dalej.
 
+## Pełny reset środowiska i migracja danych (`full_reset.sh`)
+
+Skrypt `full_reset.sh` automatyzuje cały cykl: pobranie / odświeżenie danych Garmin (opcjonalnie), pełne wyczyszczenie bazy (kasuje wolumen Postgresa), przebudowę obrazów, start bazy, start backendu, uruchomienie migracji oraz (opcjonalnie) uruchomienie lokalnego frontendu React.
+
+### Użycie podstawowe
+```bash
+./full_reset.sh
+```
+Po zakończeniu backend będzie dostępny pod: http://localhost:5002
+
+### Opcje
+- `--with-frontend` — po migracji uruchamia lokalny dev server React (wyszukiwanie wolnego portu 3000–3010)
+- `--no-cache` — przebudowa obrazów Dockera całkowicie od zera (ignoruje cache warstw)
+- `--skip-garmindb` — pomija wstępny krok wywołania CLI do pobierania/importu danych
+- `--help` — krótka pomoc / nagłówek skryptu
+
+### Krok 0: Pobranie / aktualizacja danych (garmindb_cli)
+Na początku (o ile nie użyto `--skip-garmindb`) skrypt próbuje uruchomić:
+```bash
+garmindb_cli.py --all --download --import --analyze --latest
+```
+Wyszukiwane ścieżki do tego pliku:
+1. `./garmindb_cli.py`
+2. `./Diary-AI-BE/scripts/cli/garmindb_cli.py`
+
+Jeśli plik nie istnieje, otrzymasz ostrzeżenie i proces resetu idzie dalej.
+
+### Kolejne kroki wykonywane przez skrypt
+1. `docker compose down -v` — zatrzymanie stacka i usunięcie wolumenów (czyści bazę)
+2. Czyszczenie „dangling images” (jeśli są)
+3. Budowa obrazów (`--no-cache` jeśli podano)
+4. Start samej bazy (`db`) i oczekiwanie na healthcheck
+5. Start backendu i oczekiwanie aż endpoint `/api/stats` będzie odpowiadał
+6. Uruchomienie pełnej migracji: `python run_migration.py --subset all` wewnątrz kontenera backendu
+7. (Opcjonalnie) uruchomienie frontendu React lokalnie
+
+### Typowe scenariusze
+Pełny reset + frontend:
+```bash
+./full_reset.sh --with-frontend
+```
+
+Pełny reset z wymuszoną przebudową obrazów bez cache:
+```bash
+./full_reset.sh --no-cache
+```
+
+Pominięcie etapu pobierania danych:
+```bash
+./full_reset.sh --skip-garmindb
+```
+
+### Dlaczego warto używać `full_reset.sh`?
+- Gwarantuje spójne środowisko testowe (czysta baza + świeża migracja)
+- Szybko diagnozuje problemy (jeśli migracja padnie — od razu wiesz gdzie)
+- Minimalizuje „ukryte” efekty cache Dockera
+
+### Kiedy NIE używać
+- Gdy chcesz tylko zrestartować backend (użyj wtedy `./start_all.sh` albo `docker compose up -d`)
+- Gdy nie chcesz tracić bieżącej zawartości bazy (skrypt usuwa wolumen)
+
+### Rozszerzenia / możliwe usprawnienia
+Można łatwo dodać kolejne opcje (np. `--activities-only`, `--sleep-only` dla selektywnych subsetów migracji) – jeśli będą potrzebne, napisz.
+
+
