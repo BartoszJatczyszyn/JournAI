@@ -12,7 +12,7 @@ from typing import Optional, Dict, Any
 import logging
 
 # Third-party imports
-from sqlalchemy import create_engine, Column, Integer, BigInteger, String, Float, Boolean, Date, DateTime, Text, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, BigInteger, String, Float, Boolean, Date, DateTime, Text, ForeignKey, CheckConstraint, Index, text, inspect
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.dialects.postgresql import insert
@@ -251,36 +251,172 @@ class GarminActivity(Base):
 
 class DailyJournal(Base):
     __tablename__ = 'daily_journal'
-    
+
+    # Identity / linkage
     day = Column(Date, ForeignKey("garmin_daily_summaries.day"), primary_key=True, index=True, nullable=False)
-    location = Column(String(200))
-    mood = Column(String(100))
-    alcohol = Column(String(100))
+
+    # Core subjective ratings (1-5)
+    mood = Column(Integer, nullable=True)  # 1 (very low) .. 5 (great)
+    stress_level = Column(Integer, nullable=True)  # perceived stress 1-5
+    energy_level = Column(Integer, nullable=True)  # energy 1-5
+    focus_level = Column(Integer, nullable=True)   # focus 1-5
+    productivity_score = Column(Integer, nullable=True)  # productivity 1-5
+    sleep_quality_rating = Column(Integer, nullable=True)  # subjective sleep quality 1-5
+    soreness_level = Column(Integer, nullable=True)  # DOMS / soreness 1-5
+    social_interactions_quality = Column(Integer, nullable=True)  # 1-5
+    digestion_quality = Column(Integer, nullable=True)  # 1-5
+    workout_intensity_rating = Column(Integer, nullable=True)  # 1-5 subjective
+
+    # Lifestyle flags / behaviors
     meditated = Column(Boolean)
+    alcohol = Column(String(100))  # details string ("0" / type / units)
+    fasting_hours = Column(Float)  # e.g. 16.0
     calories_controlled = Column(Boolean)
-    sweet_cravings = Column(Boolean)
     night_snacking = Column(Boolean)
-    notes = Column(Text)
-    
-    # Supplements
+    sweet_cravings = Column(Boolean)
+    steps_goal_achieved = Column(Boolean)
+    journaling_done = Column(Boolean)
+    stretching_mobility_done = Column(Boolean)
+
+    # Nutrition / intake
+    water_intake_ml = Column(Integer)      # daily total
+    caffeine_mg = Column(Integer)
+    supplements_taken = Column(String(500))  # free-form list
     supplement_ashwagandha = Column(Boolean, default=False)
     supplement_magnesium = Column(Boolean, default=False)
     supplement_vitamin_d = Column(Boolean, default=False)
-    supplements_taken = Column(String(500))
-    
-    # Sleep environment
+
+    # Sleep environment / pre-sleep habits
     used_sleep_mask = Column(Boolean)
     used_ear_plugs = Column(Boolean)
-    bedroom_temp_rating = Column(String(50))
+    bedroom_temp_rating = Column(String(50))  # e.g. "cool", "warm"
     read_before_sleep = Column(Boolean)
     used_phone_before_sleep = Column(Boolean)
     hot_bath_before_sleep = Column(Boolean)
-    
+    blue_light_blockers = Column(Boolean)
+
+    # Time allocations / exposure
+    screen_time_minutes = Column(Integer)
+    outside_time_minutes = Column(Integer)
+    reading_time_minutes = Column(Integer)
+
+    # Body metrics (subjective or quick manual capture)
+    weight_morning_kg = Column(Float)
+    resting_hr_manual = Column(Integer)  # if user self-logs different from device
+    hrv_ms = Column(Integer)  # manual HRV (rMSSD) entry in milliseconds
+
+    # Context / qualitative
+    location = Column(String(200))
+    primary_workout_type = Column(String(100))
+    notes = Column(Text)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     # Relationship
     daily_summary = relationship("GarminDailySummary", back_populates="journal")
+
+    # Constraints and indexes (PostgreSQL)
+    __table_args__ = (
+        # Rating scales 1-5 (allow NULL)
+        CheckConstraint('(mood BETWEEN 1 AND 5) OR mood IS NULL', name='ck_daily_journal_mood_range'),
+        CheckConstraint('(stress_level BETWEEN 1 AND 5) OR stress_level IS NULL', name='ck_dj_stress_level'),
+        CheckConstraint('(energy_level BETWEEN 1 AND 5) OR energy_level IS NULL', name='ck_dj_energy_level'),
+        CheckConstraint('(focus_level BETWEEN 1 AND 5) OR focus_level IS NULL', name='ck_dj_focus_level'),
+        CheckConstraint('(productivity_score BETWEEN 1 AND 5) OR productivity_score IS NULL', name='ck_dj_productivity'),
+        CheckConstraint('(sleep_quality_rating BETWEEN 1 AND 5) OR sleep_quality_rating IS NULL', name='ck_dj_sleep_quality'),
+        CheckConstraint('(soreness_level BETWEEN 1 AND 5) OR soreness_level IS NULL', name='ck_dj_soreness'),
+        CheckConstraint('(social_interactions_quality BETWEEN 1 AND 5) OR social_interactions_quality IS NULL', name='ck_dj_social_quality'),
+        CheckConstraint('(digestion_quality BETWEEN 1 AND 5) OR digestion_quality IS NULL', name='ck_dj_digestion'),
+        CheckConstraint('(workout_intensity_rating BETWEEN 1 AND 5) OR workout_intensity_rating IS NULL', name='ck_dj_workout_intensity'),
+        # Quantitative ranges
+        CheckConstraint('water_intake_ml IS NULL OR (water_intake_ml >= 0 AND water_intake_ml <= 15000)', name='ck_dj_water_intake'),
+        CheckConstraint('caffeine_mg IS NULL OR (caffeine_mg >= 0 AND caffeine_mg <= 3000)', name='ck_dj_caffeine'),
+        CheckConstraint('fasting_hours IS NULL OR (fasting_hours >= 0 AND fasting_hours <= 72)', name='ck_dj_fasting_hours'),
+        CheckConstraint('screen_time_minutes IS NULL OR (screen_time_minutes >= 0 AND screen_time_minutes <= 2000)', name='ck_dj_screen_time'),
+        CheckConstraint('outside_time_minutes IS NULL OR (outside_time_minutes >= 0 AND outside_time_minutes <= 1440)', name='ck_dj_outside_time'),
+        CheckConstraint('reading_time_minutes IS NULL OR (reading_time_minutes >= 0 AND reading_time_minutes <= 1440)', name='ck_dj_reading_time'),
+        CheckConstraint('hrv_ms IS NULL OR (hrv_ms >= 0 AND hrv_ms <= 400)', name='ck_dj_hrv_ms_range'),
+        Index('ix_daily_journal_mood', 'mood'),
+        Index('ix_daily_journal_energy_focus', 'energy_level', 'focus_level')
+    )
+
+    # --- Subjective rating fields (1-5) ---
+    SUBJECTIVE_RATING_FIELDS = [
+        'mood', 'stress_level', 'energy_level', 'focus_level', 'productivity_score',
+        'sleep_quality_rating', 'soreness_level', 'social_interactions_quality',
+        'digestion_quality', 'workout_intensity_rating'
+    ]
+
+    SUBJECTIVE_LABEL_MAP = {
+        # Possible text -> numeric mappings (can be extended). Includes some Polish variants for convenience.
+        'very bad': 1, 'bardzo zle': 1, 'zle': 2, 'bad': 2, 'ok': 3, 'neutral': 3,
+        'good': 4, 'dobrze': 4, 'great': 5, 'super': 5, 'excellent': 5
+    }
+
+    def set_rating(self, field: str, value):
+        """Set a subjective rating (1–5) for a given field.
+
+        Accepts:
+        - int 1–5
+        - string containing a digit
+        - textual label present in SUBJECTIVE_LABEL_MAP
+        - None (clears the value)
+        Returns True if handled (even if cleared), False if field unsupported.
+        """
+        if field not in self.SUBJECTIVE_RATING_FIELDS:
+            return False
+        if value is None:
+            setattr(self, field, None)
+            return True
+        try:
+            if isinstance(value, str):
+                lower = value.strip().lower()
+                if lower in self.SUBJECTIVE_LABEL_MAP:
+                    num = self.SUBJECTIVE_LABEL_MAP[lower]
+                else:
+                    # try to parse a digit inside the string
+                    num = int(''.join([c for c in lower if c.isdigit()])) if any(c.isdigit() for c in lower) else None
+            elif isinstance(value, (int, float)):
+                num = int(value)
+            else:
+                num = None
+            if num is None:
+                setattr(self, field, None)
+                return True
+            if num < 1:
+                num = 1
+            if num > 5:
+                num = 5
+            setattr(self, field, num)
+            return True
+        except Exception:
+            setattr(self, field, None)
+            return True
+
+    @property
+    def wellbeing_composite_score(self) -> float:
+        """Return the average of available subjective ratings (ignores NULL).
+        Can be used as a lightweight overall wellbeing indicator.
+        """
+        values = [getattr(self, f) for f in self.SUBJECTIVE_RATING_FIELDS if getattr(self, f) is not None]
+        if not values:
+            return 0.0
+        return round(sum(values) / len(values), 2)
+
+    def update_from_payload(self, payload: dict):
+        """Update journal fields from a dict payload (e.g. API / form input).
+
+        Defensive: ignores missing / unknown fields.
+        Automatically applies mapping for subjective rating fields.
+        """
+        if not isinstance(payload, dict):
+            return
+        for key, val in payload.items():
+            if key in self.SUBJECTIVE_RATING_FIELDS:
+                self.set_rating(key, val)
+            elif hasattr(self, key):
+                setattr(self, key, val)
 
 class EnhancedGarminMigrator:
     def __init__(self):
@@ -297,6 +433,95 @@ class EnhancedGarminMigrator:
         # Create all tables
         Base.metadata.create_all(bind=self.engine)
         logger.info("Database tables created/verified")
+        # Apply post-creation schema adjustments (idempotent)
+        self.apply_post_schema_updates()
+
+    def apply_post_schema_updates(self):
+        """Apply idempotent schema alterations for updated DailyJournal model.
+
+        This handles:
+        - Converting legacy mood (STRING) to INTEGER 1-5
+        - Adding newly introduced columns if the table already existed
+        - (Constraints will not be auto-added for existing tables without migrations; advanced users can run Alembic later.)
+        """
+        try:
+            inspector = inspect(self.engine)
+            if 'daily_journal' not in inspector.get_table_names():
+                return
+
+            # Map new columns (name -> SQL fragment) kept minimal for backward safety
+            desired_columns = {
+                'mood': 'INTEGER',
+                'stress_level': 'INTEGER',
+                'energy_level': 'INTEGER',
+                'focus_level': 'INTEGER',
+                'productivity_score': 'INTEGER',
+                'sleep_quality_rating': 'INTEGER',
+                'soreness_level': 'INTEGER',
+                'social_interactions_quality': 'INTEGER',
+                'digestion_quality': 'INTEGER',
+                'workout_intensity_rating': 'INTEGER',
+                'fasting_hours': 'DOUBLE PRECISION',
+                'steps_goal_achieved': 'BOOLEAN',
+                'journaling_done': 'BOOLEAN',
+                'stretching_mobility_done': 'BOOLEAN',
+                'water_intake_ml': 'INTEGER',
+                'caffeine_mg': 'INTEGER',
+                'screen_time_minutes': 'INTEGER',
+                'outside_time_minutes': 'INTEGER',
+                'reading_time_minutes': 'INTEGER',
+                'weight_morning_kg': 'DOUBLE PRECISION',
+                'resting_hr_manual': 'INTEGER',
+                'hrv_ms': 'INTEGER',
+                'primary_workout_type': 'VARCHAR(100)',
+                'blue_light_blockers': 'BOOLEAN'
+            }
+
+            existing_columns_info = inspector.get_columns('daily_journal')
+            existing_column_names = {c['name'] for c in existing_columns_info}
+
+            with self.engine.begin() as conn:
+                # Add any missing columns
+                for col_name, col_sql in desired_columns.items():
+                    if col_name not in existing_column_names:
+                        try:
+                            conn.execute(text(f'ALTER TABLE daily_journal ADD COLUMN {col_name} {col_sql}'))
+                            logger.info(f"Added column daily_journal.{col_name}")
+                        except Exception as e:
+                            logger.warning(f"Could not add column {col_name}: {e}")
+
+                # Convert legacy mood column type if needed (string -> int)
+                for col in existing_columns_info:
+                    if col['name'] == 'mood':
+                        # Heuristic: if python_type not int, attempt conversion
+                        try:
+                            if hasattr(col['type'], 'python_type'):
+                                python_type = col['type'].python_type
+                            else:
+                                python_type = None
+                        except Exception:
+                            python_type = None
+                        if python_type is not int:
+                            try:
+                                # Attempt safe cast: extract digits; clamp to 1-5; invalid -> NULL
+                                conn.execute(text(
+                                    """
+                                    ALTER TABLE daily_journal
+                                    ALTER COLUMN mood TYPE INTEGER USING (
+                                        CASE
+                                            WHEN mood ~ '^[0-9]+' THEN LEAST(GREATEST((substring(mood from '^[0-9]+')::INTEGER),1),5)
+                                            ELSE NULL
+                                        END
+                                    )
+                                    """
+                                ))
+                                logger.info("Converted daily_journal.mood to INTEGER")
+                            except Exception as e:
+                                logger.warning(f"Could not convert mood column to INTEGER: {e}")
+                        break
+
+        except Exception as e:
+            logger.warning(f"apply_post_schema_updates encountered an issue: {e}")
 
     def load_json_data(self, file_path: Path) -> Optional[Dict[Any, Any]]:
         """Load JSON data from file"""
