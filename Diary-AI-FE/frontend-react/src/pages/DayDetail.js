@@ -14,7 +14,8 @@ import {
   Bar
 } from 'recharts';
 import { ComposedChart, Area } from 'recharts';
-import { monitoringAPI, sleepsAPI, journalAPI, healthAPI2 } from '../services';
+import { monitoringAPI, sleepsAPI, journalAPI, healthAPI2, healthAPI } from '../services';
+import BodyMetricsCard from '../components/BodyMetricsCard';
 import JournalEditor from '../components/JournalEditor';
 
 const DayDetail = () => {
@@ -37,7 +38,7 @@ const DayDetail = () => {
       setLoading(true);
       setError(null);
       try {
-        const [hrRes, stressRes, rrRes, sleepEvRes, journalRes, healthDataRes] = await Promise.all([
+  const [hrRes, stressRes, rrRes, sleepEvRes, journalRes, healthDataRes, currentWeight] = await Promise.all([
           monitoringAPI.getHeartRateDaily(day).catch(() => null),
           monitoringAPI.getStressDaily(day).catch(() => null),
           monitoringAPI.getRespiratoryRateDaily(day).catch(() => null),
@@ -45,6 +46,7 @@ const DayDetail = () => {
           journalAPI.getEntry(day).catch(() => null),
           // fetch a range of daily summaries and pick the matching day
           healthAPI2.getHealthData(365).catch(() => null),
+          healthAPI.getCurrentWeight ? healthAPI.getCurrentWeight().catch(() => null) : null,
         ]);
     if (!mounted) return;
   // keep raw response for debugging
@@ -120,7 +122,17 @@ const DayDetail = () => {
         } else if (healthDataRes && healthDataRes.data && Array.isArray(healthDataRes.data)) {
           match = healthDataRes.data.find(d => String(d.day ?? d.date ?? d.label ?? d.x) === String(day));
         }
-        setDailySummary(match || null);
+        // Merge in current weight (if for same day) or attach separately when viewing that exact date
+        let enriched = match ? { ...match } : null;
+        if (currentWeight && currentWeight.day) {
+          // If viewing the day equal to latest weight day, surface weight_kg
+            if (String(currentWeight.day) === String(day)) {
+              enriched = enriched || { day };
+              if (currentWeight.weight_kg != null) enriched.weight_kg = currentWeight.weight_kg;
+              if (currentWeight.bmi != null) enriched.bmi = currentWeight.bmi;
+            }
+        }
+        setDailySummary(enriched || match || null);
       } catch (e) {
         console.error('Day detail load error', e);
         if (mounted) setError(String(e?.message || e));
@@ -390,7 +402,7 @@ const DayDetail = () => {
             <div style={{ color: '#64748b' }}>No daily summary found for this day.</div>
           )}
         </div>
-        <div className="card" style={{ padding: 16 }}>
+    <div className="card" style={{ padding: 16 }}>
           <h3 style={{ marginTop: 0 }}>Heart Rate</h3>
           {hrChartData && hrChartData.length ? (
             <>
@@ -446,7 +458,7 @@ const DayDetail = () => {
           </div>
         </div>
 
-        <div className="card" style={{ padding: 16 }}>
+    <div className="card" style={{ padding: 16 }}>
           <h3 style={{ marginTop: 0 }}>Stress Summary</h3>
           {stressChartData && stressChartData.length ? (
             <>
@@ -485,27 +497,25 @@ const DayDetail = () => {
           </div>
         </div>
 
-        <div className="card" style={{ padding: 16 }}>
+    <div className="card" style={{ padding: 16 }}>
           <h3 style={{ marginTop: 0 }}>Respiratory Rate</h3>
           {rr ? (
             <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(rr, null, 2)}</pre>
           ) : (<div style={{ color: '#64748b' }}>No respiratory rate data.</div>)}
         </div>
 
-        <div className="card" style={{ padding: 16 }}>
+  <div className="card" style={{ padding: 16 }}>
           <h3 style={{ marginTop: 0 }}>Sleep Events</h3>
           {Array.isArray(sleepEvents) && sleepEvents.length ? (
             <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(sleepEvents, null, 2)}</pre>
           ) : (<div style={{ color: '#64748b' }}>No sleep events for this day.</div>)}
         </div>
 
+        <BodyMetricsCard day={day} />
+
         <div className="card" style={{ padding: 16 }}>
           <h3 style={{ marginTop: 0 }}>Journal Entry</h3>
-          <JournalEditor
-            day={day}
-            initialData={journal || {}}
-            onSaved={(entry) => setJournal(entry)}
-          />
+          <JournalEditor day={day} initialData={journal || {}} onSaved={(entry) => setJournal(entry)} />
         </div>
       </div>
     </div>

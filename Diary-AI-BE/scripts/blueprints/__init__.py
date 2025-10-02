@@ -14,6 +14,7 @@ from .sleeps import sleeps_router
 from .core import router as core_router
 from .trends import router as trends_router
 from .journal import router as journal_router
+from .gym import router as gym_router
 
 __all__ = [
     "analytics_router",
@@ -25,5 +26,6 @@ __all__ = [
     "core_router",
     "trends_router",
     "journal_router",
+    "gym_router",
     # (legacy *_bp aliases removed after full FastAPI migration)
 ]

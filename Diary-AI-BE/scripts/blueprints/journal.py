@@ -72,7 +72,8 @@ ALLOWED_FIELDS: set[str] = {
     # Time allocations
     "screen_time_minutes", "outside_time_minutes", "reading_time_minutes",
     # Body metrics
-    "weight_morning_kg", "resting_hr_manual", "hrv_manual",
+    # Removed weight_morning_kg (weight now stored in garmin_weight)
+    "resting_hr_manual", "hrv_manual",
     # Context
     "location", "primary_workout_type", "notes",
 }
@@ -129,7 +130,7 @@ class JournalUpdate(BaseModel):
     reading_time_minutes: Optional[int] = Field(None, ge=0, le=1440)
 
     # Body metrics
-    weight_morning_kg: Optional[float] = Field(None, ge=20, le=300)
+    # weight_morning_kg removed (weight comes from device table)
     resting_hr_manual: Optional[int] = Field(None, ge=20, le=250)
     hrv_manual: Optional[int] = Field(None, ge=20, le=150)
 
@@ -179,7 +180,7 @@ def _fetch_last_days(day: date, window: int = 7) -> list[dict[str, Any]]:
     query = """
         SELECT day, mood, stress_level, energy_level, focus_level, productivity_score,
                sleep_quality_rating, soreness_level, social_interactions_quality,
-               digestion_quality, workout_intensity_rating, hrv_manual, weight_morning_kg, resting_hr_manual
+               digestion_quality, workout_intensity_rating, hrv_manual, resting_hr_manual
         FROM daily_journal
         WHERE day BETWEEN %s - INTERVAL '%s day' AND %s
         ORDER BY day
@@ -260,7 +261,7 @@ def journal_meta():
         {"name": "digestion_quality", "label": "Digestion", "type": "rating", "min": 1, "max": 5, "group": "ratings"},
         {"name": "workout_intensity_rating", "label": "Workout Intensity", "type": "rating", "min": 1, "max": 5, "group": "ratings"},
     {"name": "hrv_manual", "label": "HRV (manual)", "type": "number", "min": 20, "max": 150, "group": "metrics"},
-        {"name": "weight_morning_kg", "label": "Weight Morning (kg)", "type": "number", "min": 20, "max": 300, "group": "metrics"},
+        # weight_morning_kg removed from manual journal meta
         {"name": "water_intake_ml", "label": "Water (ml)", "type": "number", "min": 0, "max": 20000, "group": "metrics"},
         {"name": "caffeine_mg", "label": "Caffeine (mg)", "type": "number", "min": 0, "max": 2000, "group": "metrics"},
         {"name": "fasting_hours", "label": "Fasting (h)", "type": "number", "min": 0, "max": 48, "group": "metrics"},
@@ -323,7 +324,7 @@ def journal_context(day: date, window: int = Query(7, ge=3, le=30)):
                 seq.append({"day": r["day"], "value": r.get(f)})
         if seq:
             series[f] = seq[-window:]
-    considered = suggestion_targets + ["hrv_manual", "weight_morning_kg", "resting_hr_manual"]
+    considered = suggestion_targets + ["hrv_manual", "resting_hr_manual"]
     filled = sum(1 for f in considered if entry.get(f) is not None)
     completeness = round(100 * filled / len(considered), 1) if considered else 0.0
     summary = _generate_summary(entry, prediction)
@@ -364,7 +365,7 @@ def journal_correlations(
                mood, stress_level, energy_level, focus_level, productivity_score,
                sleep_quality_rating, soreness_level, social_interactions_quality,
                digestion_quality, workout_intensity_rating,
-               hrv_manual, weight_morning_kg, resting_hr_manual,
+               hrv_manual, resting_hr_manual,
                water_intake_ml, caffeine_mg, fasting_hours,
                screen_time_minutes, outside_time_minutes, reading_time_minutes,
                meditated::int, calories_controlled::int, night_snacking::int, sweet_cravings::int,
@@ -402,7 +403,7 @@ def journal_correlations(
         "digestion_quality", "workout_intensity_rating",
     }
     metric_cols = {
-    "hrv_manual", "weight_morning_kg", "resting_hr_manual", "water_intake_ml", "caffeine_mg",
+    "hrv_manual", "resting_hr_manual", "water_intake_ml", "caffeine_mg",
         "fasting_hours", "screen_time_minutes", "outside_time_minutes", "reading_time_minutes",
     }
     flag_cols = {

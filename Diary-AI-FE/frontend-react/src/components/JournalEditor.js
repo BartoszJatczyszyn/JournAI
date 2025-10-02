@@ -7,7 +7,7 @@ import useJournalSync from '../hooks/useJournalSync';
 // Numeric-only fields we keep as number inputs
 const numericFields = [
   { name: 'hrv_manual', label: 'HRV (manual)', min: 20, max: 150, step: 1 },
-  { name: 'weight_morning_kg', label: 'Weight Morning (kg)', min: 20, max: 300, step: 0.1 },
+  // Removed weight_morning_kg (now sourced from garmin_weight table)
 ];
 
 // Rating fields (1-5 new schema)
@@ -52,7 +52,6 @@ const quantityFields = [
   { name: 'screen_time_minutes', label: 'Screen (min)', min:0, max:1440, step:5 },
   { name: 'outside_time_minutes', label: 'Outside (min)', min:0, max:1440, step:5 },
   { name: 'reading_time_minutes', label: 'Reading (min)', min:0, max:1440, step:5 },
-  { name: 'hrv_manual', label: 'HRV (manual)', min:20, max:150, step:1 },
 ];
 
 const NumberField = ({ label, value, onChange, min=0, max=10, step=1 }) => (

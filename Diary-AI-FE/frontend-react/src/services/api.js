@@ -191,6 +191,9 @@ export const healthAPI = {
   
   getWeightStats: () => 
     api.get('/api/weight/stats'),
+
+  getCurrentWeight: () => 
+    api.get('/api/weight/current'),
   
   getSleepEvents: (date) => 
     api.get(`/api/sleep/events/${date}`),

@@ -8,6 +8,7 @@ const MetricCard = ({
   trend = 0, 
   color = 'blue',
   subtitle,
+  tooltip, // optional explanatory tooltip text
   onClick 
 }) => {
   const getTrendIcon = () => {
@@ -56,8 +57,16 @@ const MetricCard = ({
       onClick={onClick}
     >
       <div className="metric-header">
-        <div className="metric-icon">{icon}</div>
-        <div className="metric-trend">
+        <div className="metric-icon-group">
+          <div className="metric-icon">{icon}</div>
+          {tooltip && (
+            <div className="metric-tooltip-wrapper">
+              <span className="tooltip-trigger" aria-label={tooltip} role="img">ℹ️</span>
+              <div className="metric-tooltip" role="tooltip">{tooltip}</div>
+            </div>
+          )}
+        </div>
+        <div className="metric-trend" title={trend !== 0 ? getTrendText() : 'No change'}>
           {getTrendIcon()}
         </div>
       </div>
@@ -142,6 +151,65 @@ const MetricCard = ({
           justify-content: space-between;
           align-items: flex-start;
           margin-bottom: 16px;
+          gap: 12px;
+        }
+
+        .metric-icon-group {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          position: relative;
+        }
+
+        .metric-tooltip-wrapper {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+        }
+
+        .tooltip-trigger {
+          font-size: 0.95rem;
+          cursor: help;
+          opacity: 0.85;
+          transition: opacity 0.2s ease;
+        }
+
+        .tooltip-trigger:hover + .metric-tooltip,
+        .metric-tooltip-wrapper:focus-within .metric-tooltip {
+          opacity: 1;
+          transform: translateY(0);
+          pointer-events: auto;
+        }
+
+        .metric-tooltip {
+          position: absolute;
+          top: 100%;
+          left: 0;
+            z-index: 10;
+          background: rgba(15,23,42,0.95);
+          color: #f1f5f9;
+          padding: 8px 10px;
+          font-size: 0.65rem;
+          line-height: 1.2;
+          border-radius: 6px;
+          width: 180px;
+          margin-top: 6px;
+          box-shadow: 0 4px 12px -2px rgba(0,0,0,0.4);
+          opacity: 0;
+          transform: translateY(-4px);
+          transition: opacity 0.2s ease, transform 0.2s ease;
+          pointer-events: none;
+        }
+
+        .metric-tooltip::after {
+          content: '';
+          position: absolute;
+          top: -5px;
+          left: 10px;
+          width: 10px;
+          height: 10px;
+          background: rgba(15,23,42,0.95);
+          transform: rotate(45deg);
         }
 
         .metric-icon {

@@ -294,11 +294,12 @@ const Stress = () => {
               subtitle="Episodes above 75/100"
             />
             <MetricCard
-              title="Recovery Time"
-              value={recoveryPatterns?.avg_recovery_time_readings ? `${recoveryPatterns.avg_recovery_time_readings} readings` : 'N/A'}
+              title="Avg Recovery Span"
+              value={recoveryPatterns?.avg_recovery_time_readings != null ? recoveryPatterns.avg_recovery_time_readings : 'N/A'}
               icon="⏱️"
               color="blue"
-              subtitle="Average time to recover"
+              subtitle="Measurements to recover (↓ = faster)"
+              tooltip="Average readings required to fall below the high‑stress threshold after an episode (lower = faster recovery)."
             />
           </div>
         </div>
@@ -451,20 +452,18 @@ const Stress = () => {
                         <div className="stat-icon">⚡</div>
                         <div className="stat-content">
                           <div className="stat-value">{fast}</div>
-                          <div className="stat-label">Fast Recovery</div>
-                          <div className="stat-detail">≤ 4 measurements to recover</div>
+                          <div className="stat-label">Fast Recovery Episodes</div>
+                          <div className="stat-detail">Resolved in ≤ 4 measurements</div>
                         </div>
                       </div>
-
                       <div className="recovery-stat">
                         <div className="stat-icon">🐌</div>
                         <div className="stat-content">
                           <div className="stat-value">{slow}</div>
-                          <div className="stat-label">Slow Recovery</div>
-                          <div className="stat-detail">Longer recovery episodes</div>
+                          <div className="stat-label">Slow Recovery Episodes</div>
+                          <div className="stat-detail">Needed &gt; 4 measurements</div>
                         </div>
                       </div>
-
                       <div className="recovery-stat">
                         <div className="stat-icon">📊</div>
                         <div className="stat-content">
@@ -487,9 +486,9 @@ const Stress = () => {
                         <div className="zone-description">Share of slow recovery episodes</div>
                       </div>
                       <div className="zone" style={{flex:1, minWidth: 180}}>
-                        <div className="zone-range">{avgReadings != null ? `${avgReadings} readings` : 'N/A'}</div>
-                        <div className="zone-label">Avg recovery time (readings)</div>
-                        <div className="zone-description">Smaller = faster recovery</div>
+                        <div className="zone-range">{avgReadings != null ? `${avgReadings}` : 'N/A'}</div>
+                        <div className="zone-label">Avg measurements to recover</div>
+                        <div className="zone-description">Lower value = quicker recovery</div>
                       </div>
                       <div className="zone" style={{flex:1, minWidth: 180}}>
                         <div className="zone-range">{burden != null ? `${burden}` : 'N/A'}</div>

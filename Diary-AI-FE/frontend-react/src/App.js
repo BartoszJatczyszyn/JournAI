@@ -15,6 +15,9 @@ import Today from './pages/Today';
 import Stress from './pages/Stress';
 import Activity from './pages/Activity';
 import ActivityDetail from './pages/ActivityDetail';
+import Running from './pages/Running';
+import Gym from './pages/Gym';
+import GymWorkouts from './pages/GymWorkouts';
 import Insights from './pages/Insights';
 import Settings from './pages/Settings';
 import { HealthDataProvider } from './context/HealthDataContext';
@@ -83,6 +86,9 @@ function App() {
                   <Route path="/stress" element={<Stress />} />
                   <Route path="/activity" element={<Activity />} />
                   <Route path="/activity/:id" element={<ActivityDetail />} />
+                  <Route path="/running" element={<Running />} />
+                  <Route path="/gym" element={<Gym />} />
+                  <Route path="/gym/workouts" element={<GymWorkouts />} />
                   <Route path="/insights" element={<Insights />} />
                   <Route path="/settings" element={<Settings />} />
                 </Routes>

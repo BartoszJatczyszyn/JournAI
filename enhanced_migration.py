@@ -301,7 +301,7 @@ class DailyJournal(Base):
     reading_time_minutes = Column(Integer, default=0)
 
     # Body metrics (subjective or quick manual capture)
-    weight_morning_kg = Column(Float, default=None)
+    # weight_morning_kg removed (authoritative weights live in garmin_weight)
     resting_hr_manual = Column(Integer, default=None)  # if user self-logs different from device
     hrv_manual = Column(Integer, default=None)  # manual HRV (rMSSD) entry in milliseconds
 
@@ -470,7 +470,6 @@ class EnhancedGarminMigrator:
                 'screen_time_minutes': 'INTEGER',
                 'outside_time_minutes': 'INTEGER',
                 'reading_time_minutes': 'INTEGER',
-                'weight_morning_kg': 'DOUBLE PRECISION',
                 'resting_hr_manual': 'INTEGER',
                 'hrv_manual': 'INTEGER',
                 'primary_workout_type': 'VARCHAR(100)',
