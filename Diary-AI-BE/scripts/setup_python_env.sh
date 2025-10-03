@@ -7,7 +7,7 @@ set -euo pipefail
 # - Creates a virtual environment at AI/.venv and installs requirements
 #
 # Usage:
-#   bash AI/scripts/setup_python_env.sh [--force] [--python X.Y.Z]
+#   bash AI/Diary-AI-BE/scripts/setup_python_env.sh [--force] [--python X.Y.Z]
 #
 # Notes:
 # - Requires pyenv to be installed and available on PATH.

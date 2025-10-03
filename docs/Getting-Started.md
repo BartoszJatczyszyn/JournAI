@@ -14,14 +14,14 @@ This guide walks you from zero to charts with the least yak-shaving possible.
 ## 1.5) Optional: Prepare GarminDb and download data
 An interactive helper can configure `garmindb` and fetch your data.
 - Run:
-     python AI/scripts/setup_garmindb.py
+     python AI/Diary-AI-BE/scripts/cli/setup_garmindb.py
 - What it does:
   - Installs/updates `garmindb`
   - Writes `~/.GarminDb/GarminConnectConfig.json` with your username, dates, and paths
   - Optionally stores your password in a separate file (chmod 600)
   - Can immediately run: `--all --download --import --analyze` (plus `--latest`)
 - Non-interactive example:
-     python AI/scripts/setup_garmindb.py --username you@example.com --start-date 11/01/2024 --latest
+     python AI/Diary-AI-BE/scripts/cli/setup_garmindb.py --username you@example.com --start-date 11/01/2024 --latest
 Tip: Ensure the resulting `HealthData` directory matches what your migrations will read.
 
 ## 2) Launch the stack

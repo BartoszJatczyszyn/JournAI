@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+"""
+Compatibility wrapper for the daily_journal filler.
+Preferred entrypoint lives at:
+  AI/Diary-AI-BE/scripts/cli/fill_daily_journal.py
+
+Usage (this wrapper keeps existing workflow working):
+  python AI/temp_dailyJournal --days 300 --commit
+"""
+from __future__ import annotations
+import sys
+from pathlib import Path
+
+# Add backend scripts to path
+SCRIPTS_DIR = Path(__file__).resolve().parent / "Diary-AI-BE" / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+try:
+    from cli.fill_daily_journal import main  # type: ignore
+except Exception as e:  # pragma: no cover
+    raise SystemExit(f"Failed to import filler CLI: {e}")
+
+if __name__ == "__main__":
+    main()
