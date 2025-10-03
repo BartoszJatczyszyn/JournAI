@@ -19,6 +19,7 @@ Table of contents:
 - Full reset (fresh DB + rebuild + migrate)
 - API overview
 - Frontend
+- Utilities
 - Troubleshooting
 - FAQ
 
@@ -72,7 +73,7 @@ Health data mount:
 ## GarminDb setup helper (optional)
 Want to quickly configure GarminDb and fetch your export? Use the interactive helper:
 
-- Location: `AI/scripts/setup_garmindb.py`
+- Location: `AI/Diary-AI-BE/scripts/cli/setup_garmindb.py`
 - What it does:
   - Installs/updates the `garmindb` package
   - Creates `~/.GarminDb/GarminConnectConfig.json` with your credentials and start dates
@@ -80,11 +81,11 @@ Want to quickly configure GarminDb and fetch your export? Use the interactive he
   - Can immediately run: `--all --download --import --analyze` (and optionally `--latest`)
 - Usage examples:
   - Interactive (recommended):
-       python AI/scripts/setup_garmindb.py
+       python AI/Diary-AI-BE/scripts/cli/setup_garmindb.py
   - Non-interactive quick setup:
-       python AI/scripts/setup_garmindb.py --username you@example.com --start-date 11/01/2024 --latest
+       python AI/Diary-AI-BE/scripts/cli/setup_garmindb.py --username you@example.com --start-date 11/01/2024 --latest
   - Force upgrade of garmindb first:
-       python AI/scripts/setup_garmindb.py --upgrade
+       python AI/Diary-AI-BE/scripts/cli/setup_garmindb.py --upgrade
 - Note: The default base directory for downloads is `HealthData` under your home-relative path (as per the script config). Ensure your repository’s `HealthData/` contains the export you want to migrate.
 
 ## Running migrations (importing your Garmin data)
@@ -149,6 +150,11 @@ Selected endpoints:
   - POST /api/admin/models/retrain — delete cached models so they retrain on demand
 
 Tip: The frontend dev server proxies to http://localhost:5002, so relative calls like `/api/stats` just work.
+
+## Utilities
+- Daily journal filler CLI: `AI/Diary-AI-BE/scripts/cli/fill_daily_journal.py`
+  - Example: `python AI/Diary-AI-BE/scripts/cli/fill_daily_journal.py --days 300 --commit`
+  - Backward compatible wrapper also available: `python AI/temp_dailyJournal`
 
 ## Frontend (React)
 Location: AI/Diary-AI-FE/frontend-react

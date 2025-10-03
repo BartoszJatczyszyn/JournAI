@@ -44,10 +44,12 @@ const SleepGanttChart = ({
     const sliced = sorted.slice(-Math.max(1, maxDays));
 
     const norm = (m) => ((Math.round(Number(m)) % 1440) + 1440) % 1440;
+    // Signed rotation: values before base become negative (left of base), values after base positive.
     const rot = (m) => {
-      // rotate m to base; 0 means 'offset' (base), 60 -> base+1h, etc.
       const mm = norm(m);
-      return ((mm - base) % 1440 + 1440) % 1440;
+      let r = ((mm - base) % 1440 + 1440) % 1440; // 0..1439
+      if (r > 720) r -= 1440; // map to (-720..720]
+      return r;
     };
 
   for (const d of sliced) {
@@ -74,11 +76,13 @@ const SleepGanttChart = ({
       bed = norm(bed);
       wake = norm(wake);
 
-      // rotate to base so that intervals crossing midnight become continuous
-      let rStart = rot(bed);
-      let rEnd = rot(wake);
-      if (rEnd <= rStart) rEnd += 1440; // ensure continuous segment after rotation
-      const seg = Math.max(0, rEnd - rStart);
+  // rotate to base (signed): pre-base values will be negative, post-base positive
+  let rStart = rot(bed);
+  // compute segment length robustly from raw minutes-of-day delta
+  const rawSeg = ((wake - bed + 1440) % 1440);
+  const seg = Math.max(0, rawSeg);
+  // compute end as start + seg to preserve continuity
+  let rEnd = rStart + seg;
 
       const score = typeof d.sleep_score === 'number' ? d.sleep_score : null;
       const dayObj = (d.day && typeof d.day === 'string') ? new Date(d.day) : (d.day?.toDate ? d.day.toDate() : null);
@@ -107,7 +111,7 @@ const SleepGanttChart = ({
       const wakeMin = wakeE[i];
       // map to rotated coordinates
       data[i].bedTrend = bedMin != null ? rot(bedMin) : null;
-      data[i].wakeTrend = wakeMin != null ? (rot(wakeMin) + (rot(wakeMin) <= data[i].bedR ? 1440 : 0)) : null;
+      data[i].wakeTrend = wakeMin != null ? (data[i].bedTrend != null ? data[i].bedTrend + ((wakeMin - bedMin + 1440) % 1440) : rot(wakeMin)) : null;
     }
 
     return data;
@@ -116,39 +120,90 @@ const SleepGanttChart = ({
   const chartHeight = height || Math.max(220, rows.length * rowHeight + 80);
 
   // Compute domain to fit window on rotated axis (0..1440+ depending on rotation)
+  // Behavior:
+  // - If fitWindow is true (default) the domain will be computed from the earliest rotated
+  //   sleep start to the latest rotated sleep end across rows, with a small padding.
+  // - If fitWindow is false, domainMinutes (if provided) defines the span starting at 0.
   const computedDomain = useMemo(() => {
     const defaultSpan = (domainMinutes && domainMinutes > 0) ? Math.min(domainMinutes, 1440) : 600;
-    if (!rows.length) {
-      return { min: 0, max: defaultSpan, span: defaultSpan };
-    }
-    if (!fitWindow) {
-      return { min: 0, max: defaultSpan, span: defaultSpan };
-    }
+    if (!rows.length) return { min: -defaultSpan/2, max: defaultSpan/2, span: defaultSpan };
+    if (!fitWindow) return { min: -defaultSpan/2, max: defaultSpan/2, span: defaultSpan };
     let minStart = Infinity;
     let maxEnd = -Infinity;
     for (const r of rows) {
-      const s = (r.offsetR != null) ? r.offsetR : 0;
-      const e = (r.offsetR != null) ? r.offsetR + (r.segR || 0) : 0;
+      const s = (r.bedR != null) ? r.bedR : 0;
+      const e = (r.wakeR != null) ? r.wakeR : (s + (r.segR || 0));
       minStart = Math.min(minStart, s);
       maxEnd = Math.max(maxEnd, e);
     }
-    const pad = 60; // dynamic -1h / +1h padding
-    let min = minStart - pad; // allow going before earliest sleep start
-    let max = maxEnd + pad;   // allow going after latest sleep end
-    if (max <= min) max = min + 60;
-    const span = Math.max(60, max - min);
-    return { min, max, span };
+    const rawSpan = Math.max(60, maxEnd - minStart);
+    const pad = Math.max(20, Math.min(120, Math.round(rawSpan * 0.08)));
+    const min = Math.floor(minStart - pad);
+    const max = Math.ceil(maxEnd + pad);
+    return { min, max, span: Math.max(60, max - min) };
   }, [rows, fitWindow, domainMinutes]);
 
-  // X axis label formatter: rotate back to clock time
-  const formatXAxis = (val) => minutesToHHmm(base + val);
+  // X axis label formatter: rotate back to clock time and indicate next-day values when needed
+  const formatXAxis = (val) => {
+    const absolute = base + Number(val || 0);
+    const wrapped = ((Math.round(absolute) % 1440) + 1440) % 1440;
+    return minutesToHHmm(wrapped);
+  };
+
+  // Create ticks that nicely span the domain: choose an interval that yields ~5-8 ticks
   const ticks = useMemo(() => {
     const out = [];
     const start = computedDomain.min;
     const end = computedDomain.max;
-    for (let t = Math.floor(start / 60) * 60; t <= end; t += 60) out.push(t);
+    const span = Math.max(1, end - start);
+    const desiredTicks = 6;
+    // interval in minutes rounded to nearest 15/30/60 boundary for readability
+    const rawInterval = Math.ceil(span / desiredTicks);
+    const roundTo = (n) => {
+      if (n <= 30) return 15;
+      if (n <= 60) return 30;
+      if (n <= 120) return 60;
+      if (n <= 240) return 120;
+      return 180;
+    };
+    const interval = Math.max(15, Math.ceil(rawInterval / roundTo(rawInterval)) * roundTo(rawInterval));
+    let t = Math.floor(start / interval) * interval;
+    // ensure first tick is within domain
+    if (t < start) t += interval;
+    for (; t <= end; t += interval) out.push(t);
+    // fallback: ensure at least start and end ticks
+    if (!out.length) {
+      out.push(start);
+      out.push(end);
+    } else {
+      if (out[0] > start) out.unshift(Math.floor(start));
+      if (out[out.length - 1] < end) out.push(Math.ceil(end));
+    }
     return out;
-  }, [computedDomain]);
+  }, [computedDomain, base]);
+
+  // Map original rows into display coordinates that fall inside computedDomain.
+  // This wraps values by adding/subtracting 1440 as needed so items display near each other
+  const displayRows = useMemo(() => {
+    if (!rows || !rows.length) return [];
+    const out = rows.map(r => ({ ...r }));
+    const min = computedDomain.min;
+    const max = computedDomain.max;
+    for (const r of out) {
+      // normalize offsetR, bedR, wakeR, trends into [min, max] by adding/subtracting 1440
+      ['offsetR','bedR','wakeR','bedTrend','wakeTrend'].forEach(key => {
+        if (r[key] == null) return;
+        // bring into a value near the center of domain
+        while (r[key] < min) r[key] += 1440;
+        while (r[key] > max) r[key] -= 1440;
+      });
+      // ensure wake is after bed (handle wrap)
+      if (r.wakeR != null && r.bedR != null && r.wakeR <= r.bedR) {
+        r.wakeR = r.bedR + (r.segR || 0);
+      }
+    }
+    return out;
+  }, [rows, computedDomain]);
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
