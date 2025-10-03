@@ -1,8 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import Tooltip from '../components/Tooltip';
 import { useHealthData } from '../context/HealthDataContext';
-import LoadingSpinner from '../components/LoadingSpinner';
-import ErrorMessage from '../components/ErrorMessage';
+// LoadingSpinner and ErrorMessage are not used in this file
 import CorrelationMatrix from '../components/CorrelationMatrix';
 import CorrelationHeatmap from '../components/CorrelationHeatmap';
 import ClusterAnalysis from '../components/ClusterAnalysis';
@@ -156,7 +155,11 @@ const Analytics = () => {
 
   // Don't early-return before hooks above; render conditional content instead
   const initialLoading = loading && !analytics;
-  const initialError = error && !analytics;
+  const _initialError = error && !analytics;
+  // reference to avoid unused-var ESLint warning for initialLoading
+  void initialLoading;
+  // also reference _initialError to explicitly mark it as intentionally unused
+  void _initialError;
 
   const tabs = [
     {

@@ -5,9 +5,6 @@ const SleepTimingAnalysis = ({ timing, derivedTiming, timeseries, analysisParams
   const {
     computedAvgBedMin,
     avgBedWindow,
-    computedAvgWakeMin,
-    avgWakeWindow,
-    recommendedBedCenter,
     recommendedBedWindow,
     mmToHHMM,
   } = derivedTiming;

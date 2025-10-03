@@ -242,7 +242,7 @@ const TemporalPatterns = ({ data }) => {
   }
 
   // Heatmap data preparation
-  const heatmapMetrics = ['steps', 'mood', 'energy', 'sleep'];
+  const heatmapMetrics = useMemo(() => ['steps', 'mood', 'energy', 'sleep'], []);
   const heatmapStats = useMemo(() => {
     const stats = {};
     heatmapMetrics.forEach(m => {
@@ -252,7 +252,7 @@ const TemporalPatterns = ({ data }) => {
       stats[m] = { min, max, range: max - min || 1 };
     });
     return stats;
-  }, [temporalData]);
+  }, [temporalData, heatmapMetrics]);
 
   function heatColor(metric, value) {
     const { min, range } = heatmapStats[metric];

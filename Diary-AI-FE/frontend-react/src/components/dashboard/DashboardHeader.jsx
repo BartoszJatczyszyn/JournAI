@@ -1,6 +1,6 @@
 import React from 'react';
 
-const DashboardHeader = ({ title = 'Health Dashboard', subtitle = 'Your comprehensive health overview with AI-powered insights', dateRange, onSelectDays, availableDays }) => {
+const DashboardHeader = ({ title = 'Health Dashboard', subtitle = 'Your comprehensive health overview with AI-powered insights', dateRange, onSelectDays, availableDays: _availableDays }) => {
   return (
     <div className="dashboard-header">
       <div>

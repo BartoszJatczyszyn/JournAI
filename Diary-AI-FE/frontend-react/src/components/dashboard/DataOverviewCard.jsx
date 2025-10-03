@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 
 // Helper formatting
 const fmtInt = (v) => (v == null || isNaN(v) ? '—' : Math.round(v).toLocaleString());
-const fmt1 = (v) => (v == null || isNaN(v) ? '—' : (+v).toFixed(1));
+// _fmt1 removed (unused)
 
 const DataOverviewCard = ({ stats }) => {
   // Normalize incoming stats (backend /api/stats shape)

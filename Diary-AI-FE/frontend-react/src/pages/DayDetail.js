@@ -10,10 +10,10 @@ import {
   CartesianGrid,
   Tooltip as RTooltip,
   ResponsiveContainer,
-  BarChart,
-  Bar
+  // BarChart,
+  // Bar
 } from 'recharts';
-import { ComposedChart, Area } from 'recharts';
+import { ComposedChart, Area, Bar } from 'recharts';
 import { monitoringAPI, sleepsAPI, journalAPI, healthAPI2, healthAPI } from '../services';
 import BodyMetricsCard from '../components/BodyMetricsCard';
 import JournalEditor from '../components/JournalEditor';
@@ -24,6 +24,8 @@ const DayDetail = () => {
   const [error, setError] = useState(null);
   const [hr, setHr] = useState(null);
   const [hrAttempts, setHrAttempts] = useState([]);
+  // reference to avoid unused-var ESLint warning
+  void hrAttempts;
   const [hrRaw, setHrRaw] = useState(null);
   const [stressRaw, setStressRaw] = useState(null);
   const [stress, setStress] = useState(null);

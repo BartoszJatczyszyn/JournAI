@@ -28,7 +28,7 @@ const SleepHistogram = ({
   daysLimit = 14,
   avgMinutes14 = null, // optional minutes-of-day average to mark on chart
 }) => {
-  const { data, totalDays, filteredRange } = useMemo(() => {
+  const { data, totalDays } = useMemo(() => {
     const res = Math.max(1, Math.min(60, Math.round(resolutionMinutes)));
     const binCount = Math.floor(1440 / res);
     const bins = Array.from({ length: binCount }, (_, i) => ({
@@ -134,22 +134,7 @@ const SleepHistogram = ({
 
   const CustomTooltip = (props) => <ChartTooltip {...props} mapPayload={mapTooltip} />;
 
-  const CustomTooltip_OLD = ({ active, payload }) => {
-    if (active && payload && payload.length) {
-      const p = payload[0].payload;
-      return (
-        <div className="custom-tooltip">
-          <div className="tooltip-label">{p.label}</div>
-          <div className="tooltip-value"><span className="tooltip-metric">Days:</span> <span className="tooltip-number">{p.count}</span></div>
-          <div className="tooltip-value"><span className="tooltip-metric">Percent:</span> <span className="tooltip-number">{p.percent}%</span></div>
-          {p.medianScore != null && (
-            <div className="tooltip-value"><span className="tooltip-metric">Median score:</span> <span className="tooltip-number">{Math.round(p.medianScore)}</span></div>
-          )}
-        </div>
-      );
-    }
-    return null;
-  };
+  // legacy tooltip removed
 
   // Build tick labels aligned to full hours within the cropped window
   const tickLabels = useMemo(() => {

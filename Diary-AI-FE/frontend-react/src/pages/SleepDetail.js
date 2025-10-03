@@ -55,7 +55,7 @@ const doughnutPercentPlugin = {
 
 ChartJS.register(doughnutPercentPlugin);
 
-const CustomTooltip = ({ active, payload, label }) => {
+const CustomTooltip = ({ active, payload, label: _label }) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     const time = new Date(data.t).toLocaleTimeString([], {

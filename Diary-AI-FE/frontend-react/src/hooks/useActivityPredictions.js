@@ -4,9 +4,9 @@ import { useMemo } from 'react';
 function linearRegression(points) {
   const n = points.length;
   if (n === 0) return { slope: 0, intercept: 0, r2: 0 };
-  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0, sumY2 = 0;
+  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
   for (const { x, y } of points) {
-    sumX += x; sumY += y; sumXY += x * y; sumX2 += x * x; sumY2 += y * y;
+    sumX += x; sumY += y; sumXY += x * y; sumX2 += x * x;
   }
   const denom = (n * sumX2 - sumX * sumX) || 1e-9;
   const slope = (n * sumXY - sumX * sumY) / denom;
@@ -105,7 +105,7 @@ export const useActivityPredictions = (weeklyGroups, { window = 6, ewmaAlpha = 0
       paceConfidence,
       paceImprovement
     };
-  }, [weeklyGroups, window]);
+  }, [weeklyGroups, window, ewmaAlpha, blend]);
 };
 
 export default useActivityPredictions;

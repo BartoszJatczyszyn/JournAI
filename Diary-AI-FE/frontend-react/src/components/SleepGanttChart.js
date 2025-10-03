@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell, LabelList, ComposedChart, Line } from 'recharts';
+import { Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList, ComposedChart, Line } from 'recharts';
 import { circularEWMASeries } from '../utils/timeUtils';
 import { getSleepScoreColor } from '../utils/chartUtils';
 
@@ -82,7 +82,7 @@ const SleepGanttChart = ({
   const rawSeg = ((wake - bed + 1440) % 1440);
   const seg = Math.max(0, rawSeg);
   // compute end as start + seg to preserve continuity
-  let rEnd = rStart + seg;
+  
 
       const score = typeof d.sleep_score === 'number' ? d.sleep_score : null;
       const dayObj = (d.day && typeof d.day === 'string') ? new Date(d.day) : (d.day?.toDate ? d.day.toDate() : null);
@@ -180,7 +180,7 @@ const SleepGanttChart = ({
       if (out[out.length - 1] < end) out.push(Math.ceil(end));
     }
     return out;
-  }, [computedDomain, base]);
+  }, [computedDomain]);
 
   // Map original rows into display coordinates that fall inside computedDomain.
   // This wraps values by adding/subtracting 1440 as needed so items display near each other
@@ -205,7 +205,9 @@ const SleepGanttChart = ({
     return out;
   }, [rows, computedDomain]);
 
-  const CustomTooltip = ({ active, payload, label }) => {
+  const chartData = (displayRows && displayRows.length) ? displayRows : rows;
+
+  const CustomTooltip = ({ active, payload, _label }) => {
     if (active && payload && payload.length) {
       const p = payload[0].payload;
       return (
@@ -222,7 +224,7 @@ const SleepGanttChart = ({
   return (
     <div className="sleep-gantt-chart">
       <ResponsiveContainer width="100%" height={chartHeight}>
-        <ComposedChart data={rows} layout="vertical" margin={{ top: 10, right: 20, left: 20, bottom: 10 }}>
+  <ComposedChart data={chartData} layout="vertical" margin={{ top: 10, right: 20, left: 20, bottom: 10 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={true} horizontal={false} stroke="#e2e8f0" />
           <XAxis type="number" domain={[computedDomain.min, computedDomain.max]} ticks={ticks} tickFormatter={formatXAxis} stroke="#64748b" fontSize={12} />
           <YAxis type="category" dataKey="dateLabel" stroke="#64748b" fontSize={12} width={110} />
@@ -230,7 +232,7 @@ const SleepGanttChart = ({
           {/* Single continuous segment per sleep on rotated axis */}
           <Bar dataKey="offsetR" stackId="a" fill="transparent" isAnimationActive={false} />
           <Bar dataKey="segR" stackId="a" radius={[6,6,6,6]} minPointSize={4}>
-            {rows.map((entry, index) => (
+            {chartData.map((entry, index) => (
               <Cell key={`cellR-${index}`} fill={entry.sleep_score == null ? barColor : getSleepScoreColor(entry.sleep_score, barColor)} />
             ))}
             <LabelList

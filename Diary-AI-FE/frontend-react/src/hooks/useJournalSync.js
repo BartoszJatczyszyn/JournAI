@@ -26,7 +26,7 @@ export function useJournalSync(day, initialData) {
       console.warn('loadQueue failed', e);
       return [];
     }
-  }, [storageKey]);
+  }, [storageKey, day]);
 
   const saveQueue = useCallback((queue, d = day) => {
     try {
@@ -35,7 +35,7 @@ export function useJournalSync(day, initialData) {
     } catch (e) {
       console.warn('saveQueue failed', e);
     }
-  }, [storageKey]);
+  }, [storageKey, day]);
 
   const enqueueOffline = useCallback((payload) => {
     const q = loadQueue();
@@ -60,7 +60,7 @@ export function useJournalSync(day, initialData) {
     setNotes(initialData?.notes || '');
     lastSavedRef.current = sanitizeEntry({ ...(initialData || {}) });
     setStatus(null); setAutoStatus(null); setError(null); setUnsyncedCount(loadQueue().length);
-  }, [initialData, day]);
+  }, [initialData, day, sanitizeEntry, loadQueue]);
 
   const buildFullPayload = useCallback(() => sanitizeEntry({ ...form, notes: notes?.trim() || null }), [form, notes, sanitizeEntry]);
 
@@ -135,7 +135,7 @@ export function useJournalSync(day, initialData) {
         setIsOffline(true);
       }
     } finally { setSaving(false); }
-  }, [isOffline, buildFullPayload, buildDiffPayload, enqueueOffline, loadQueue, saveQueue, day, sanitizeEntry]);
+  }, [isOffline, buildFullPayload, buildDiffPayload, enqueueOffline, loadQueue, saveQueue, day, sanitizeEntry, unsyncedCount]);
 
   const handleSave = useCallback(() => performSave(false), [performSave]);
 

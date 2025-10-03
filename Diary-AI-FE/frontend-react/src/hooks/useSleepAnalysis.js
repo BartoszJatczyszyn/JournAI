@@ -7,7 +7,7 @@ import { mmToHHMM, circularMeanMinutes, windowAround, circularRollingMedian } fr
 const RECOMMENDED_SLEEP_TARGET_MINUTES = 7.5 * 60;
 
 export const useSleepAnalysis = (defaultDays = 14) => {
-  const { loading: ctxLoading, error: ctxError, fetchSpecializedAnalysis, getHealthDataForRange } = useHealthData();
+  const { error: ctxError, fetchSpecializedAnalysis, getHealthDataForRange } = useHealthData();
   const [localLoading, setLocalLoading] = useState(false);
   const [localError, setLocalError] = useState(null);
   const [sleepData, setSleepData] = useState(null);
@@ -210,47 +210,9 @@ export const useSleepAnalysis = (defaultDays = 14) => {
             }
           }
 
-          // Helper: fetch latest sleeps directly from enhanced backend and merge avg_sleep_hr into timeseries
-              const fetchLatestSleepsDirect = async () => {
-                try {
-                  const j = await sleepsAPI.getLatestSleeps({ limit: analysisParams.days });
-                  return Array.isArray(j?.sleeps) ? j.sleeps : [];
-                } catch (e) {
-                  console.warn('Failed to fetch latest sleeps directly:', e);
-                  return [];
-                }
-              };
+              // reuse outer fetchLatestSleepsDirect helper defined earlier
 
-              const mergeAvgVitalsFromSleeps = async (tsArr) => {
-                if (!Array.isArray(tsArr) || !tsArr.length) return tsArr;
-                try {
-                  const sleeps = await fetchLatestSleepsDirect();
-                  if (!sleeps || !sleeps.length) return tsArr;
-                  const byDay = new Map(sleeps.map(s => [String(s.day), s]));
-                  return tsArr.map(row => {
-                    const dayKey = String(row?.day);
-                    const sleepRow = byDay.get(dayKey);
-                    if (!sleepRow) return row;
-                    const out = { ...row };
-                    if ((out.avg_sleep_hr == null || out.rhr == null) && sleepRow.avg_sleep_hr != null) {
-                      out.avg_sleep_hr = sleepRow.avg_sleep_hr;
-                      out.rhr = out.rhr ?? sleepRow.avg_sleep_hr;
-                    }
-                    if ((out.avg_sleep_rr == null || out.respiratory_rate == null) && (sleepRow.avg_sleep_rr != null || sleepRow.avg_respiration != null || sleepRow.respiratory_rate != null)) {
-                      out.avg_sleep_rr = out.avg_sleep_rr ?? (sleepRow.avg_sleep_rr ?? sleepRow.avg_respiration ?? sleepRow.respiratory_rate ?? null);
-                      out.respiratory_rate = out.respiratory_rate ?? out.avg_sleep_rr;
-                    }
-                    if ((out.avg_sleep_stress == null || out.stress_avg == null) && (sleepRow.avg_sleep_stress != null || sleepRow.stress_avg != null || sleepRow.stress != null)) {
-                      out.avg_sleep_stress = out.avg_sleep_stress ?? (sleepRow.avg_sleep_stress ?? sleepRow.stress_avg ?? sleepRow.stress ?? null);
-                      out.stress_avg = out.stress_avg ?? out.avg_sleep_stress;
-                    }
-                    return out;
-                  });
-                } catch (e) {
-                  console.warn('mergeAvgVitalsFromSleeps failed:', e);
-                  return tsArr;
-                }
-              };
+              // duplicate helper removed - original mergeAvgVitalsFromSleeps defined above is used
 
               // Merge timeseries with latestTimeseries (prefer latest-based anchor; fill missing values from insights)
               const mergeTimeseriesByDay = (base, extra) => {
@@ -465,7 +427,7 @@ export const useSleepAnalysis = (defaultDays = 14) => {
     } finally {
       setLocalLoading(false);
     }
-  }, [analysisParams.days, fetchSpecializedAnalysis]);
+  }, [analysisParams.days, fetchSpecializedAnalysis, getHealthDataForRange]);
 
   useEffect(() => {
     loadSleepAnalysis();

@@ -6,7 +6,7 @@ export const journalAPI = {
   getMeta: () => api.get('/api/journal/meta'),
   getContext: (date, window=7) => api.get(`/api/journal/context/${date}?window=${window}`),
   getCorrelations: (start, end, method='pearson', opts={}) => {
-    const { min_abs=0, categories } = opts;
+    const min_abs = opts?.min_abs ?? 0;
     const qp = new URLSearchParams({ start, end, method, min_abs: String(min_abs) });
     // categories filter is frontend-only; backend returns map so we filter client-side
     return api.get(`/api/journal/correlations?${qp.toString()}`);

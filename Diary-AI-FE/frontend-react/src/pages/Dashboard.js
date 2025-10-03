@@ -5,7 +5,8 @@ import ErrorMessage from '../components/ErrorMessage';
 import DashboardHeader from '../components/dashboard/DashboardHeader';
 import MetricsGrid from '../components/dashboard/MetricsGrid';
 import HealthTrendsCard from '../components/dashboard/HealthTrendsCard';
-import CorrelationSection from '../components/dashboard/CorrelationSection';
+// CorrelationSection is not currently used in this file
+// import CorrelationSection from '../components/dashboard/CorrelationSection';
 import CorrelationMatrix from '../components/CorrelationMatrix';
 import DataOverviewCard from '../components/dashboard/DataOverviewCard';
 
@@ -16,9 +17,11 @@ const Dashboard = () => {
     error, 
     fetchDashboardData, 
     dateRange, 
-  setDateRange,
-  fetchDashboardForDays
+    setDateRange: _setDateRange,
+    fetchDashboardForDays
   } = useHealthData();
+  // explicitly ignore setDateRange in this view
+  void _setDateRange;
 
   const [selectedMetric, setSelectedMetric] = useState('energy_level');
   const [showFullMatrix, setShowFullMatrix] = useState(false);

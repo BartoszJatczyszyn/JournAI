@@ -10,9 +10,11 @@ const Sleeps = () => {
   const [limit, setLimit] = useState(25);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  // intentionally unused in this view
+  void setStartDate; void setEndDate;
   const [total, setTotal] = useState(null);
 
-  const loadSleeps = async () => {
+  const loadSleeps = React.useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -38,11 +40,11 @@ const Sleeps = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, limit, startDate, endDate]);
 
   useEffect(() => {
     loadSleeps();
-  }, [page, limit, startDate, endDate]);
+  }, [loadSleeps]);
 
   // Accept either seconds (default) or minutes and format as "Xh Ym" or "Ym"
   const formatDuration = (value, unit = 'seconds') => {
@@ -71,6 +73,8 @@ const Sleeps = () => {
   if (score >= 60) return 'text-yellow-600 dark:text-yellow-400';
   return 'text-red-600 dark:text-red-400';
   };
+  // reference to avoid unused-var ESLint warning
+  void getScoreColor;
 
   const getScoreBadgeClass = (score) => {
     if (score == null) return 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200';

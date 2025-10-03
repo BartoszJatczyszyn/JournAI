@@ -4,7 +4,8 @@ import useActivityAggregates from '../hooks/useActivityAggregates';
 import useActivityPredictions from '../hooks/useActivityPredictions';
 import useGoalSimulation from '../hooks/useGoalSimulation';
 import TrendComparison from '../components/TrendComparison';
-import SegmentedControl from '../components/SegmentedControl';
+// SegmentedControl not used here
+// import SegmentedControl from '../components/SegmentedControl';
 import Sparkline from '../components/Sparkline';
 import { activitiesAPI } from '../services';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -61,7 +62,7 @@ const Running = () => {
     const newLimit = map[periodDays] || 400;
     if (newLimit !== limit) setLimit(newLimit);
     // load will be triggered by limit change effect
-  }, [periodDays]);
+  }, [periodDays, limit]);
   // compute lastRunning (timestamp of the most recent running activity) early so other hooks can use it
   const lastRunning = React.useMemo(() => {
     const runningTimestamps = allActivities.map(a => {

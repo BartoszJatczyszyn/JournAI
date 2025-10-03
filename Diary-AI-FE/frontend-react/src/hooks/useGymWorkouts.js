@@ -141,19 +141,17 @@ export default function useGymWorkouts() {
       });
     });
     // Compute regression on est1RM if enough points else on topWeight
-    Object.entries(progress).forEach(([exId, data]) => {
+  Object.entries(progress).forEach(([exId, data]) => {
       // Merge manual 1RM entries into history stream
       const manualEntries = manualOneRMs.filter(m => m.exerciseId === exId).sort((a,b)=> new Date(a.date)-new Date(b.date));
       // Append manual entries as synthetic history points (index after last existing index or by date mapping)
       if (manualEntries.length) {
-        // We'll interleave by date ordering while preserving index ordering (assign fractional indexes if needed)
-        const combined = [];
-        const hist = [...data.history];
-        let hPtr = 0; let syntheticIndexCounter = data.history.length ? data.history[data.history.length-1].index : 0;
+  // We'll interleave by date ordering while preserving index ordering (assign fractional indexes if needed)
+  const hist = [...data.history];
         const histByDate = hist.map(h => ({ ...h, ts: new Date(h.date).getTime() }));
         manualEntries.forEach(man => { man._ts = new Date(man.date || new Date().toISOString()).getTime(); });
         const allItems = [...histByDate.map(h=>({type:'hist', item:h})), ...manualEntries.map(m=>({type:'manual', item:m}))].sort((a,b)=> a.item._ts - b.item._ts);
-        const rebuilt = []; let newIndex = 0;
+  const rebuilt = []; let newIndex = 0;
         allItems.forEach(obj => {
           if (obj.type === 'hist') {
             rebuilt.push({ ...obj.item, index: newIndex });
@@ -185,7 +183,7 @@ export default function useGymWorkouts() {
       data.record1RM = data.est1RMSeries.filter(Boolean).reduce((m,v)=> v>m? v : m, 0) || null;
     });
     // Stagnation detection (flat slope or low r2)
-    Object.entries(progress).forEach(([exId, data]) => {
+  Object.entries(progress).forEach(([_exId, data]) => {
       if (data.regression) {
         const base = data.est1RMSeries.filter(Boolean);
         const avg = base.length ? base.reduce((a,b)=>a+b,0)/base.length : 0;
@@ -219,12 +217,12 @@ export default function useGymWorkouts() {
     if (!data || !data.regression || targetEst1RM == null) return null;
     const { slope, intercept } = data.regression;
   if (!slope || slope <= 0) return { achievable: false, message: 'No positive trend' };
-    const lastIndex = data.history[data.history.length-1].index;
-    const current = data.history[data.history.length-1].est1RM || data.history[data.history.length-1].topWeight;
+  const _lastIndex = data.history[data.history.length-1].index;
+  const current = data.history[data.history.length-1].est1RM || data.history[data.history.length-1].topWeight;
   if (current >= targetEst1RM) return { achievable: true, weeks: 0, message: 'Target already reached' };
     // Solve targetEst1RM = slope * x + intercept => x
     const x = (targetEst1RM - intercept) / slope;
-    const sessionsNeeded = Math.max(0, Math.ceil(x - lastIndex));
+    const sessionsNeeded = Math.max(0, Math.ceil(x - _lastIndex));
   return { achievable: true, sessionsNeeded, approxWeeks: (sessionsNeeded/3).toFixed(1), message: 'Projection' };
   }, [exerciseProgress]);
 
@@ -273,7 +271,7 @@ export default function useGymWorkouts() {
     if (!meta) return null;
     const prog = exerciseProgress[exerciseId];
     if (!prog || prog.history.length === 0) return null;
-    const last = prog.history[prog.history.length-1];
+  // previous last entry placeholder removed to avoid unused var
     const template = templates.find(t => t.exercises.some(e => e.id===exerciseId));
     const cfg = template?.progression || { type:'linear', incrementKg:2.5, repRangeMin:6, repRangeMax:10, targetRPE:8 };
     // Find last session sets for this exercise

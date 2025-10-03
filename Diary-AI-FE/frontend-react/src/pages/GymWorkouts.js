@@ -71,6 +71,9 @@ const GymWorkouts = () => {
     deleteManualOneRepMax,
   } = useGymWorkouts();
 
+  // intentionally ignore some callbacks when not used in this view
+  void updateTemplate; void updateSession;
+
   const [newTplName, setNewTplName] = useState('');
   const [tplDraftExercises, setTplDraftExercises] = useState([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState(null);
@@ -106,7 +109,7 @@ const GymWorkouts = () => {
     setLoggingTemplateId(null);
   };
 
-  const sessionsByTemplate = useMemo(() => {
+  const _sessionsByTemplate = useMemo(() => {
     const map = new Map();
     sessions.forEach(s => { if (!map.has(s.templateId)) map.set(s.templateId, []); map.get(s.templateId).push(s); });
     return map;
@@ -122,11 +125,13 @@ const GymWorkouts = () => {
         const meta = exerciseMeta.get(ex.exerciseId);
         const bp = meta?.name ? meta.name.toLowerCase() : 'other';
         let vol = 0; ex.sets.forEach(st => { if (st.weight!=null && st.reps) vol += st.weight*st.reps; });
-        if (vol>0) arr.push({ date: day, bodyPart: bp.includes('bench')||bp.includes('chest')?'chest': bp.includes('row')||bp.includes('lat')?'back': bp.includes('squat')||bp.includes('leg')||bp.includes('lunge')?'legs': bp.includes('press')||bp.includes('shoulder')?'shoulders': bp.includes('curl')?'biceps': bp.includes('tricep')?'triceps': bp.includes('ab')||bp.includes('core')?'core':'other', volume: vol });
+  if (vol>0) arr.push({ date: day, bodyPart: bp.includes('bench')||bp.includes('chest')?'chest': bp.includes('row')||bp.includes('lat')?'back': bp.includes('squat')||bp.includes('leg')||bp.includes('lunge')?'legs': bp.includes('press')||bp.includes('shoulder')?'shoulders': bp.includes('curl')?'biceps': bp.includes('tricep')?'triceps': bp.includes('ab')||bp.includes('core')?'core':'other', volume: vol });
       });
     });
     return arr;
   }, [sessions, exerciseMeta]);
+  // intentionally ignore _sessionsByTemplate (used for diagnostics in dev)
+  void _sessionsByTemplate;
 
   // Suggestion: test 1RM if stagnation flagged for X consecutive entries (default 5 sessions with stagnation and no manual 1RM in last 30 days)
   const oneRMSuggestions = useMemo(() => {
@@ -134,7 +139,7 @@ const GymWorkouts = () => {
     Object.entries(exerciseProgress).forEach(([exId, prog]) => {
       if (!prog || !prog.history) return;
       const recent = prog.history.slice(-5);
-      const stagnationCount = recent.filter(h => prog.stagnation).length; // same flag for all points when stagnation true
+  const stagnationCount = recent.filter(_h => prog.stagnation).length; // same flag for all points when stagnation true
       const lastManual = manualOneRMs.filter(m => m.exerciseId===exId).sort((a,b)=> new Date(b.date)-new Date(a.date))[0];
       const thirtyAgo = Date.now() - 1000*60*60*24*30;
       const needsTest = prog.stagnation && stagnationCount >= 5 && (!lastManual || new Date(lastManual.date).getTime() < thirtyAgo);

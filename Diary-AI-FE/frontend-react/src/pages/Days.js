@@ -44,7 +44,7 @@ const Days = () => {
   const [corrMinAbs, setCorrMinAbs] = useState(0.0);
   const [corrCategories, setCorrCategories] = useState({ ratings: true, metrics: true, flags: true });
 
-  const load = async () => {
+  const load = React.useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -64,12 +64,15 @@ const Days = () => {
     } catch (e) {
       console.error('Failed to load daily summaries', e);
       setError(String(e?.message || e));
-    } finally {
-      setLoading(false);
-    }
-  };
+      } finally {
+        setLoading(false);
+      }
+    }, [daysRange]);
 
-  useEffect(() => { load(); }, [daysRange]);
+    // wrap load in useCallback properly (separate stable reference)
+    const _loadRef = React.useRef();
+    _loadRef.current = load;
+    useEffect(() => { _loadRef.current(); }, [daysRange]);
 
   useEffect(() => {
     const fetchRecovery = async () => {

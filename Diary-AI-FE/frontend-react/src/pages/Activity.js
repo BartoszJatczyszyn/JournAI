@@ -12,7 +12,7 @@ import SegmentedControl from '../components/SegmentedControl';
 // have been moved to the dedicated Running page.
 
 const Activity = () => {
-  const { loading, error, dashboardData, fetchDashboardForDays } = useHealthData();
+  const { error, dashboardData, fetchDashboardForDays } = useHealthData();
   const [activities, setActivities] = useState([]);
   const [busy, setBusy] = useState(false);
   const [limit, setLimit] = useState(400); // dynamic based on selected period
@@ -61,7 +61,7 @@ const Activity = () => {
       // defensive: ensure UI doesn't crash if context method fails
       console.warn('Failed to refresh dashboard for new period', e);
     }
-  }, [periodDays, loadActivities, fetchDashboardForDays]);
+  }, [periodDays, loadActivities, fetchDashboardForDays, limit]);
 
   // Persist the user's chosen activity period (e.g. Last 2 weeks) so
   // the preference survives reloads.
@@ -105,7 +105,7 @@ const Activity = () => {
     todayCalories,
     weeklySteps,
     weeklyDistance,
-    activeDays,
+  // activeDays intentionally unused in this view
     last14DaysSeries,
     weeklyGroups
   } = useActivityAggregates(periodActivities);
@@ -194,7 +194,7 @@ const Activity = () => {
   const displayTodaySteps = todaySteps > 0 ? todaySteps : fallbackTodaySteps;
   const displayWeeklySteps = weeklySteps > 0 ? weeklySteps : fallbackWeeklySteps;
   const [sparkMetric, setSparkMetric] = useState('distance'); // 'distance' | 'steps' | 'calories'
-  const [weeksRange, setWeeksRange] = useState(8); // can be 4 / 8 / 12
+  const [weeksRange /*, setWeeksRange */] = useState(8); // can be 4 / 8 / 12
   const [weeklySortKey, setWeeklySortKey] = useState('week');
   const [weeklySortDir, setWeeklySortDir] = useState('asc');
 
@@ -554,9 +554,10 @@ const Activity = () => {
                 {periodActivities.slice(0,8).map(act => {
                   const entries = Object.entries(act || {});
                   const candidates = entries
-                    .filter(([k,v]) => /load|tl|trimp|work|session|loadscore|load_score|training/i.test(k))
-                    .map(([k,v]) => {
+                    .filter(([k,_v]) => /load|tl|trimp|work|session|loadscore|load_score|training/i.test(k))
+                    .map(([k,_v]) => {
                       let parsed = null;
+                      const v = _v;
                       if (v != null) {
                         if (typeof v === 'number') parsed = v;
                         else if (typeof v === 'string') {

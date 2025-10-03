@@ -45,7 +45,7 @@ const Gym = () => {
   }), [allActivities]);
 
   const aggregates = useActivityAggregates(gymActivities);
-  const weeklyGroups = aggregates.weeklyGroups || [];
+  const weeklyGroups = React.useMemo(() => (aggregates.weeklyGroups || []), [aggregates.weeklyGroups]);
 
   // Enrich weekly groups with an "advanced volume" metric:
   // Priority order:

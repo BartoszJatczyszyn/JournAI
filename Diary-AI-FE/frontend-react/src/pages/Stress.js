@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { useHealthData } from '../context/HealthDataContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
-import HealthChart from '../components/HealthChart';
+// HealthChart is not used in this file
+// import HealthChart from '../components/HealthChart';
 import MetricCard from '../components/MetricCard';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload || !payload.length) return null;
@@ -62,16 +63,12 @@ const Stress = () => {
   }, []);
 
 
-  useEffect(() => {
-    loadStressAnalysis();
-  }, [analysisParams.days]);
-
-  const loadStressAnalysis = async () => {
+  const loadStressAnalysis = React.useCallback(async () => {
     const data = await fetchSpecializedAnalysis('stress', analysisParams.days);
-    if (data) {
-      setStressData(data);
-    }
-  };
+    if (data) setStressData(data);
+  }, [fetchSpecializedAnalysis, analysisParams.days]);
+
+  useEffect(() => { loadStressAnalysis(); }, [loadStressAnalysis]);
 
   const handleRefresh = () => {
     loadStressAnalysis();
