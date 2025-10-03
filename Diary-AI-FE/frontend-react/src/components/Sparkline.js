@@ -14,6 +14,18 @@ import React, { useRef, useState, useEffect } from 'react';
 const Sparkline = ({ data, height = 40, stroke = '#6366f1', fill = 'rgba(99,102,241,0.15)', strokeWidth = 2, className = '', tooltipFormatter }) => {
   const containerRef = useRef(null);
   const [tooltip, setTooltip] = useState({ visible: false, x: 0, y: 0, content: '' });
+  // Update on container resize so SVG can fill available width
+  useEffect(() => {
+    if (!containerRef.current) return;
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      // trigger a re-render by updating tooltip state with same values
+      setTooltip(t => ({ ...t }));
+    });
+    ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, [containerRef]);
+
   if (!data || data.length === 0) return <div className={className}>No data</div>;
   const values = data.map(d => typeof d === 'number' ? d : (d.value ?? d.dist ?? 0));
   const max = Math.max(...values, 1);
@@ -43,17 +55,6 @@ const Sparkline = ({ data, height = 40, stroke = '#6366f1', fill = 'rgba(99,102,
   };
   const hideTip = () => setTooltip({ visible: false, x: 0, y: 0, content: '' });
 
-  // Update on container resize so SVG can fill available width
-  useEffect(() => {
-    if (!containerRef.current) return;
-    if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => {
-      // trigger a re-render by updating tooltip state with same values
-      setTooltip(t => ({ ...t }));
-    });
-    ro.observe(containerRef.current);
-    return () => ro.disconnect();
-  }, [containerRef]);
 
   return (
     <div ref={containerRef} className={className} style={{ overflow: 'hidden', position: 'relative' }}>

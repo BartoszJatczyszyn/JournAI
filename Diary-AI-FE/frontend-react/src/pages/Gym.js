@@ -194,19 +194,21 @@ const Gym = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {useMemo(() => {
-                    const arr = [...visibleWeeks];
-                    arr.sort((a,b) => {
-                      let va = a[weeklySortKey];
-                      let vb = b[weeklySortKey];
-                      if (va == null && vb == null) return 0;
-                      if (va == null) return 1;
-                      if (vb == null) return -1;
-                      if (typeof va === 'number' && typeof vb === 'number') return weeklySortDir==='asc' ? va - vb : vb - va;
-                      return weeklySortDir==='asc' ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
-                    });
-                    return arr;
-                  }, [visibleWeeks, weeklySortKey, weeklySortDir]).map((w,i) => {
+                  {(() => {
+                    const sorted = (function() {
+                      const arr = [...visibleWeeks];
+                      arr.sort((a,b) => {
+                        let va = a[weeklySortKey];
+                        let vb = b[weeklySortKey];
+                        if (va == null && vb == null) return 0;
+                        if (va == null) return 1;
+                        if (vb == null) return -1;
+                        if (typeof va === 'number' && typeof vb === 'number') return weeklySortDir==='asc' ? va - vb : vb - va;
+                        return weeklySortDir==='asc' ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+                      });
+                      return arr;
+                    })();
+                    return sorted.map((w,i) => {
                     const pct = maxAdvanced ? (w.advancedVolume / maxAdvanced) * 100 : 0;
                     const zebra = i % 2 === 0 ? 'bg-gray-800/20' : 'bg-gray-800/10';
                     return (
@@ -235,7 +237,8 @@ const Gym = () => {
                         </td>
                       </tr>
                     );
-                  })}
+                    });
+                    })()}
                 </tbody>
               </table>
             )}

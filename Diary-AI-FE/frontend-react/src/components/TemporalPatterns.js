@@ -74,14 +74,7 @@ const TemporalPatterns = ({ data }) => {
     };
   }, [data]);
 
-  if (!temporalData) {
-    return (
-      <div className="temporal-empty">
-        <div className="empty-icon">📅</div>
-        <div className="empty-text">No temporal pattern data available</div>
-      </div>
-    );
-  }
+  // If no temporalData we'll render an empty state later; keep hooks consistent across renders.
 
   // Unified tooltip component used across all charts
   const CustomTooltip = ({ active, payload, label }) => {
@@ -332,6 +325,15 @@ const TemporalPatterns = ({ data }) => {
         pct: Number(r.pct.toFixed(2))
       }));
   }, [segmentComparison, selectedMetrics]);
+
+  if (!temporalData) {
+    return (
+      <div className="temporal-empty">
+        <div className="empty-icon">📅</div>
+        <div className="empty-text">No temporal pattern data available</div>
+      </div>
+    );
+  }
 
   return (
     <div className="temporal-patterns">

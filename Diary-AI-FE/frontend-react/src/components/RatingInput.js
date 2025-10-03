@@ -28,7 +28,7 @@ function colorFor(v) {
   return '#22c55e';
 }
 
-export default function RatingInput({ label, value, onChange, hideZero=false, disabled=false, compact=false, allowClear=true, descriptors }) {
+export default function RatingInput({ label, value, onChange, hideZero: _hideZero=false, disabled=false, compact=false, allowClear=true, descriptors }) {
   // Force 1..5 range irrespective of hideZero (DB constraint)
   const min = 1;
   const max = 5;

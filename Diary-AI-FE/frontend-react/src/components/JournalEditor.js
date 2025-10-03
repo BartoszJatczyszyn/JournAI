@@ -75,7 +75,7 @@ const NumberField = ({ label, value, onChange, min=0, max=10, step=1 }) => (
   </label>
 );
 
-export default function JournalEditor({ day, initialData, onSaved }) {
+export default function JournalEditor({ day, initialData, onSaved: _onSaved }) {
   const { form, setForm, notes, setNotes, saving, status, error, autoStatus, unsyncedCount, isOffline, hasChanges, handleSave } = useJournalSync(day, initialData);
   const { context } = useJournalContext(day, 7);
 

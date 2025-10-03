@@ -9,7 +9,7 @@ function formatDelta(v) {
   return sign + v.toFixed(2) + ' kg';
 }
 
-export default function BodyMetricsCard({ day }) {
+export default function BodyMetricsCard(/* day */) {
   const { data, stats, loading, error } = useCurrentWeight();
   const [history, setHistory] = React.useState([]);
   const [correlations, setCorrelations] = React.useState([]);
@@ -21,17 +21,19 @@ export default function BodyMetricsCard({ day }) {
     const load = async () => {
       setLoadingExtra(true);
       try {
-        const [hist, corr] = await Promise.all([
-          healthAPI.getWeightHistory ? healthAPI.getWeightHistory(60).catch(()=>[]) : [],
-          healthAPI.api ? Promise.resolve([]) : []
-        ]);
+        // intentionally unused: hist, corr — keep for future API wiring
+        // const [hist, corr] = await Promise.all([
+        //   healthAPI.getWeightHistory ? healthAPI.getWeightHistory(60).catch(()=>[]) : [],
+        //   healthAPI.api ? Promise.resolve([]) : []
+        // ]);
         // correlations endpoint: we reuse generic api instance via healthAPI.getAnalyticsInfo? We'll call directly below
-      } catch {}
+      } catch (e) { console.warn('failed loading weight extras', e); }
       finally {
-        setLoadingExtra(false);
+        if (mounted) setLoadingExtra(false);
       }
     };
     load();
+    return () => { mounted = false; };
   }, []);
 
   // Fetch correlations separately (explicit to keep backward compatibility)
@@ -41,7 +43,9 @@ export default function BodyMetricsCard({ day }) {
       try {
         const corr = await (healthAPI && healthAPI.getWeightCorrelations ? healthAPI.getWeightCorrelations(90).catch(()=>null) : null);
         if (mounted && corr && Array.isArray(corr.pairs)) setCorrelations(corr.pairs);
-      } catch {}
+      } catch (e) {
+        console.warn('failed fetching fallback weight data', e);
+      }
     })();
     return () => { mounted = false; };
   }, []);
@@ -55,7 +59,7 @@ export default function BodyMetricsCard({ day }) {
         if (mounted && Array.isArray(h)) setHistory(h.slice().reverse().map(r => ({ date: r.day, value: r.weight_kg })));
         const c = await fetch('/api/weight/correlations?days=90').then(r=>r.ok?r.json():null).catch(()=>null);
         if (mounted && c && Array.isArray(c.pairs)) setCorrelations(c.pairs);
-      } catch {}
+      } catch (e) { console.warn('failed fallback calls', e); }
     }
     fallbackCalls();
     return () => { mounted = false; };

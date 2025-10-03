@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# stop_all.sh — zatrzymuje stack uruchomiony przez Docker Compose i czyści lokalne procesy frontendu/backendu
+# stop_all.sh — stop the stack started by Docker Compose and clean local frontend/backend processes
 
 echo "🛑 Zatrzymywanie Garmin Health Dashboard..."
 
@@ -11,13 +11,13 @@ NC='\033[0m'
 
 # Preferuj docker compose down
 if command -v docker &>/dev/null; then
-	echo -e "${YELLOW}🔧 Wywołuję: docker compose down${NC}"
-	docker compose down || echo -e "${YELLOW}⚠️ docker compose down zakończyło się błędem lub nie było uruchomione${NC}"
+	echo -e "${YELLOW}🔧 Running: docker compose down${NC}"
+	docker compose down || echo -e "${YELLOW}⚠️ docker compose down failed or was not running${NC}"
 elif command -v docker-compose &>/dev/null; then
-	echo -e "${YELLOW}� Wywołuję: docker-compose down${NC}"
-	docker-compose down || echo -e "${YELLOW}⚠️ docker-compose down zakończyło się błędem lub nie było uruchomione${NC}"
+	echo -e "${YELLOW}🔧 Running: docker-compose down${NC}"
+	docker-compose down || echo -e "${YELLOW}⚠️ docker-compose down failed or was not running${NC}"
 else
-	echo -e "${YELLOW}⚠️ Nie znaleziono docker/ docker-compose — pomijam tę część${NC}"
+	echo -e "${YELLOW}⚠️ docker / docker-compose not found — skipping this part${NC}"
 fi
 
 # Dodatkowe czyszczenie lokalnych procesów (jeśli ktoś uruchomił frontend lokalnie)

@@ -560,7 +560,7 @@ const Activity = () => {
                       if (v != null) {
                         if (typeof v === 'number') parsed = v;
                         else if (typeof v === 'string') {
-                          const cleaned = v.replace(/[\s,]+/g,'').replace(/[^0-9.\-]/g,'');
+                          const cleaned = v.replace(/[\s,]+/g,'').replace(/[^0-9.-]/g,'');
                           const n = Number(cleaned);
                           if (!Number.isNaN(n)) parsed = n;
                         }

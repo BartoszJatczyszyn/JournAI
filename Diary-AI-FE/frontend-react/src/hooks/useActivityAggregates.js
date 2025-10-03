@@ -90,7 +90,7 @@ const toNumberSafe = (v) => {
   if (typeof v === 'number') return Number.isFinite(v) ? v : null;
   if (typeof v === 'string') {
     // remove common thousands separators and non-numeric chars except dot and minus
-    const cleaned = v.replace(/[\s,]+/g, '').replace(/[^0-9.\-]/g, '');
+  const cleaned = v.replace(/[\s,]+/g, '').replace(/[^0-9.-]/g, '');
     const n = Number(cleaned);
     return Number.isNaN(n) ? null : n;
   }

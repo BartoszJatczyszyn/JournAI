@@ -52,7 +52,7 @@ const Running = () => {
   }, [periodDays]);
 
   React.useEffect(() => {
-    try { localStorage.setItem('runningShowAggregated', showAggregated ? '1' : '0'); } catch (e) { }
+    try { localStorage.setItem('runningShowAggregated', showAggregated ? '1' : '0'); } catch (e) { console.warn('Failed to persist runningShowAggregated', e); }
   }, [showAggregated]);
 
   // Adjust fetch limit heuristically when period changes and trigger reload via limit change

@@ -6,6 +6,7 @@ import DashboardHeader from '../components/dashboard/DashboardHeader';
 import MetricsGrid from '../components/dashboard/MetricsGrid';
 import HealthTrendsCard from '../components/dashboard/HealthTrendsCard';
 import CorrelationSection from '../components/dashboard/CorrelationSection';
+import CorrelationMatrix from '../components/CorrelationMatrix';
 import DataOverviewCard from '../components/dashboard/DataOverviewCard';
 
 const Dashboard = () => {

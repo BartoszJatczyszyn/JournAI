@@ -1,11 +1,11 @@
 #!/bin/bash
-# full_reset.sh — pełne wyczyszczenie bazy (usunięcie wolumenu), przebudowa obrazów,
-# start Postgresa + backendu i wykonanie migracji, a następnie (opcjonalnie) start frontendu lokalnie.
-# Użycie:
-#   ./full_reset.sh            # reset + migracja + backend
-#   ./full_reset.sh --with-frontend  # dodatkowo uruchomi frontend React lokalnie
-#   ./full_reset.sh --no-cache       # wymusi build bez cache
-#   Można łączyć: ./full_reset.sh --no-cache --with-frontend
+# full_reset.sh — full reset of the database (remove volume), rebuild images,
+# start Postgres + backend and run migrations, then (optionally) start frontend locally.
+# Usage:
+#   ./full_reset.sh            # reset + migration + backend
+#   ./full_reset.sh --with-frontend  # also starts React frontend locally
+#   ./full_reset.sh --no-cache       # build without cache
+#   You can combine flags: ./full_reset.sh --no-cache --with-frontend
 
 set -euo pipefail
 
@@ -14,7 +14,7 @@ cd "$SCRIPT_DIR"
 
 WITH_FRONTEND=0
 NO_CACHE=0
-RUN_GARMINDb=1  # można wyłączyć przez --skip-garmindb
+RUN_GARMINDb=1  # can be disabled with --skip-garmindb
 
 for arg in "$@"; do
   case "$arg" in
@@ -25,7 +25,7 @@ for arg in "$@"; do
       grep '^#' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
-    *) echo "Nieznana opcja: $arg" ; exit 1 ;;
+    *) echo "Unknown option: $arg" ; exit 1 ;;
   esac
 done
 
@@ -35,20 +35,19 @@ RED='\033[0;31m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-# (0) Opcjonalnie: pobierz/odśwież dane Garmin przez garmindb_cli.py
+# (0) Optionally: fetch/refresh Garmin data via garmindb_cli.py
 # ---------------------------------------------------------------
-# Użytkownik poprosił, aby przed resetem uruchamiać:
+# The script may run:
 #   garmindb_cli.py --all --download --import --analyze --latest
-# Założenia:
-#   - Skrypt może znajdować się w: 
-#       ./garmindb_cli.py lub Diary-AI-BE/scripts/cli/garmindb_cli.py
-#   - Jeśli nie istnieje, wypisujemy ostrzeżenie i kontynuujemy.
-#   - Można pominąć przez flagę: --skip-garmindb
+# Assumptions:
+#   - Script might be located at ./garmindb_cli.py or Diary-AI-BE/scripts/cli/garmindb_cli.py
+#   - If not present, we warn and continue.
+#   - Can be skipped via --skip-garmindb
 
 if [ $RUN_GARMINDb -eq 1 ]; then
-  echo -e "${BLUE}📥 Wykonuję wstępny etap: garmindb (download/import/analyze/latest) – pomijam szukanie lokalnego pliku, używam globalnych poleceń...${NC}"
+  echo -e "${BLUE}📥 Running initial garmindb step (download/import/analyze/latest) – skipping local-file search and using global commands...${NC}"
 
-  # Funkcja pomocnicza: znajdź python z importem garmindb
+  # Helper: find a python executable that can import garmindb
   find_python_with_garmindb() {
     local candidates
     candidates=("${SCRIPT_DIR}/.venv/bin/python" "python3" "python")
@@ -75,115 +74,115 @@ if [ $RUN_GARMINDb -eq 1 ]; then
       echo -e "${BLUE}▶️  $PY_CMD -m garmindb --all --download --import --analyze --latest${NC}"
       set +e; "$PY_CMD" -m garmindb --all --download --import --analyze --latest; GCLI_STATUS=$?; set -e
     else
-      echo -e "${YELLOW}⚠️  Nie znaleziono globalnego polecenia garmindb (pomijam etap). Zainstaluj: pip install garmindb lub użyj --skip-garmindb.${NC}"
+      echo -e "${YELLOW}⚠️  garmindb command not found (skipping step). Install: pip install garmindb or use --skip-garmindb.${NC}"
       GCLI_STATUS=0
     fi
   fi
 
   if [ $GCLI_STATUS -ne 0 ]; then
-    echo -e "${RED}⚠️  garmindb zakończył się kodem $GCLI_STATUS (kontynuuję reset bazy).${NC}"
+    echo -e "${RED}⚠️  garmindb exited with code $GCLI_STATUS (continuing reset).${NC}"
   else
-    echo -e "${GREEN}✅ garmindb etap zakończony (lub pominięty bez błędu)${NC}"
+    echo -e "${GREEN}✅ garmindb step completed (or skipped without error)${NC}"
   fi
 else
-  echo -e "${YELLOW}⏭  Pomijam etap garmindb_cli.py (użyto --skip-garmindb)${NC}"
+  echo -e "${YELLOW}⏭  Skipping garmindb step (used --skip-garmindb)${NC}"
 fi
 
-# Wykryj docker compose
+# Detect docker compose
 if command -v docker &>/dev/null; then
   DC='docker compose'
 elif command -v docker-compose &>/dev/null; then
   DC='docker-compose'
 else
-  echo -e "${RED}❌ Brak polecenia docker / docker-compose${NC}"; exit 1
+  echo -e "${RED}❌ docker / docker-compose not found${NC}"; exit 1
 fi
 
-# 1. Zatrzymaj i usuń stack + wolumeny
-echo -e "${BLUE}🧹 Zatrzymuję kontenery i usuwam wolumeny (baza zostanie wyczyszczona)...${NC}"
+# 1. Stop and remove the stack + volumes
+echo -e "${BLUE}🧹 Stopping containers and removing volumes (database will be cleared)...${NC}"
 $DC down -v || true
 
-# 2. (Opcjonalnie) usuń dangling images
+# 2. (Optional) remove dangling images
 if docker images -f dangling=true -q | grep -q .; then
-  echo -e "${YELLOW}🗑  Usuwam dangling images...${NC}"
+  echo -e "${YELLOW}🗑  Removing dangling images...${NC}"
   docker rmi $(docker images -f dangling=true -q) || true
 fi
 
-# 3. Build świeżych obrazów
-echo -e "${BLUE}🏗  Buduję obrazy backendu...${NC}"
+# 3. Build fresh images
+echo -e "${BLUE}🏗  Building backend images...${NC}"
 if [ $NO_CACHE -eq 1 ]; then
   $DC build --no-cache --pull
 else
   $DC build --pull
 fi
 
-echo -e "${BLUE}🐘 Start samej bazy (db) aby móc wykonać migrację)...${NC}"
+echo -e "${BLUE}🐘 Starting the db service (so we can run migrations)...${NC}"
 $DC up -d db
 
-# 4. Czekaj aż Postgres zdrowy (healthcheck w compose)
-echo -e "${YELLOW}⏳ Czekam na zdrowy Postgres...${NC}"
+# 4. Wait for Postgres healthy (healthcheck in compose)
+echo -e "${YELLOW}⏳ Waiting for Postgres to be healthy...${NC}"
 for i in {1..30}; do
   status=$(docker inspect -f '{{ .State.Health.Status }}' journal_ai_db 2>/dev/null || echo 'unknown')
   if [ "$status" = "healthy" ]; then
-    echo -e "${GREEN}✅ Postgres gotowy${NC}"; break
+    echo -e "${GREEN}✅ Postgres is ready${NC}"; break
   fi
   sleep 2
   if [ $i -eq 30 ]; then
-    echo -e "${RED}❌ Postgres nie osiągnął stanu healthy${NC}"; exit 1
+    echo -e "${RED}❌ Postgres did not reach healthy state${NC}"; exit 1
   fi
 done
 
-# 5. Start backendu
-echo -e "${BLUE}🚀 Start backendu...${NC}"
+# 5. Start backend
+echo -e "${BLUE}🚀 Starting backend...${NC}"
 $DC up -d backend
 
-# 6. Czekaj aż backend odpowie
+# 6. Wait until backend responds
 BACKEND_URL="http://localhost:5002/api/stats"
-echo -e "${YELLOW}⏳ Czekam na backend (${BACKEND_URL})...${NC}"
+echo -e "${YELLOW}⏳ Waiting for backend (${BACKEND_URL})...${NC}"
 for i in {1..60}; do
   if curl -s "$BACKEND_URL" >/dev/null 2>&1; then
-    echo -e "${GREEN}✅ Backend działa${NC}"; break
+    echo -e "${GREEN}✅ Backend is up${NC}"; break
   fi
   sleep 1
   if [ $i -eq 60 ]; then
-    echo -e "${RED}❌ Backend nie odpowiedział w ciągu 60s${NC}"; exit 1
+    echo -e "${RED}❌ Backend did not respond within 60s${NC}"; exit 1
   fi
 done
 
-# 7. Uruchom migrację wewnątrz kontenera backendu
-echo -e "${BLUE}📦 Uruchamiam migrację danych (run_migration.py)...${NC}"
+# 7. Run migration inside backend container
+echo -e "${BLUE}📦 Running migration (run_migration.py)...${NC}"
 set +e
 docker exec journal_ai_backend python run_migration.py --subset all
 MIG_STATUS=$?
 set -e
 if [ $MIG_STATUS -ne 0 ]; then
-  echo -e "${RED}❌ Migracja zakończona błędem (kod $MIG_STATUS) — sprawdź logi: docker compose logs backend${NC}"
+  echo -e "${RED}❌ Migration failed (code $MIG_STATUS) — check logs: docker compose logs backend${NC}"
   exit $MIG_STATUS
 fi
 
-echo -e "${GREEN}✅ Migracja zakończona sukcesem${NC}"
+echo -e "${GREEN}✅ Migration finished successfully${NC}"
 
-# 8. (Opcjonalnie) start frontendu lokalnie
+# 8. (Optional) start frontend locally
 if [ $WITH_FRONTEND -eq 1 ]; then
-  echo -e "${BLUE}🌐 Uruchamiam frontend React lokalnie...${NC}"
+  echo -e "${BLUE}🌐 Starting React frontend locally...${NC}"
   FE_DIR="$SCRIPT_DIR/Diary-AI-FE/frontend-react"
   if [ ! -d "$FE_DIR" ]; then
-    echo -e "${RED}❌ Katalog frontendu nie istnieje: $FE_DIR${NC}"; exit 1
+    echo -e "${RED}❌ Frontend directory does not exist: $FE_DIR${NC}"; exit 1
   fi
   pushd "$FE_DIR" >/dev/null
   if [ ! -d node_modules ]; then
-    echo -e "${YELLOW}📦 Instaluję zależności (npm install)...${NC}"
+    echo -e "${YELLOW}📦 Installing dependencies (npm install)...${NC}"
     npm install
   fi
-  # znajdź wolny port
+  # find a free port
   for p in {3000..3010}; do
     if ! lsof -Pi :$p -sTCP:LISTEN -t >/dev/null; then
       FRONTEND_PORT=$p; break
     fi
   done
-  echo -e "${GREEN}🌍 Frontend wystartuje na http://localhost:${FRONTEND_PORT}${NC}"
+  echo -e "${GREEN}🌍 Frontend will start at http://localhost:${FRONTEND_PORT}${NC}"
   PORT=$FRONTEND_PORT npm start
   popd >/dev/null
 else
-  echo -e "${GREEN}🎉 Gotowe: Baza czysta, migracja wykonana, backend działa na http://localhost:5002${NC}"
-  echo -e "${YELLOW}Aby odpalić frontend: ./full_reset.sh --with-frontend (lub ./start_all.sh --with-frontend)${NC}"
+  echo -e "${GREEN}🎉 Done: Database reset, migration completed, backend is running at http://localhost:5002${NC}"
+  echo -e "${YELLOW}To start frontend: ./full_reset.sh --with-frontend (or ./start_all.sh --with-frontend)${NC}"
 fi

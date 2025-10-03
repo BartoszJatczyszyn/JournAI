@@ -159,9 +159,4 @@ const CorrelationHeatmap = ({ matrix, data, fields, method = 'pearson', onSelect
   );
 };
 
-function shorten(name) {
-  if (name.length <= 6) return name;
-  return name.split('_').map(p => p[0]).join('').slice(0,6);
-}
-
 export default CorrelationHeatmap;

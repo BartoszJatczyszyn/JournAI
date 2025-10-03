@@ -2,6 +2,54 @@ import React, { useMemo, useState, useCallback } from 'react';
 import { ResponsiveContainer, RadialBarChart, RadialBar, AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip, LineChart, Line } from 'recharts';
 import { getSleepScoreColor } from '../utils/chartUtils';
 
+// Move small pure helpers and constants to module scope so they are stable
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+function parseDateObj(raw){
+  if(!raw) return null;
+  let d = null;
+  if (typeof raw === 'string') {
+    if (/^[A-Za-z]{3},/.test(raw)) { // RFC 1123
+      const dt = new Date(raw);
+      if (!isNaN(dt)) d = dt;
+    } else if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) { // YYYY-MM-DD
+      d = new Date(raw + 'T00:00:00Z');
+    } else if (/^\d{4}-\d{2}-\d{2}\s/.test(raw)) { // YYYY-MM-DD HH:MM:SS
+      d = new Date(raw.replace(' ', 'T') + 'Z');
+    } else if (/^\d{4}-\d{2}-\d{2}T/.test(raw)) { // ISO full
+      const dt = new Date(raw);
+      if (!isNaN(dt)) d = dt;
+    }
+  } else if (raw instanceof Date) {
+    d = raw;
+  }
+  return d && !isNaN(d) ? d : null;
+}
+
+function formatFullWithWeekday(raw){
+  const d = parseDateObj(raw);
+  if (!d) return raw;
+  const wd = WEEKDAYS[d.getUTCDay()];
+  const dayNum = String(d.getUTCDate()).padStart(2,'0');
+  const mon = MONTHS[d.getUTCMonth()];
+  const yr = d.getUTCFullYear();
+  return `${wd} ${dayNum} ${mon} ${yr}`;
+}
+
+const DEVIATION_ICONS = {
+  hrv_drop: '💓',
+  hrv_spike: '💗',
+  sleep_debt: '😴',
+  stress_spike: '⚡',
+  rhr_elevated: '🔥',
+  energy_drop: '🪫',
+  respiratory_change: '🌬️',
+  default: '🔍'
+};
+
+const scoreLabel = (s) => s>=80?'Excellent':s>=60?'Good':s>=40?'Fair':s>=0?'Poor':'—';
+
 /*
   RecoveryAnalysis - minimal clean version
   Shows:
@@ -34,39 +82,41 @@ const RecoveryAnalysis = ({ data, periodDays = null }) => {
   }, [analysis]);
 
   // Prefer full series if provided by backend for better historical coverage
-  const rawFullTrend = analysis?.trend_series_full;
-  const rawTailTrend = analysis?.trend_series;
-  let trendSeries = [];
-  if (Array.isArray(rawFullTrend) && rawFullTrend.length) {
-    trendSeries = rawFullTrend;
-  } else if (Array.isArray(rawTailTrend) && rawTailTrend.length) {
-    trendSeries = rawTailTrend;
-  } else if (Array.isArray(analysis?.component_trend_series_full) && analysis.component_trend_series_full.length) {
-    trendSeries = analysis.component_trend_series_full.map(r => ({
-      day: r.day,
-      score: r.composite ?? (['rhr','hrv','sleep','stress','energy','vo2max','respiratory']
-        .map(k=>r[k])
-        .filter(v=>v!=null)
-        .reduce((a,b)=>a+b,0) / (['rhr','hrv','sleep','stress','energy','vo2max','respiratory']
-        .map(k=>r[k])
-        .filter(v=>v!=null).length || 1))
-    }));
-  } else if (Array.isArray(analysis?.component_trend_series) && analysis.component_trend_series.length) {
-    trendSeries = analysis.component_trend_series.map(r => ({
-      day: r.day,
-      score: r.composite ?? (['rhr','hrv','sleep','stress','energy','vo2max','respiratory']
-        .map(k=>r[k])
-        .filter(v=>v!=null)
-        .reduce((a,b)=>a+b,0) / (['rhr','hrv','sleep','stress','energy','vo2max','respiratory']
-        .map(k=>r[k])
-        .filter(v=>v!=null).length || 1))
-    }));
-  } else if (Array.isArray(analysis?.pattern_details?.daily_classification) && analysis.pattern_details.daily_classification.length) {
-    trendSeries = analysis.pattern_details.daily_classification.map(d => ({ day: d.day, score: d.recovery_score }));
-  }
+  const trendSeries = useMemo(() => {
+    const rawFullTrend = analysis?.trend_series_full;
+    const rawTailTrend = analysis?.trend_series;
+    if (Array.isArray(rawFullTrend) && rawFullTrend.length) return rawFullTrend;
+    if (Array.isArray(rawTailTrend) && rawTailTrend.length) return rawTailTrend;
+    if (Array.isArray(analysis?.component_trend_series_full) && analysis.component_trend_series_full.length) {
+      return analysis.component_trend_series_full.map(r => ({
+        day: r.day,
+        score: r.composite ?? (['rhr','hrv','sleep','stress','energy','vo2max','respiratory']
+          .map(k=>r[k])
+          .filter(v=>v!=null)
+          .reduce((a,b)=>a+b,0) / (['rhr','hrv','sleep','stress','energy','vo2max','respiratory']
+          .map(k=>r[k])
+          .filter(v=>v!=null).length || 1))
+      }));
+    }
+    if (Array.isArray(analysis?.component_trend_series) && analysis.component_trend_series.length) {
+      return analysis.component_trend_series.map(r => ({
+        day: r.day,
+        score: r.composite ?? (['rhr','hrv','sleep','stress','energy','vo2max','respiratory']
+          .map(k=>r[k])
+          .filter(v=>v!=null)
+          .reduce((a,b)=>a+b,0) / (['rhr','hrv','sleep','stress','energy','vo2max','respiratory']
+          .map(k=>r[k])
+          .filter(v=>v!=null).length || 1))
+      }));
+    }
+    if (Array.isArray(analysis?.pattern_details?.daily_classification) && analysis.pattern_details.daily_classification.length) {
+      return analysis.pattern_details.daily_classification.map(d => ({ day: d.day, score: d.recovery_score }));
+    }
+    return [];
+  }, [analysis]);
 
-  const fullLen = Array.isArray(rawFullTrend) ? rawFullTrend.length : (Array.isArray(analysis?.trend_series_full) ? analysis.trend_series_full.length : 0);
-  const tailLen = Array.isArray(rawTailTrend) ? rawTailTrend.length : (Array.isArray(analysis?.trend_series) ? analysis.trend_series.length : 0);
+  const fullLen = Array.isArray(analysis?.trend_series_full) ? analysis.trend_series_full.length : 0;
+  const tailLen = Array.isArray(analysis?.trend_series) ? analysis.trend_series.length : 0;
   const tailDays = analysis?.trend_tail_days;
   // Ensure boolean (avoid rendering raw 0 when tailLen is 0)
   const showingTailSubset = !!(fullLen && tailLen && tailLen < fullLen);
@@ -76,7 +126,7 @@ const RecoveryAnalysis = ({ data, periodDays = null }) => {
     if (!trendSeries || !trendSeries.length) return [];
     const arr = [...trendSeries].sort((a,b)=> (a.day > b.day ? 1 : -1));
     let rolling = [];
-    return arr.map((row,i)=>{
+    return arr.map((row)=>{
       rolling.push(row.score);
       if (rolling.length > 7) rolling.shift();
       const baseline = rolling.reduce((a,b)=>a+b,0)/rolling.length;
@@ -84,9 +134,10 @@ const RecoveryAnalysis = ({ data, periodDays = null }) => {
     });
   }, [trendSeries]);
 
-  const componentTrend = (analysis?.component_trend_series_full && analysis.component_trend_series_full.length)
-    ? analysis.component_trend_series_full
-    : (analysis?.component_trend_series || []);
+  const componentTrend = useMemo(() => {
+    if (analysis?.component_trend_series_full && analysis.component_trend_series_full.length) return analysis.component_trend_series_full;
+    return (analysis?.component_trend_series || []);
+  }, [analysis]);
   // Normalize possible backend field naming: if hr_variability present but hrv absent, create hrv alias (ms-based value already scaled upstream to component 0-100 if appropriate)
   const componentTrendNormalized = useMemo(()=> {
     if(!Array.isArray(componentTrend)) return [];
@@ -98,7 +149,7 @@ const RecoveryAnalysis = ({ data, periodDays = null }) => {
       return r;
     });
   }, [componentTrend]);
-  const deviationEvents = analysis?.deviation_events || [];
+  const deviationEvents = useMemo(() => analysis?.deviation_events || [], [analysis]);
 
   // Derive cutoff date for componentTrend based on periodDays similar to enrichedTrend
   const componentTrendFiltered = useMemo(()=> {
@@ -112,92 +163,23 @@ const RecoveryAnalysis = ({ data, periodDays = null }) => {
     return sorted.filter(r => {
       const d = parseDateObj(r.day); if(!d) return false; return d >= cutoff;
     });
-  }, [componentTrendNormalized, periodDays]);
+  }, [componentTrend, componentTrendNormalized, periodDays]);
 
-  // Simple icon mapping for deviation event types
-  const deviationIcons = {
-    hrv_drop: '💓',
-    hrv_spike: '💗',
-    sleep_debt: '😴',
-    stress_spike: '⚡',
-    rhr_elevated: '🔥',
-    energy_drop: '🪫',
-    respiratory_change: '🌬️',
-    default: '🔍'
-  };
+
+  // Simple icon mapping for deviation event types (module-level)
+  const deviationIcons = DEVIATION_ICONS;
 
   const sparkKeys = ['composite','rhr','hrv','sleep','stress','energy','vo2max','respiratory']
     .filter(k => componentTrendNormalized.some(r => r[k] != null));
 
-  const label = (s) => s>=80?'Excellent':s>=60?'Good':s>=40?'Fair':s>=0?'Poor':'—';
+  const label = scoreLabel;
 
-  if (!state) {
-    return <div style={styles.empty}>No recovery analysis data.</div>;
-  }
+  // If no analysis state, we'll render an empty state later after hooks are registered.
+  // Keep execution flowing so React hooks are always called in the same order.
 
-  const formatDay = useCallback((raw) => {
-    if (raw == null) return '';
-    // Try parse date-like string YYYY-MM-DD else return raw
-    if (typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-      return parseInt(raw.split('-')[2],10);
-    }
-    // If already number or short label
-    const asNum = Number(raw);
-    return Number.isFinite(asNum) ? asNum : raw;
-  }, []);
+  // formatDay and normalizeDay removed (unused)
 
-  const normalizeDay = useCallback((val) => {
-    if (val == null) return { dayLabel: '', dayNum: '' };
-    if (typeof val === 'string') {
-      // RFC 1123 / HTTP-date like: Wed, 04 Jun 2025 00:00:00 GMT
-      const rfcMatch = /^([A-Za-z]{3}),\s(\d{2})\s([A-Za-z]{3})\s(\d{4})\s(\d{2}:\d{2}:\d{2})\sGMT$/.exec(val);
-      if (rfcMatch) {
-        const dayNum = parseInt(rfcMatch[2],10);
-        return { dayLabel: val, dayNum };
-      }
-      // Strip time if ISO with time
-      const pure = val.includes('T') ? val.split('T')[0] : val.split(' ')[0];
-      if (/^\d{4}-\d{2}-\d{2}$/.test(pure)) {
-        return { dayLabel: val, dayNum: parseInt(pure.split('-')[2],10) };
-      }
-    }
-    const asNum = Number(val);
-    if (Number.isFinite(asNum)) return { dayLabel: String(val), dayNum: asNum };
-    return { dayLabel: String(val), dayNum: String(val) };
-  }, []);
-
-  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  function parseDateObj(raw){
-    if(!raw) return null;
-    let d = null;
-    if (typeof raw === 'string') {
-      if (/^[A-Za-z]{3},/.test(raw)) { // RFC 1123
-        const dt = new Date(raw);
-        if (!isNaN(dt)) d = dt;
-      } else if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) { // YYYY-MM-DD
-        d = new Date(raw + 'T00:00:00Z');
-      } else if (/^\d{4}-\d{2}-\d{2}\s/.test(raw)) { // YYYY-MM-DD HH:MM:SS
-        d = new Date(raw.replace(' ', 'T') + 'Z');
-      } else if (/^\d{4}-\d{2}-\d{2}T/.test(raw)) { // ISO full
-        const dt = new Date(raw);
-        if (!isNaN(dt)) d = dt;
-      }
-    } else if (raw instanceof Date) {
-      d = raw;
-    }
-    return d && !isNaN(d) ? d : null;
-  }
-
-  const formatFullWithWeekday = useCallback((raw) => {
-    const d = parseDateObj(raw);
-    if (!d) return raw;
-    const wd = WEEKDAYS[d.getUTCDay()];
-    const dayNum = String(d.getUTCDate()).padStart(2,'0');
-    const mon = MONTHS[d.getUTCMonth()];
-    const yr = d.getUTCFullYear();
-    return `${wd} ${dayNum} ${mon} ${yr}`;
-  }, []);
+  // module-level date helpers (parseDateObj, formatFullWithWeekday) are used instead
 
   // Chronological sort (full) for enriched trend
   const sortedEnrichedAll = useMemo(()=> {
@@ -333,17 +315,7 @@ const RecoveryAnalysis = ({ data, periodDays = null }) => {
       return (a.day > b.day ? 1 : (a.day < b.day ? -1 : 0));
     });
   }, [componentTrend]);
-  const sortedComponent = useMemo(()=> {
-    if (!cutoffDate) return sortedComponentAll;
-    return sortedComponentAll.filter(r => {
-      const d = parseDateObj(r.day);
-      return !d || d >= cutoffDate;
-    });
-  }, [sortedComponentAll, cutoffDate]);
-  const preparedComponentTrend = useMemo(()=> sortedComponent.map(r => {
-    const d = parseDateObj(r.day);
-    return { ...r, dayLabel: d ? `${WEEKDAYS[d.getUTCDay()]}` : r.day, fullDate: d ? formatFullWithWeekday(r.day) : r.day };
-  }), [sortedComponent, formatFullWithWeekday]);
+  // Use sortedComponentAll filtered inline where needed to avoid an extra variable and keep deps small
 
   const TrendTooltip = ({active,payload,label}) => {
     if(!active||!payload?.length) return null;
@@ -355,7 +327,7 @@ const RecoveryAnalysis = ({ data, periodDays = null }) => {
         <div style={styles.ttDate}>{displayDate}</div>
         {payload.filter(p=>p.dataKey==='score' || p.dataKey==='baseline').map(p => (
           <div key={p.dataKey} style={styles.ttRow}>
-            <span>{p.dataKey==='score'?'Wynik':'Baseline'}</span>
+            <span>{p.dataKey==='score'?'Score':'Baseline'}</span>
             <span>{p.value!=null?Math.round(p.value):'—'}</span>
           </div>
         ))}
@@ -370,17 +342,21 @@ const RecoveryAnalysis = ({ data, periodDays = null }) => {
     return (
       <div style={styles.ttBox}>
         <div style={styles.ttDate}>{displayDate}</div>
-        <div style={styles.ttRow}><span>Wynik</span><span>{Math.round(payload[0].value)}</span></div>
+        <div style={styles.ttRow}><span>Score</span><span>{Math.round(payload[0].value)}</span></div>
       </div>
     );
   };
+
+  if (!state) {
+    return <div style={styles.empty}>No recovery analysis data.</div>;
+  }
 
   return (
     <div style={styles.wrapper}>
       <div style={styles.grid}>
         {showingTailSubset && (
           <div style={styles.infoBanner}>
-            <span style={{display:'block'}}>Pokazuję tail {tailLen}/{fullLen} (Tail={tailDays || tailLen}d).</span>
+            <span style={{display:'block'}}>Showing tail {tailLen}/{fullLen} (Tail={tailDays || tailLen}d).</span>
           </div>
         )}
         {/* Score + small stats */}
@@ -437,9 +413,10 @@ const RecoveryAnalysis = ({ data, periodDays = null }) => {
               </div>
               <div style={styles.miniStatsGrid}>
                 {['rhr','hrv','sleep','stress','energy','vo2max','respiratory']
-                  .filter(key=> state.pattern?.summary || componentTrendFiltered.length)
-                  .map(key => {
-                    const base = periodDays ? componentTrendFiltered : componentTrend;
+                  .filter(() => state.pattern?.summary || componentTrendFiltered.length)
+                  .map(_key => {
+                    const key = _key;
+                    const base = (periodDays && periodDays>0) ? (sortedComponentAll.filter(r => { const d = parseDateObj(r.day); return !d || d >= ( (()=>{ const last = sortedComponentAll[sortedComponentAll.length-1]; const lastDate = parseDateObj(last?.day); if(!lastDate) return new Date(0); return new Date(lastDate.getTime() - (periodDays-1)*86400000); })() ); })) : componentTrend;
                     if (!base.length) return null;
                     const lastRow = base[base.length-1];
                     const latest = lastRow ? lastRow[key] : null;
@@ -513,7 +490,8 @@ const RecoveryAnalysis = ({ data, periodDays = null }) => {
                     <span style={styles.sparkHeader}>Component Trends {periodDays?`(${periodDays}d)`:'(full)'}</span>
                   </div>
                   <div style={styles.sparksLarge}>
-                    {sparkKeys.map(key => {
+                    {sparkKeys.map(_key => {
+                      const key = _key;
                       const base = componentTrendFiltered;
                       const series = base
                         .map(r => ({ x:r.day, y:r[key] }))
@@ -575,7 +553,7 @@ const RecoveryAnalysis = ({ data, periodDays = null }) => {
                   )}
                 </AreaChart>
               </ResponsiveContainer>
-              <div style={styles.expandHint}>Kliknij aby powiększyć</div>
+              <div style={styles.expandHint}>Click to expand</div>
             </div>
           ) : <div style={styles.placeholder}>No trend data (received: trend_series={analysis?.trend_series?.length||0}, component_trend_series={analysis?.component_trend_series?.length||0}).</div>}
         </div>
@@ -752,7 +730,7 @@ const RecoveryAnalysis = ({ data, periodDays = null }) => {
                 <ResponsiveContainer width="100%" height={420}>
                   <LineChart data={componentTrendFiltered.map((r,i)=> { const d = parseDateObj(r.day); const dayNum = d? d.getUTCDate(): null; const mon = d? MONTHS[d.getUTCMonth()]:null; return { dayIdx:i, tickLabel: d? `${dayNum}${dayNum===1? ' '+mon:''}`: r.day, value:r[expanded.key], fullDate:r.day, raw:r.day }; })} margin={{left:10,right:20,top:20,bottom:10}}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#3a4a5d" />
-                    <XAxis dataKey="dayIdx" tickFormatter={(v,i,vals)=> { const data = componentTrendFiltered; const total = data.length; const interval = total>120?14: total>80?10: total>60?7: total>40?5: total>25?3:1; if (i===0|| i===total-1 || i%interval===0){ const row = componentTrendFiltered[i]; const d = parseDateObj(row.day); if (!d) return row.day; const dn = d.getUTCDate(); const mon = MONTHS[d.getUTCMonth()]; return `${dn}${dn===1?' '+mon:''}`;} return ''; }} interval={0} tick={{fontSize:12, fill:'#cbd5e1'}} />
+                    <XAxis dataKey="dayIdx" tickFormatter={(v,i,_vals)=> { const data = componentTrendFiltered; const total = data.length; const interval = total>120?14: total>80?10: total>60?7: total>40?5: total>25?3:1; if (i===0|| i===total-1 || i%interval===0){ const row = componentTrendFiltered[i]; const d = parseDateObj(row.day); if (!d) return row.day; const dn = d.getUTCDate(); const mon = MONTHS[d.getUTCMonth()]; return `${dn}${dn===1?' '+mon:''}`;} return ''; }} interval={0} tick={{fontSize:12, fill:'#cbd5e1'}} />
                     <YAxis domain={[0,100]} tick={{fontSize:12, fill:'#cbd5e1'}} />
                     <Tooltip content={<SparkTooltip />} />
                     <Line dataKey="value" type="monotone" stroke="#60a5fa" strokeWidth={2.2} dot={false} />

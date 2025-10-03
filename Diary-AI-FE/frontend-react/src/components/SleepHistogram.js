@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as ReTooltip, ResponsiveContainer, Cell, ReferenceLine } from 'recharts';
 import { getSleepScoreColor } from '../utils/chartUtils';
+import ChartTooltip from './ui/ChartTooltip';
 
 const formatBinLabel = (i, resolution) => {
   const minutes = i * resolution;
@@ -117,7 +118,23 @@ const SleepHistogram = ({
     return { data: dataWindow, totalDays: validDays, filteredRange: [start, end] };
   }, [timeseries, metric, resolutionMinutes, daysLimit]);
 
-  const CustomTooltip = ({ active, payload }) => {
+  
+
+  const mapTooltip = ({ payload }) => {
+    if (!payload || !payload.length) return null;
+    const p = payload[0]?.payload;
+    if (!p) return null;
+    const items = [
+      { label: 'Days', value: p.count },
+      { label: 'Percent', value: `${p.percent}%` },
+    ];
+    if (p.medianScore != null) items.push({ label: 'Median score', value: Math.round(p.medianScore) });
+    return { title: p.label, items };
+  };
+
+  const CustomTooltip = (props) => <ChartTooltip {...props} mapPayload={mapTooltip} />;
+
+  const CustomTooltip_OLD = ({ active, payload }) => {
     if (active && payload && payload.length) {
       const p = payload[0].payload;
       return (
@@ -178,7 +195,7 @@ const SleepHistogram = ({
           })()}
           <XAxis dataKey="label" ticks={tickLabels} interval={0} stroke="#64748b" fontSize={12} angle={-45} height={60} />
           <YAxis allowDecimals={false} stroke="#64748b" fontSize={12} />
-          <Tooltip content={<CustomTooltip />} />
+          <ReTooltip content={<CustomTooltip />} />
           <Bar dataKey="count" radius={[4,4,0,0]}>
             {data.map((entry, idx) => (
               <Cell key={`cell-${idx}`} fill={entry.count > 0 ? getSleepScoreColor(entry.medianScore, color) : '#e5e7eb'} />

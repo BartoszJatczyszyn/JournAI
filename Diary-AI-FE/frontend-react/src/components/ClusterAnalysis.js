@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
 const ClusterAnalysis = ({ data }) => {
   const clusterData = useMemo(() => {
@@ -78,7 +78,7 @@ const ClusterAnalysis = ({ data }) => {
     return units[metric] || '';
   }
 
-  const CustomTooltip = ({ active, payload, label }) => {
+  const CustomTooltip = ({ active, payload, label: _label }) => {
     if (active && payload && payload.length) {
       return (
         <div className="custom-tooltip">
@@ -121,8 +121,8 @@ const ClusterAnalysis = ({ data }) => {
         <div className="features-used">
           <h4>Features Analyzed:</h4>
           <div className="feature-tags">
-            {clusterData.featuresUsed.map((feature, index) => (
-              <span key={index} className="feature-tag">
+            {clusterData.featuresUsed.map((feature, _index) => (
+              <span key={_index} className="feature-tag">
                 {formatMetricName(feature)}
               </span>
             ))}
@@ -156,7 +156,7 @@ const ClusterAnalysis = ({ data }) => {
         </div>
 
         <div className="cluster-legend">
-          {clusterData.clusters.map((cluster, index) => (
+          {clusterData.clusters.map((cluster, _index) => (
             <div key={cluster.id} className="legend-item">
               <div 
                 className="legend-color" 
@@ -182,7 +182,7 @@ const ClusterAnalysis = ({ data }) => {
       <div className="cluster-details">
         <h4>Cluster Characteristics</h4>
         <div className="cluster-cards">
-          {clusterData.clusters.map((cluster, index) => (
+          {clusterData.clusters.map((cluster, _index) => (
             <div key={cluster.id} className="cluster-card">
               <div className="cluster-header">
                 <div 
@@ -196,7 +196,7 @@ const ClusterAnalysis = ({ data }) => {
               </div>
 
               <div className="cluster-characteristics">
-                {Object.entries(cluster.characteristics).map(([metric, stats]) => (
+                {Object.entries(cluster.characteristics).map(([metric, stats], _idx) => (
                   <div key={metric} className="characteristic-item">
                     <div className="characteristic-header">
                       <span className="metric-name">

@@ -4,6 +4,8 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
 import { healthAPI2, journalAPI } from '../services';
 import DayCard from '../components/DayCard';
+import CorrelationHeatmap from '../components/CorrelationHeatmap';
+import TopCorrelationPairs from '../components/TopCorrelationPairs';
 
 const formatDate = (d) => {
   try {
@@ -47,9 +49,7 @@ const Days = () => {
       setLoading(true);
       setError(null);
       const resp = await healthAPI2.getHealthData(daysRange);
-      // resp is expected to be an array of daily summaries
       const arr = Array.isArray(resp) ? resp : (resp?.data || []);
-      // normalize day field to `day` and ensure numeric fields are numbers
       const norm = (arr || []).map(r => ({
         day: r.day ?? r.date ?? r.label ?? r.x,
         sleep_score: r.sleep_score ?? r.sleepScore ?? null,
@@ -71,7 +71,6 @@ const Days = () => {
 
   useEffect(() => { load(); }, [daysRange]);
 
-  // Fetch recovery composite scores for current range
   useEffect(() => {
     const fetchRecovery = async () => {
       try {
@@ -88,7 +87,6 @@ const Days = () => {
     fetchRecovery();
   }, [daysRange]);
 
-  // Correlations fetch when panel visible or params change
   useEffect(() => {
     if (!showCorr) return;
     const fetchCorr = async () => {
@@ -231,124 +229,6 @@ const Days = () => {
         .liquid-control { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 9999px; background: rgba(255,255,255,0.06); color: #f8fafc; backdrop-filter: blur(6px) saturate(120%); -webkit-backdrop-filter: blur(6px) saturate(120%); border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 6px 18px rgba(2,6,23,0.5); }
         .page-size-select { appearance: none; -webkit-appearance: none; padding: 6px 8px; border-radius: 8px; background: rgba(255,255,255,0.06); color: #f8fafc; border: 1px solid rgba(255,255,255,0.08); }
       `}</style>
-    </div>
-  );
-};
-
-// --- Correlation helper components ---
-const CorrelationHeatmap = ({ matrix, samples, pairs, categories={}, activeCats }) => {
-  if (!matrix || !Object.keys(matrix).length) return <div style={{ fontSize:12, color:'#64748b' }}>Empty</div>;
-  const colsAll = Object.keys(matrix);
-  const cols = colsAll.filter(c => !activeCats || activeCats[categories[c]]);
-  const hiddenCount = colsAll.length - cols.length;
-  const pairMap = useMemo(() => {
-    const m = new Map();
-    (pairs || []).forEach(p => {
-      const key = p.a < p.b ? `${p.a}|${p.b}` : `${p.b}|${p.a}`;
-      m.set(key, p);
-    });
-    return m;
-  }, [pairs]);
-  const [tooltip, setTooltip] = useState(null); // {x,y,a,b,value,n}
-
-  const onEnter = (e, a, b) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const key = a < b ? `${a}|${b}` : `${b}|${a}`;
-    const p = pairMap.get(key);
-    const same = a === b;
-    const n = same ? (samples?.[a] ?? null) : (p?.n ?? null);
-    const value = matrix[a][b];
-    setTooltip({
-      x: rect.left + window.scrollX + rect.width / 2,
-      y: rect.top + window.scrollY - 8,
-      a,
-      b,
-      value,
-      n,
-    });
-  };
-  const onLeave = () => setTooltip(null);
-
-  return (
-    <div style={{ display:'inline-block', border:'1px solid #1e293b', borderRadius:8, position:'relative' }}>
-      <table style={{ borderCollapse:'collapse', fontSize:11 }}>
-        <thead>
-          <tr>
-            <th style={{ padding:4, background:'#0f172a', color:'#e2e8f0' }}>↘</th>
-            {cols.map(c => {
-              const cat = categories[c];
-              const isFlag = cat === 'flags';
-              const label = isFlag ? `${c}⚑` : c;
-              return <th key={c} style={{ padding:'4px 6px', background:'#0f172a', color:'#e2e8f0' }}>{label}</th>;
-            })}
-          </tr>
-          {samples && (
-            <tr>
-              <th style={{ padding:4, background:'#0f172a', color:'#64748b', fontWeight:400 }}>n</th>
-              {cols.map(c => <th key={c} style={{ padding:'2px 6px', background:'#0f172a', color:'#64748b', fontWeight:400 }}>{samples[c] ?? '-'}</th>)}
-            </tr>
-          )}
-        </thead>
-        <tbody>
-          {cols.map(r => (
-            <tr key={r}>
-              <th style={{ padding:'4px 6px', textAlign:'right', background:'#0f172a', color:'#e2e8f0' }}>{r}</th>
-              {cols.map(c => {
-                const v = matrix[r][c];
-                const val = v == null ? '' : v.toFixed(2);
-                const abs = v == null ? 0 : Math.abs(v);
-                const hue = v == null ? 0 : (v > 0 ? 160 : 0);
-                const alpha = 0.1 + abs * 0.75;
-                const bg = v == null ? '#1e293b' : `hsla(${hue},70%,40%,${alpha})`;
-                return (
-                  <td
-                    key={c}
-                    title={`${r} – ${c}: ${val || '—'}`}
-                    onMouseEnter={(e)=> onEnter(e, r, c)}
-                    onMouseLeave={onLeave}
-                    style={{ padding:'4px 6px', background:bg, color:'#e2e8f0', textAlign:'center', minWidth:42, cursor:'crosshair' }}
-                  >{val}</td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {tooltip && (
-        <div style={{ position:'absolute', left:0, top:0, transform:`translate(${tooltip.x - 80}px, ${tooltip.y - 40}px)`, background:'#0f172a', color:'#e2e8f0', padding:'8px 10px', borderRadius:8, fontSize:11, pointerEvents:'none', boxShadow:'0 4px 16px rgba(0,0,0,0.4)', maxWidth:180, zIndex:20 }}>
-          <div style={{ fontWeight:600 }}>{tooltip.a === tooltip.b ? tooltip.a : `${tooltip.a} ↔ ${tooltip.b}`}</div>
-            <div style={{ display:'flex', justifyContent:'space-between', gap:12 }}>
-              <span style={{ color:'#94a3b8' }}>r</span>
-              <span>{tooltip.value == null ? '—' : tooltip.value.toFixed(4)}</span>
-            </div>
-            <div style={{ display:'flex', justifyContent:'space-between', gap:12 }}>
-              <span style={{ color:'#94a3b8' }}>n</span>
-              <span>{tooltip.n ?? '—'}</span>
-            </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-const TopCorrelationPairs = ({ pairs, limit=10, categories={}, activeCats }) => {
-  if (!pairs || !pairs.length) return null;
-  const filtered = !activeCats ? pairs : pairs.filter(p => activeCats[categories?.[p.a]] && activeCats[categories?.[p.b]]);
-  const sorted = [...filtered].sort((a,b) => Math.abs(b.value) - Math.abs(a.value)).slice(0, limit);
-  return (
-    <div style={{ fontSize:12 }}>
-      <div style={{ fontWeight:600, marginBottom:6 }}>Top Correlations</div>
-      <div style={{ display:'grid', gap:4 }}>
-        {sorted.map(p => {
-          const color = p.value >= 0 ? '#22c55e' : '#ef4444';
-          return (
-            <div key={`${p.a}-${p.b}`} style={{ display:'flex', justifyContent:'space-between', background:'#1e293b', padding:'4px 8px', borderRadius:6 }}>
-              <span style={{ color:'#e2e8f0' }}>{p.a} – {p.b} <span style={{ color:'#64748b' }}>({p.n})</span></span>
-              <span style={{ color }}>{p.value.toFixed(2)}</span>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 };

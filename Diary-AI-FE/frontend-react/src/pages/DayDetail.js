@@ -65,8 +65,6 @@ const DayDetail = () => {
             hrNormalized = hrRes.data;
           } else if (hrRes.data && Array.isArray(hrRes.data)) {
             hrNormalized = { samples: hrRes.data };
-          } else if (hrRes.samples && Array.isArray(hrRes.samples)) {
-            hrNormalized = hrRes;
           } else {
             // Unknown shape: keep as object under 'summary' so user can inspect
             hrNormalized = { summary: hrRes };
@@ -84,17 +82,20 @@ const DayDetail = () => {
             setHrAttempts(prev => [...prev, { endpoint: 'getHeartRateSummary', attempted: String(day), found: !!summaryRes }]);
             if (summaryRes && (Array.isArray(summaryRes.samples) && summaryRes.samples.length)) {
               setHr({ samples: summaryRes.samples });
-            } else if (summaryRes && (summaryRes.data && Array.isArray(summaryRes.data))) {
-              setHr({ samples: summaryRes.data });
-            } else if (summaryRes && typeof summaryRes === 'object' && Object.keys(summaryRes).length) {
-              setHr({ summary: summaryRes });
+              } else if (summaryRes && (summaryRes.data && Array.isArray(summaryRes.data))) {
+                setHr({ samples: summaryRes.data });
+              } else if (summaryRes && typeof summaryRes === 'object' && Object.keys(summaryRes).length) {
+                setHr({ summary: summaryRes });
             } else {
               // Try alternative date formats: YYYY-MM-DD extracted from provided param
               let altDay = day;
               try {
                 const iso = new Date(day);
                 if (!Number.isNaN(iso.getTime())) altDay = iso.toISOString().slice(0,10);
-              } catch(e) {}
+              } catch (e) {
+                // ignore invalid date formats when probing alternative day formats
+                console.warn('Alt day parse failed', e);
+              }
               if (altDay !== String(day)) {
                 const altRes = await monitoringAPI.getHeartRateDaily(altDay).catch(() => null);
                 setHrAttempts(prev => [...prev, { endpoint: 'getHeartRateDaily', attempted: altDay, found: !!altRes }]);
@@ -103,9 +104,9 @@ const DayDetail = () => {
                 else if (altRes && altRes.data && Array.isArray(altRes.data)) setHr({ samples: altRes.data });
               }
             }
-          } catch (e) {
-            console.warn('Extra HR attempts failed', e);
-          }
+              } catch (e) {
+                console.warn('Extra HR attempts failed', e);
+              }
         }
         setStress(stressRes || null);
         setRr(rrRes || null);

@@ -365,7 +365,9 @@ const Analytics = () => {
             </div>
             
             {analytics?.recovery ? (
-              <RecoveryAnalysis data={analytics.recovery} periodDays={analysisParams.days} />
+              <>
+                <RecoveryAnalysis data={analytics.recovery} periodDays={analysisParams.days} />
+              </>
             ) : (
               <div className="no-data">No recovery data available</div>
             )}

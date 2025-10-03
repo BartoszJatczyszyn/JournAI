@@ -155,6 +155,7 @@ export const HealthDataProvider = ({ children }) => {
       setLoading(true);
       setError(null);
 
+      console.log('fetchAnalytics: requesting analytics for', { days, clusters, recoveryFilters });
       const [
         comprehensiveData,
         correlationsData,
@@ -166,8 +167,21 @@ export const HealthDataProvider = ({ children }) => {
         healthAPI.getEnhancedCorrelations(days),
         healthAPI.getClusterAnalysis(days, clusters),
         healthAPI.getTemporalPatterns(days),
-        healthAPI.getRecoveryAnalysis(days)
+        healthAPI.getRecoveryAnalysis({ days, ...(recoveryFilters || {}) })
       ]);
+
+      // Debug: log what we received from analytics endpoints (helps debug empty/malformed responses)
+      try {
+        console.log('fetchAnalytics: received analytics responses', {
+          comprehensive: comprehensiveData && (comprehensiveData.data ? '(wrapped)':'(raw)'),
+          correlations: correlationsData && (correlationsData.data ? '(wrapped)':'(raw)'),
+          clusters: clustersData && (clustersData.data ? '(wrapped)':'(raw)'),
+          temporal: temporalData && (temporalData.data ? '(wrapped)':'(raw)'),
+          recovery: recoveryData
+        });
+      } catch (logErr) {
+        console.warn('fetchAnalytics: logging failed', logErr);
+      }
 
       setAnalytics({
         comprehensive: comprehensiveData,
@@ -444,7 +458,7 @@ export const HealthDataProvider = ({ children }) => {
     // Utilities
     clearError: () => setError(null),
     setLoading
-  }), [loading, error, dashboardData, analytics, predictions, insights, dateRange, fetchDashboardData, fetchAnalytics, fetchPredictions, fetchInsights, fetchSpecializedAnalysis, comparePeriods, getHealthDataForRange, refreshAllData]);
+  }), [loading, error, dashboardData, analytics, predictions, insights, dateRange, fetchDashboardData, fetchDashboardForDays, fetchAnalytics, fetchPredictions, fetchInsights, fetchSpecializedAnalysis, comparePeriods, getHealthDataForRange, refreshAllData]);
 
   return (
     <HealthDataContext.Provider value={value}>

@@ -5,7 +5,7 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
+  Tooltip as ReTooltip,
   ResponsiveContainer,
   Area,
   AreaChart,
@@ -16,6 +16,7 @@ import {
   Scatter,
   ReferenceLine
 } from 'recharts';
+import ChartTooltip from './ui/ChartTooltip';
 import { format, parseISO } from 'date-fns';
 
 const minutesToHHmm = (m) => {
@@ -26,6 +27,60 @@ const minutesToHHmm = (m) => {
   const h = Math.floor(mm / 60) % 24;
   const min = mm % 60;
   return `${h.toString().padStart(2,'0')}:${min.toString().padStart(2,'0')}`;
+};
+
+// metric config helper hoisted to module scope to keep stable reference for hooks
+const defaultMetricConfig = (metric, color) => {
+  const configs = {
+    energy_level: {
+      name: 'Energy Level',
+      unit: '/5',
+      color: '#3b82f6',
+      domain: [0, 5]
+    },
+    sleep_score: {
+      name: 'Sleep Score',
+      unit: '/100',
+      color: '#8b5cf6',
+      domain: [0, 100]
+    },
+    steps: {
+      name: 'Steps',
+      unit: '',
+      color: '#10b981',
+      domain: [0, 'dataMax']
+    },
+    rhr: {
+      name: 'Resting Heart Rate',
+      unit: ' bpm',
+      color: '#ef4444',
+      domain: ['dataMin - 5', 'dataMax + 5']
+    },
+    mood: {
+      name: 'Mood',
+      unit: '/5',
+      color: '#f59e0b',
+      domain: [0, 5]
+    },
+    calories_total: {
+      name: 'Calories',
+      unit: ' kcal',
+      color: '#ec4899',
+      domain: [0, 'dataMax']
+    },
+    stress_avg: {
+      name: 'Stress Level',
+      unit: '/100',
+      color: '#f97316',
+      domain: [0, 100]
+    }
+  };
+  return configs[metric] || {
+    name: metric.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()),
+    unit: '',
+    color: color,
+    domain: ['dataMin', 'dataMax']
+  };
 };
 
 const HealthChart = ({ 
@@ -43,7 +98,6 @@ const HealthChart = ({
   xKey,
   yKey,
   pointColor = '#3b82f6',
-  pointSize = 50,
   legend = false,
   // rolling average for line charts
   rollingWindow,
@@ -64,8 +118,7 @@ const HealthChart = ({
       return null;
     };
 
-    const dowNamesShort = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-    const dowNamesLong = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+      const dowNamesShort = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
     // For stacked area charts, don't filter by a single metric. Use any of the stackKeys present.
     if (type === 'stacked-area') {
@@ -116,61 +169,7 @@ const HealthChart = ({
    return ra;
  }, [chartData, rollingWindow]);
 
- const getMetricConfig = (metric) => {
-    const configs = {
-      energy_level: {
-        name: 'Energy Level',
-        unit: '/5',
-        color: '#3b82f6',
-        domain: [0, 5]
-      },
-      sleep_score: {
-        name: 'Sleep Score',
-        unit: '/100',
-        color: '#8b5cf6',
-        domain: [0, 100]
-      },
-      steps: {
-        name: 'Steps',
-        unit: '',
-        color: '#10b981',
-        domain: [0, 'dataMax']
-      },
-      rhr: {
-        name: 'Resting Heart Rate',
-        unit: ' bpm',
-        color: '#ef4444',
-        domain: ['dataMin - 5', 'dataMax + 5']
-      },
-      mood: {
-        name: 'Mood',
-        unit: '/5',
-        color: '#f59e0b',
-        domain: [0, 5]
-      },
-      calories_total: {
-        name: 'Calories',
-        unit: ' kcal',
-        color: '#ec4899',
-        domain: [0, 'dataMax']
-      },
-      stress_avg: {
-        name: 'Stress Level',
-        unit: '/100',
-        color: '#f97316',
-        domain: [0, 100]
-      }
-    };
-    
-    return configs[metric] || {
-      name: metric.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()),
-      unit: '',
-      color: color,
-      domain: ['dataMin', 'dataMax']
-    };
-  };
-
-  const config = getMetricConfig(metric);
+  const config = defaultMetricConfig(metric, color);
 
   // Compute Y axis ticks for percent-style charts (0..100 step 10)
   const yTicks = React.useMemo(() => {
@@ -202,42 +201,30 @@ const HealthChart = ({
     if (type === 'stacked-area') {
       return 'Selected series';
     }
-    return (getMetricConfig(metric)?.name) || metric;
-  }, [type, xKey, yKey, metric]);
+    return (defaultMetricConfig(metric, config.color)?.name) || metric;
+  }, [type, xKey, yKey, metric, config.color]);
 
-  const CustomTooltip = ({ active, payload, label }) => {
-    if (!active || !payload || !payload.length) return null;
+  
+  const mapTooltip = ({ payload, label }) => {
+    if (!payload || !payload.length) return null;
     const data = payload[0].payload;
-    const isTimeOfDay = metric === 'bedtime_minutes' || metric === 'wake_minutes';
-
-    // If multiple series (stacked-area) show each entry
-    const rows = payload.map((p, idx) => {
-      // p.value may be null/undefined for some series
+    const items = payload.map((p, idx) => {
       const name = p.name || (stackKeys && stackKeys[idx]) || p.dataKey || `series ${idx+1}`;
-      const val = (p.value != null && !isNaN(Number(p.value))) ? p.value : null;
-      const display = isTimeOfDay && val != null ? minutesToHHmm(val) : (val != null ? (Number(val).toFixed(1) + ((getMetricConfig(p.dataKey || metric)?.unit) || '')) : 'N/A');
+      const val = (p.value != null && !isNaN(Number(p.value))) ? Number(p.value) : null;
+      const isTimeOfDay = metric === 'bedtime_minutes' || metric === 'wake_minutes';
+      const unit = (defaultMetricConfig(p.dataKey || metric, config.color)?.unit) || '';
+      const display = isTimeOfDay && val != null
+        ? minutesToHHmm(val)
+        : (val != null ? `${val.toFixed(1)}${unit}` : 'N/A');
       const color = (p.color) || (p.stroke) || (p.fill) || '#64748b';
-      return { name, display, color, raw: val };
+      return { label: name, value: display, color };
     });
-
-    return (
-      <div className="custom-tooltip">
-        <p className="tooltip-label">{data?.formattedDate || label}</p>
-        {rows.map((r, i) => (
-          <p key={i} className="tooltip-value">
-            <span className="tooltip-metric" style={{ color: r.color }}>{r.name}:</span>
-            <span className="tooltip-number">{r.display}</span>
-          </p>
-        ))}
-        {isTimeOfDay && payload[0].value != null && (
-          <p className="tooltip-extra">Minutes: {payload[0].value}</p>
-        )}
-        {data?.mood && metric !== 'mood' && (
-          <p className="tooltip-extra">Mood: {data.mood}/5</p>
-        )}
-      </div>
-    );
+    return { title: data?.formattedDate || label, items };
   };
+
+  const CustomTooltip = (props) => <ChartTooltip {...props} mapPayload={mapTooltip} />;
+
+  // Legacy tooltip removed to avoid unused variable warnings
 
   const formatXAxisTick = (tickItem) => {
     if (!tickItem && tickItem !== 0) return '';
@@ -300,7 +287,7 @@ const HealthChart = ({
             {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />}
             <XAxis dataKey={xDataKey} tickFormatter={xDataKey === 'date' ? formatXAxisTick : undefined} stroke="#64748b" fontSize={12} />
             <YAxis domain={yDomain || ['dataMin', 'dataMax']} ticks={yTicks} stroke="#64748b" fontSize={12} />
-            {showTooltip && <Tooltip content={<CustomTooltip />} />}
+            {showTooltip && <ReTooltip content={<CustomTooltip />} />}
             {legend && <Legend />}
             {(stackKeys || []).map((k, idx) => (
               <Area key={k}
@@ -321,7 +308,7 @@ const HealthChart = ({
             {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />}
             <XAxis dataKey={xKey || 'x'} name={xKey || 'x'} stroke="#64748b" fontSize={12} />
             <YAxis dataKey={yKey || 'y'} name={yKey || 'y'} stroke="#64748b" fontSize={12} />
-            {showTooltip && <Tooltip />}
+            {showTooltip && <ReTooltip /> }
             {/* Reference lines at medians for quick quadrant interpretation */}
             <ReferenceLine x={() => {
               const xs = data.map(d => d?.[xKey || 'x']).filter(v => v != null && !isNaN(v)).sort((a,b)=>a-b);
@@ -354,7 +341,7 @@ const HealthChart = ({
               stroke="#64748b"
               fontSize={12}
             />
-            {showTooltip && <Tooltip content={<CustomTooltip />} />}
+            {showTooltip && <ReTooltip content={<CustomTooltip />} />}
             <Area
               type="monotone"
               dataKey="value"
@@ -383,7 +370,7 @@ const HealthChart = ({
               stroke="#64748b"
               fontSize={12}
             />
-            {showTooltip && <Tooltip content={<CustomTooltip />} />}
+            {showTooltip && <ReTooltip content={<CustomTooltip />} />}
             <Bar
               dataKey="value"
               fill={config.color}
@@ -409,7 +396,7 @@ const HealthChart = ({
               stroke="#64748b"
               fontSize={12}
             />
-            {showTooltip && <Tooltip content={<CustomTooltip />} />}
+            {showTooltip && <ReTooltip content={<CustomTooltip />} />}
             <Line
               type="monotone"
               dataKey="value"
