@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { durationToMinutes, parsePaceToMinutes } from '../utils/timeUtils';
 
 // Helper to sum values
 const sum = (arr, sel) => arr.reduce((acc, x) => acc + (Number(sel(x)) || 0), 0);
@@ -100,7 +101,8 @@ const toNumberSafe = (v) => {
 };
 
 // Hook computing derived metrics for activities
-export const useActivityAggregates = (activities) => {
+export const useActivityAggregates = (activities, opts = {}) => {
+  const lastNDays = Number(opts.lastNDays || 14); // configurable recent-days window (default 14)
   const todayKey = new Date().toISOString().slice(0, 10);
 
   const todayActivities = useMemo(() => activities.filter(a => a.start_time && a.start_time.startsWith(todayKey)), [activities, todayKey]);
@@ -128,11 +130,11 @@ export const useActivityAggregates = (activities) => {
     return days.size;
   }, [weeklyActivities]);
 
-  // Build a map date -> aggregated metrics for sparkline (last 14 days)
-  const last14DaysSeries = useMemo(() => {
+  // Build a map date -> aggregated metrics for sparkline (last N days)
+  const lastNDaysSeries = useMemo(() => {
     const now = new Date();
     const map = new Map();
-    for (let i = 13; i >= 0; i--) {
+    for (let i = lastNDays - 1; i >= 0; i--) {
       const d = new Date(now);
       d.setDate(now.getDate() - i);
       const key = d.toISOString().slice(0,10);
@@ -151,15 +153,15 @@ export const useActivityAggregates = (activities) => {
       }
     });
     return Array.from(map.entries()).map(([date, vals]) => ({ date, ...vals }));
-  }, [activities]);
+  }, [activities, lastNDays]);
 
-  // Fallback: if raw weekly steps is zero but we have data points in the last 7 days series, derive from that
+  // Fallback: if raw weekly steps is zero but we have data points in the last 7 days of the recent series, derive from that
   const weeklySteps = useMemo(() => {
     if (weeklyStepsRaw > 0) return weeklyStepsRaw;
-    const last7 = last14DaysSeries.slice(-7);
+    const last7 = lastNDaysSeries.slice(-7);
     const derived = last7.reduce((acc, d) => acc + (d.steps || 0), 0);
     return derived;
-  }, [weeklyStepsRaw, last14DaysSeries]);
+  }, [weeklyStepsRaw, lastNDaysSeries]);
 
   // Weekly grouping (last 8 weeks) for summary / average pace
   const weeklyGroups = useMemo(() => {
@@ -176,10 +178,10 @@ export const useActivityAggregates = (activities) => {
       const week = 1 + Math.round(((tmp - firstThursday) / 86400000 - 3) / 7);
       const year = tmp.getUTCFullYear();
       const key = `${year}-W${String(week).padStart(2,'0')}`;
-      if (!map.has(key)) map.set(key, { distance:0, steps:null, calories:0, durationMin:0, daily:new Map(), hrWeighted:0, hrDuration:0, trainingLoad:null, trainingEffectVals:[], anaerobicEffectVals:[] });
+      if (!map.has(key)) map.set(key, { distance:0, steps:null, calories:0, durationMin:0, daily:new Map(), hrWeighted:0, hrDuration:0, trainingLoad:null, trainingEffectVals:[], anaerobicEffectVals:[], paceSum:0, paceCount:0 });
         const rec = map.get(key);
-      const dist = Number(a.distance_km) || 0;
-      rec.distance += dist;
+  const dist = Number(a.distance_km) || 0;
+  rec.distance += dist;
         let s = pickSteps(a);
         if (s == null) {
           // fallback: scan for any field name that looks like steps
@@ -187,7 +189,16 @@ export const useActivityAggregates = (activities) => {
         }
         if (s != null) rec.steps = (rec.steps || 0) + s;
       rec.calories += Number(a.calories) || 0;
-      rec.durationMin += Number(a.duration_min) || 0;
+  // Normalize duration into minutes using helper
+      const durMin = durationToMinutes(a.duration_min ?? a.duration ?? a.moving_time ?? a.elapsed_time);
+      rec.durationMin += (durMin != null ? durMin : 0);
+  // Prefer pace reported by source if available (avg_pace). Support other legacy names as fallback.
+  const rawPace = a.avg_pace ?? a.avgPace ?? a.avg_pace_min;
+      const parsedPace = parsePaceToMinutes(rawPace);
+      if (parsedPace != null && Number.isFinite(parsedPace)) {
+        rec.paceSum += parsedPace;
+        rec.paceCount += 1;
+      }
       if (a.avg_hr && a.duration_min) {
         rec.hrWeighted += Number(a.avg_hr) * Number(a.duration_min);
         rec.hrDuration += Number(a.duration_min);
@@ -201,10 +212,14 @@ export const useActivityAggregates = (activities) => {
         if (tl != null) rec.trainingLoad = (rec.trainingLoad || 0) + tl;
       if (a.training_effect) rec.trainingEffectVals.push(Number(a.training_effect));
       if (a.anaerobic_training_effect) rec.anaerobicEffectVals.push(Number(a.anaerobic_training_effect));
-      // daily distance accumulation
+      // daily distance accumulation and mark if day has pace
       const dateKey = a.start_time.slice(0,10);
-      if (!rec.daily.has(dateKey)) rec.daily.set(dateKey, { distance:0 });
-      rec.daily.get(dateKey).distance += dist;
+      if (!rec.daily.has(dateKey)) rec.daily.set(dateKey, { distance:0, hasPace: false });
+      const dayRec = rec.daily.get(dateKey);
+      dayRec.distance += dist;
+      // mark that this day has a pace if source provided it or duration+distance allow computing it
+      const computedPace = parsedPace != null ? parsedPace : (durMin != null && dist > 0 ? (durMin / dist) : null);
+      if (computedPace != null) dayRec.hasPace = true;
     });
     // Sort by week descending, take last up to 52 (1 year), then chronological
     const arr = Array.from(map.entries()).sort((a,b) => a[0] < b[0] ? 1 : -1).slice(0,52).reverse();
@@ -234,22 +249,29 @@ export const useActivityAggregates = (activities) => {
       const avgHr = vals.hrDuration ? (vals.hrWeighted / vals.hrDuration) : null;
       const trainingEffect = vals.trainingEffectVals.length ? (vals.trainingEffectVals.reduce((a,b)=>a+b,0)/vals.trainingEffectVals.length) : null;
       const anaerobicEffect = vals.anaerobicEffectVals.length ? (vals.anaerobicEffectVals.reduce((a,b)=>a+b,0)/vals.anaerobicEffectVals.length) : null;
-      const activeDaysCount = dailyDistanceSeries.filter(v => v > 0).length;
-      return { week, distance: vals.distance, steps: vals.steps, calories: vals.calories, durationMin: vals.durationMin, avgPace: vals.distance ? (vals.durationMin / vals.distance) : null, dailyDistanceSeries, avgHr, trainingLoad: vals.trainingLoad, trainingEffect, anaerobicEffect, activeDaysCount };
+      // count active days based on presence of pace data for the day
+      const activeDaysCount = (() => {
+        let c = 0;
+        for (const v of vals.daily.values()) {
+          if (v && v.hasPace) c += 1;
+        }
+        return c;
+      })();
+  const avgPace = vals.distance ? (vals.durationMin / vals.distance) : null;
+  // If source provided per-activity paces, prefer their average for the week's avgPace
+  const avgPaceFromSource = vals.paceCount ? (vals.paceSum / vals.paceCount) : null;
+  const finalAvgPace = avgPaceFromSource != null ? avgPaceFromSource : avgPace;
+  return { week, distance: vals.distance, steps: vals.steps, calories: vals.calories, durationMin: vals.durationMin, avgPace: finalAvgPace, dailyDistanceSeries, avgHr, trainingLoad: vals.trainingLoad, trainingEffect, anaerobicEffect, activeDaysCount };
     });
-    // Compute monotonic upward streak (distance strictly increasing week to week)
-    let lastDistance = null;
+    // Compute streak of consecutive weeks that have avgPace available (preferred)
     let streak = 0;
     chronological.forEach(w => {
-      if (lastDistance == null) {
-        streak = 0;
-      } else if (w.distance > lastDistance) {
+      if (w.avgPace != null) {
         streak += 1;
-      } else if (w.distance <= lastDistance) {
-        streak = 0; // reset on plateau or drop
+      } else {
+        streak = 0;
       }
-      w.streakUp = streak; // number of consecutive increases ending at this week
-      lastDistance = w.distance;
+      w.streakUp = streak;
     });
 
     // Rolling 4-week average pace (lower is better). Pace = minutes per km (avgPace already in minutes per km)
@@ -289,10 +311,11 @@ export const useActivityAggregates = (activities) => {
     todayDistance,
     todayCalories,
     weeklyActivities,
-  weeklySteps,
+    weeklySteps,
     weeklyDistance,
     activeDays,
-    last14DaysSeries,
+    // expose the series with a neutral name; callers can request different window via opts
+    lastNDaysSeries,
     weeklyGroups,
     pickSteps
   };

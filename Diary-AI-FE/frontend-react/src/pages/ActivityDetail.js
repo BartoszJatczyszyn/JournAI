@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
 import { activitiesAPI } from '../services';
+import { formatPaceMinPerKm} from '../utils/timeUtils';
 
 const ActivityDetail = () => {
   const { id } = useParams();
@@ -48,7 +49,7 @@ const ActivityDetail = () => {
               <li><strong>Avg HR:</strong> {activity.avg_hr || '-'}</li>
               <li><strong>Max HR:</strong> {activity.max_hr || '-'}</li>
               <li><strong>Calories:</strong> {activity.calories || '-'}</li>
-              <li><strong>Avg Pace:</strong> {activity.avg_pace_min_per_km != null ? `${activity.avg_pace_min_per_km} min/km` : '-'}</li>
+              <li><strong>Avg Pace:</strong> {activity.avg_pace != null ? (formatPaceMinPerKm(activity.avg_pace) + ' min/km') : '-'}</li>
             </ul>
           </div>
         </div>
@@ -57,8 +58,8 @@ const ActivityDetail = () => {
           <div className="card-header"><h3 className="card-title">Performance</h3></div>
           <div className="card-content">
             <ul className="space-y-2">
-              <li><strong>Avg Speed:</strong> {activity.avg_speed != null ? `${activity.avg_speed.toFixed(2)} m/s` : '-'}</li>
-              <li><strong>Max Speed:</strong> {activity.max_speed != null ? `${activity.max_speed.toFixed(2)} m/s` : '-'}</li>
+              <li><strong>Avg Speed:</strong> {activity.avg_speed != null ? `${activity.avg_speed.toFixed(2)} km/h` : '-'}</li>
+              <li><strong>Max Speed:</strong> {activity.max_speed != null ? `${activity.max_speed.toFixed(2)} km/h` : '-'}</li>
               <li><strong>Training Load:</strong> {activity.training_load || '-'}</li>
               <li><strong>Training Effect:</strong> {activity.training_effect || '-'}</li>
               <li><strong>Anaerobic Effect:</strong> {activity.anaerobic_training_effect || '-'}</li>

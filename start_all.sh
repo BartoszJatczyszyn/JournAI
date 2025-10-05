@@ -15,10 +15,12 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 WITH_FRONTEND=0
+WITH_LLM=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --with-frontend) WITH_FRONTEND=1; shift ;;
-        --help|-h) echo "Usage: $0 [--with-frontend]"; exit 0 ;;
+        --llm) WITH_LLM=1; shift ;;
+        --help|-h) echo "Usage: $0 [--with-frontend] [--llm]"; exit 0 ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
 done
@@ -38,7 +40,11 @@ fi
 echo -e "${GREEN}✅ Using: $DOCKER_CMD${NC}"
 
 echo -e "${BLUE}📦 Building and starting services (detached)...${NC}"
-($DOCKER_CMD up -d --build) || { echo -e "${RED}❌ Error while starting docker compose${NC}"; exit 1; }
+SERVICES=(db backend)
+if [ "$WITH_LLM" -eq 1 ]; then
+  SERVICES+=(llm)
+fi
+($DOCKER_CMD up -d --build "${SERVICES[@]}") || { echo -e "${RED}❌ Error while starting docker compose${NC}"; exit 1; }
 
 # Wait for backend (health endpoint)
 echo -e "${YELLOW}⏳ Waiting for backend at http://localhost:5002/api/stats ...${NC}"

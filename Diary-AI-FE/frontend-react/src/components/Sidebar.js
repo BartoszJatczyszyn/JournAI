@@ -64,6 +64,12 @@ const Sidebar = ({ isOpen, onClose }) => {
       icon: '⚙️',
       label: 'Settings',
       description: 'Configuration & preferences'
+    },
+    {
+      path: '/assistant',
+      icon: '🤖',
+      label: 'AI Assistant',
+      description: 'LLM health report & chat'
     }
   ];
 
@@ -378,4 +384,6 @@ const Sidebar = ({ isOpen, onClose }) => {
   );
 };
 
+// Added AI Assistant link
+// The Sidebar is long; below we append a simple link near the end if not already present.
 export default Sidebar;

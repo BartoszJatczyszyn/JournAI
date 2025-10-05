@@ -14,15 +14,19 @@ import React, { useRef, useState, useEffect } from 'react';
 const Sparkline = ({ data, height = 40, stroke = '#6366f1', fill = 'rgba(99,102,241,0.15)', strokeWidth = 2, className = '', tooltipFormatter }) => {
   const containerRef = useRef(null);
   const [tooltip, setTooltip] = useState({ visible: false, x: 0, y: 0, content: '' });
+  const [containerWidth, setContainerWidth] = useState(null);
+
   // Update on container resize so SVG can fill available width
   useEffect(() => {
     if (!containerRef.current) return;
     if (typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver(() => {
-      // trigger a re-render by updating tooltip state with same values
-      setTooltip(t => ({ ...t }));
+      const w = containerRef.current?.clientWidth || null;
+      setContainerWidth(w);
     });
     ro.observe(containerRef.current);
+    // initialize
+    setContainerWidth(containerRef.current.clientWidth || null);
     return () => ro.disconnect();
   }, [containerRef]);
 
@@ -31,11 +35,15 @@ const Sparkline = ({ data, height = 40, stroke = '#6366f1', fill = 'rgba(99,102,
   const max = Math.max(...values, 1);
   const min = Math.min(...values, 0);
   const range = max - min || 1;
-  // Responsive width: try to fill container, but ensure a sensible min spacing per point
-  const containerWidth = containerRef.current?.clientWidth || 0;
-  const minGap = 32; // minimum px per point to make chart readable
+  // Responsive width: compute spacing so chart fits container width while keeping a sensible gap
+  const minGap = 12; // allow tighter packing when container is narrow
+  const maxGap = 96;
   const naturalWidth = Math.max(values.length * minGap, 120);
-  const w = Math.max(naturalWidth, containerWidth || naturalWidth);
+  const avail = containerWidth || 0;
+  // compute base gap to fill available width; if no container width yet, fall back to minGap
+  const baseGap = avail && values.length > 1 ? Math.max(1, (avail - 4) / (values.length - 1)) : minGap;
+  const gap = Math.max(minGap, Math.min(maxGap, Math.floor(baseGap)));
+  const w = avail && avail > 0 ? Math.max(120, (values.length - 1) * gap + 4) : naturalWidth;
   const points = values.map((v, i) => {
     const x = (i / (values.length - 1)) * (w - 4) + 2;
     const y = height - ((v - min) / range) * (height - 4) - 2;
@@ -55,6 +63,24 @@ const Sparkline = ({ data, height = 40, stroke = '#6366f1', fill = 'rgba(99,102,
   };
   const hideTip = () => setTooltip({ visible: false, x: 0, y: 0, content: '' });
 
+
+  const tooltipStyle = {
+    position: 'absolute',
+    left: tooltip.x,
+    top: tooltip.y,
+    background: 'var(--glass-bg, rgba(17,24,39,0.95))',
+    backdropFilter: 'blur(8px)',
+    WebkitBackdropFilter: 'blur(8px)',
+    border: '1px solid var(--glass-border, rgba(255,255,255,0.06))',
+    boxShadow: '0 6px 18px rgba(2,6,23,0.6)',
+    color: 'var(--text-primary, #f1f5f9)',
+    padding: '6px 8px',
+    borderRadius: 6,
+    fontSize: 12,
+    pointerEvents: 'none',
+    whiteSpace: 'nowrap',
+    zIndex: 50
+  };
 
   return (
     <div ref={containerRef} className={className} style={{ overflow: 'hidden', position: 'relative' }}>
@@ -76,7 +102,7 @@ const Sparkline = ({ data, height = 40, stroke = '#6366f1', fill = 'rgba(99,102,
         ))}
       </svg>
       {tooltip.visible && (
-        <div style={{ position: 'absolute', left: tooltip.x, top: tooltip.y, background: 'rgba(17,24,39,0.95)', color: 'white', padding: '6px 8px', borderRadius: 6, fontSize: 12, pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: 50 }}>
+        <div style={tooltipStyle} className="glass-tooltip">
           {tooltip.content}
         </div>
       )}

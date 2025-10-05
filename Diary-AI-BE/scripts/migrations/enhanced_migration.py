@@ -5,7 +5,7 @@ Successfully migrated: 277 daily summaries, 277 sleep sessions, 1025 activities,
 """
 
 # Standard library
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, time as time_cls
 import json
 import logging
 import math
@@ -170,6 +170,84 @@ def time_str_to_milliseconds(value: Any) -> float | None:
     except Exception:
         return None
 
+
+def seconds_to_time_obj(seconds: Any) -> time_cls | None:
+    """Convert a numeric seconds value to a datetime.time object (wraps at 24h)."""
+    if seconds is None:
+        return None
+    try:
+        secs = int(round(float(seconds)))
+    except Exception:
+        return None
+    secs = secs % 86400
+    h = secs // 3600
+    m = (secs % 3600) // 60
+    s = secs % 60
+    return time_cls(hour=h, minute=m, second=s)
+
+
+def parse_duration_to_time_seconds(value: Any) -> time_cls | None:
+    """Parse duration (TIME string like 'HH:MM:SS' or numeric seconds) into time object.
+    Numeric values are interpreted as seconds.
+    """
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return seconds_to_time_obj(value)
+    if isinstance(value, str):
+        # try parsing as HH:MM:SS[.ffffff]
+        try:
+            # support fractional seconds
+            if value.count(":") == 2:
+                # strip timezone Z
+                v = value.replace('Z', '')
+                try:
+                    dt = datetime.strptime(v, "%H:%M:%S.%f")
+                except Exception:
+                    try:
+                        dt = datetime.strptime(v, "%H:%M:%S")
+                    except Exception:
+                        return None
+                return time_cls(hour=dt.hour, minute=dt.minute, second=dt.second)
+        except Exception:
+            return None
+    return None
+
+
+def parse_pace_to_time(value: Any) -> time_cls | None:
+    """Convert various pace representations into a time object representing time per km.
+    - If value is a string like 'MM:SS' or 'HH:MM:SS' treat as time per km or total time and convert
+    - If numeric, interpret as minutes per km (float) and convert to seconds then to time
+    """
+    if value is None:
+        return None
+    # If it's a string time
+    if isinstance(value, str) and ':' in value:
+        try:
+            v = value.replace('Z', '')
+            try:
+                dt = datetime.strptime(v, "%H:%M:%S.%f")
+            except Exception:
+                try:
+                    dt = datetime.strptime(v, "%H:%M:%S")
+                except Exception:
+                    # allow MM:SS
+                    try:
+                        dt = datetime.strptime(v, "%M:%S")
+                        return time_cls(hour=0, minute=dt.minute, second=dt.second)
+                    except Exception:
+                        return None
+            return time_cls(hour=dt.hour, minute=dt.minute, second=dt.second)
+        except Exception:
+            return None
+    # If numeric, interpret as minutes.per_km
+    try:
+        f = float(value)
+        seconds = int(round(f * 60.0))
+        return seconds_to_time_obj(seconds)
+    except Exception:
+        return None
+
 # Mappings for self-eval textual values to ordinal scales
 SELF_EVAL_FEEL_MAP = {
     'very weak': 1,
@@ -310,12 +388,11 @@ class GarminActivity(Base):
     # Speed and pace
     avg_speed = Column(Float)       # m/s
     max_speed = Column(Float)       # m/s
-    avg_pace = Column(Float)        # min/km (calculated)
-    max_pace = Column(Float)        # min/km (reported max pace)
+    avg_pace = Column(Time)        # time per km (TIME)
+    max_pace = Column(Time)        # time per km (TIME)
     
     # Cadence
-    avg_cadence = Column(Float)     # steps/min or rpm
-    max_cadence = Column(Float)
+    # Note: avg_cadence/max_cadence deprecated in favor of avg_steps_per_min/max_steps_per_min
     
     # Elevation
     ascent = Column(Float)          # meters
@@ -347,23 +424,23 @@ class GarminActivity(Base):
     max_stress = Column(Integer)
     avg_stress = Column(Float)
     
-    # Heart rate zones time (seconds)
-    hr_zone1 = Column(Integer)
-    hr_zone2 = Column(Integer)
-    hr_zone3 = Column(Integer)
-    hr_zone4 = Column(Integer)
-    hr_zone5 = Column(Integer)
+    # Heart rate zones time (stored as TIME)
+    hr_zone1 = Column(Time)
+    hr_zone2 = Column(Time)
+    hr_zone3 = Column(Time)
+    hr_zone4 = Column(Time)
+    hr_zone5 = Column(Time)
     
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class DailyJournal(Base):
     __tablename__ = 'daily_journal'
     
-    # Klucz główny i relacje
+    # Primary key and relationships
     day = Column(Date, ForeignKey("garmin_daily_summaries.day"), primary_key=True, index=True, nullable=False)
     location = Column(String(200))
 
-    # Nastrój i samopoczucie subiektywne (1–5)
+    # Mood and subjective well-being (1–5)
     mood = Column(Integer)
     energy_level = Column(Integer)
     stress_level_manual = Column(Integer)
@@ -382,7 +459,7 @@ class DailyJournal(Base):
     gratitude_note = Column(Text)
     highlight_of_the_day = Column(Text)
 
-    # Odżywianie i nawodnienie
+    # Nutrition and hydration
     diet_type = Column(String(100))
     meals_count = Column(Integer)
     fasting_hours = Column(Integer)
@@ -396,7 +473,7 @@ class DailyJournal(Base):
     fat_intake_g = Column(Integer)
     carbs_intake_g = Column(Integer)
 
-    # Suplementy i używki
+    # Supplements and substances
     supplement_vitamin_b = Column(Boolean)
     supplement_vitamin_c = Column(Boolean)
     supplement_vitamin_d3 = Column(Boolean)
@@ -413,7 +490,7 @@ class DailyJournal(Base):
     medication_taken = Column(Text)
     recreational_drugs_taken = Column(Text)
 
-    # Aktywność fizyczna i nawyki
+    # Physical activity and habits
     workout_type_manual = Column(String(200))
     sun_exposure_minutes = Column(Integer)
     time_outdoors_minutes = Column(Integer)
@@ -437,7 +514,7 @@ class DailyJournal(Base):
     # Manual / curated HRV (ms) entered by user or external device (time-domain rMSSD proxy)
     hrv_ms = Column(Float)  # Stored already in milliseconds (float).
 
-    # Czynniki środowiskowe i kontekst dnia
+    # Environmental factors and daily context
     weather_conditions = Column(String(100))
     travel_day = Column(Boolean)
     morning_sunlight = Column(Boolean)
@@ -615,7 +692,7 @@ class EnhancedGarminMigrator:
                 )
                 logger.info("Dropped column if existed: garmin_daily_summaries.body_battery_drained")
                 # Drop deprecated/unused columns from activities
-                for col in ("avg_ground_contact_balance", "min_stress", "cycles", "start_lat", "stop_lat", "start_long", "stop_long"):
+                for col in ("avg_ground_contact_balance", "min_stress", "cycles", "start_lat", "stop_lat", "start_long", "stop_long", "avg_cadence", "max_cadence"):
                     conn.exec_driver_sql(
                         f"ALTER TABLE garmin_activities DROP COLUMN IF EXISTS {col} CASCADE;"
                     )
@@ -625,7 +702,9 @@ class EnhancedGarminMigrator:
 
             # Ensure new activity columns exist (from views/steps overlays)
             try:
-                conn.exec_driver_sql("ALTER TABLE garmin_activities ADD COLUMN IF NOT EXISTS max_pace DOUBLE PRECISION;")
+                # Ensure pace columns stored as TIME and steps/vo2 as numeric
+                conn.exec_driver_sql("ALTER TABLE garmin_activities ADD COLUMN IF NOT EXISTS avg_pace TIME WITHOUT TIME ZONE;")
+                conn.exec_driver_sql("ALTER TABLE garmin_activities ADD COLUMN IF NOT EXISTS max_pace TIME WITHOUT TIME ZONE;")
                 conn.exec_driver_sql("ALTER TABLE garmin_activities ADD COLUMN IF NOT EXISTS steps INTEGER;")
                 conn.exec_driver_sql("ALTER TABLE garmin_activities ADD COLUMN IF NOT EXISTS avg_steps_per_min DOUBLE PRECISION;")
                 conn.exec_driver_sql("ALTER TABLE garmin_activities ADD COLUMN IF NOT EXISTS max_steps_per_min DOUBLE PRECISION;")
@@ -637,7 +716,7 @@ class EnhancedGarminMigrator:
             # Normalize sentinel temperature values (127) to NULL in activities
             try:
                 conn.exec_driver_sql(
-                    """
+                        """
                     UPDATE garmin_activities
                     SET 
                         avg_temperature = NULLIF(avg_temperature, 127),
@@ -1860,11 +1939,11 @@ class EnhancedGarminMigrator:
                 conn.exec_driver_sql("ALTER TABLE garmin_activities ALTER COLUMN activity_id TYPE BIGINT;")
                 conn.exec_driver_sql("ALTER TABLE garmin_activities ADD COLUMN IF NOT EXISTS max_stress INTEGER;")
                 conn.exec_driver_sql("ALTER TABLE garmin_activities ADD COLUMN IF NOT EXISTS avg_stress DOUBLE PRECISION;")
-                conn.exec_driver_sql("ALTER TABLE garmin_activities ADD COLUMN IF NOT EXISTS hr_zone1 INTEGER;")
-                conn.exec_driver_sql("ALTER TABLE garmin_activities ADD COLUMN IF NOT EXISTS hr_zone2 INTEGER;")
-                conn.exec_driver_sql("ALTER TABLE garmin_activities ADD COLUMN IF NOT EXISTS hr_zone3 INTEGER;")
-                conn.exec_driver_sql("ALTER TABLE garmin_activities ADD COLUMN IF NOT EXISTS hr_zone4 INTEGER;")
-                conn.exec_driver_sql("ALTER TABLE garmin_activities ADD COLUMN IF NOT EXISTS hr_zone5 INTEGER;")
+                conn.exec_driver_sql("ALTER TABLE garmin_activities ADD COLUMN IF NOT EXISTS hr_zone1 TIME WITHOUT TIME ZONE;")
+                conn.exec_driver_sql("ALTER TABLE garmin_activities ADD COLUMN IF NOT EXISTS hr_zone2 TIME WITHOUT TIME ZONE;")
+                conn.exec_driver_sql("ALTER TABLE garmin_activities ADD COLUMN IF NOT EXISTS hr_zone3 TIME WITHOUT TIME ZONE;")
+                conn.exec_driver_sql("ALTER TABLE garmin_activities ADD COLUMN IF NOT EXISTS hr_zone4 TIME WITHOUT TIME ZONE;")
+                conn.exec_driver_sql("ALTER TABLE garmin_activities ADD COLUMN IF NOT EXISTS hr_zone5 TIME WITHOUT TIME ZONE;")
             
             # Connect to SQLite databases
             sqlite_conn = sqlite3.connect(str(activities_db_path))
@@ -2138,11 +2217,9 @@ class EnhancedGarminMigrator:
                             seconds = parse_duration_to_seconds(value)
                             data[model_field] = seconds
                         elif col_name in ['hrz_1_time','hrz_2_time','hrz_3_time','hrz_4_time','hrz_5_time']:
-                            seconds = parse_duration_to_seconds(value)
-                            data[model_field] = seconds
-                            # In SQLite, these are TIME strings like 'HH:MM:SS.ffffff'
-                            seconds = parse_duration_to_seconds(value)
-                            data[model_field] = seconds
+                            # store HR zone durations as TIME
+                            tobj = parse_duration_to_time_seconds(value)
+                            data[model_field] = tobj
                         elif col_name in ['calories', 'avg_hr', 'max_hr', 'cycles']:
                             data[model_field] = self.safe_int_conversion(value)
                         elif col_name in ['self_eval_feel', 'self_eval_effort']:
@@ -2209,13 +2286,13 @@ class EnhancedGarminMigrator:
                                         if fv is not None:
                                             data[mapped] = fv
                                     elif k in ['avg_pace','avg_moving_pace','max_pace']:
-                                        # convert to minutes per km
-                                        pace = parse_pace_to_min_per_km(val)
-                                        if pace is not None:
+                                        # convert to TIME per km
+                                        tval = parse_pace_to_time(val)
+                                        if tval is not None:
                                             if k == 'avg_pace':
-                                                data['avg_pace'] = pace
+                                                data['avg_pace'] = tval
                                             elif k == 'max_pace':
-                                                data['max_pace'] = pace
+                                                data['max_pace'] = tval
                                     elif k == 'avg_step_length':
                                         sl = normalize_step_length_to_meters(val)
                                         if sl is not None:
@@ -2238,6 +2315,14 @@ class EnhancedGarminMigrator:
                                                 data[k] = float(val)
                                             except Exception:
                                                 pass
+                                    elif k in ['avg_steps_per_min', 'max_steps_per_min']:
+                                        # Steps-per-minute metrics from views: store as float
+                                        try:
+                                            fv = float(val) if val is not None else None
+                                            if fv is not None:
+                                                data[k] = fv
+                                        except Exception:
+                                            pass
                                     elif k == 'vo2_max':
                                         try:
                                             data['vo2_max'] = float(val) if val is not None else None
@@ -2268,19 +2353,35 @@ class EnhancedGarminMigrator:
                     
                     # Calculate pace if we have distance and time and not present from views
                     if data.get('distance') and data.get('moving_time') and data['distance'] > 0 and data['moving_time'] > 0 and not data.get('avg_pace'):
-                        pace_seconds_per_meter = data['moving_time'] / data['distance']
-                        data['avg_pace'] = pace_seconds_per_meter * 1000 / 60  # min/km
+                        pace_seconds = (data['moving_time'] / data['distance']) * 1000.0
+                        # pace_seconds is seconds per km
+                        data['avg_pace'] = seconds_to_time_obj(pace_seconds)
                     
                     # Remove deprecated fields that are no longer in the schema
                     data.pop('cycles', None)
 
-                    # Upsert activity
-                    stmt = insert(GarminActivity).values(**data)
-                    stmt = stmt.on_conflict_do_update(
-                        index_elements=['activity_id'],
-                        set_={k: getattr(stmt.excluded, k) for k in data.keys() if k != 'activity_id'}
-                    )
-                    session.execute(stmt)
+                    # Upsert activity -- but first filter out any keys that the target
+                    # PostgreSQL table doesn't actually have (prevents errors when
+                    # source SQLite has deprecated columns like avg_cadence).
+                    try:
+                        with self.engine.begin() as conn:
+                            res = conn.exec_driver_sql("SELECT column_name FROM information_schema.columns WHERE table_name='garmin_activities';")
+                            allowed_columns = {r[0] for r in res.fetchall()}
+                    except Exception:
+                        # If we cannot query columns for any reason, fall back to inserting as-is
+                        allowed_columns = set(data.keys())
+
+                    filtered = {k: v for k, v in data.items() if k in allowed_columns}
+                    if 'activity_id' not in filtered:
+                        # Shouldn't happen, skip this row if activity_id was lost
+                        logger.warning(f"Skipping activity insert: activity_id missing after filtering (orig keys: {list(data.keys())})")
+                    else:
+                        stmt = insert(GarminActivity).values(**filtered)
+                        stmt = stmt.on_conflict_do_update(
+                            index_elements=['activity_id'],
+                            set_={k: getattr(stmt.excluded, k) for k in filtered.keys() if k != 'activity_id'}
+                        )
+                        session.execute(stmt)
                     migrated_count += 1
                     
                     # Commit in batches

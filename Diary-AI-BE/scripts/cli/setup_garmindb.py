@@ -1,32 +1,32 @@
 #!/usr/bin/env python3
 """Interactive setup script for GarminDb.
 
-Funkcjonalność:
-1. Sprawdza wersję Pythona.
-2. Instaluje / aktualizuje pakiet garmindb (opcjonalnie z flagą --upgrade).
-3. Tworzy katalog ~/.GarminDb jeśli nie istnieje.
-4. Tworzy / aktualizuje plik GarminConnectConfig.json pytając interaktywnie o:
+Functionality:
+1. Checks Python version.
+2. Installs/updates the garmindb package (optionally with the --upgrade flag).
+3. Creates the ~/.GarminDb directory if it does not exist.
+4. Creates/updates the GarminConnectConfig.json file by interactively asking for:
    - username
-   - password (ukryte)
-   - datę początkową (jedna data użyta dla kilku pól) lub osobne daty jeśli użytkownik wybierze
-5. Opcjonalnie umożliwia zapis hasła w osobnym pliku (password_file) zamiast wprost w JSON.
-6. Opcjonalnie uruchamia: pełne pobranie (--all --download --import --analyze) lub tylko najnowsze (--latest).
+   - password (hidden)
+   - start date (use one date for several fields) or separate dates if the user chooses
+5. Optionally allows saving the password in a separate file (password_file) instead of storing it directly in JSON.
+6. Optionally runs: full fetch (--all --download --import --analyze) or only the latest (--latest).
 
-Bezpieczeństwo:
-- Hasło NIE jest wyświetlane.
-- Jeśli wybierzesz password_file ustawimy secure_password=false (zgodnie z przykładem) i wskażemy ścieżkę.
-- Plik z hasłem otrzyma prawa 600.
+Security:
+- Password is NOT displayed.
+- If you choose password_file we set secure_password=false (as in the example) and point to its path.
+- The password file will be chmod 600.
 
-Uruchomienie:
+Usage:
     python scripts/setup_garmindb.py
 
-Możesz też przekazać argumenty aby pominąć interakcję:
+You can also pass arguments to skip interaction:
     python scripts/setup_garmindb.py \
         --username me@example.com \
         --start-date 11/01/2024 \
         --latest
 
-Zobacz --help dla pełnej listy.
+See --help for the full list.
 """
 from __future__ import annotations
 import argparse
@@ -72,7 +72,7 @@ def success(msg: str):
 
 
 def run_cmd(cmd: list[str], check: bool = True):
-    info("Uruchamiam: " + " ".join(cmd))
+    info("Running: " + " ".join(cmd))
     result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     print(result.stdout)
     if check and result.returncode != 0:
@@ -82,7 +82,7 @@ def run_cmd(cmd: list[str], check: bool = True):
 
 def ensure_python_version(min_major=3, min_minor=8):
     if sys.version_info < (min_major, min_minor):
-        error(f"Wymagana wersja >= {min_major}.{min_minor}, wykryto {sys.version.split()[0]}")
+        error(f"Required version >= {min_major}.{min_minor}, detected {sys.version.split()[0]}")
         raise SystemExit(1)
     success(f"Python {sys.version.split()[0]} OK")
 
@@ -95,22 +95,22 @@ def install_garmindb(upgrade: bool):
         installed = False
 
     if not installed:
-        info("Pakiet garmindb nie jest zainstalowany. Instaluję...")
+        info("garmindb package is not installed. Installing...")
         run_cmd([sys.executable, "-m", "pip", "install", "garmindb"]) 
-        success("garmindb zainstalowany")
+        success("garmindb installed")
     else:
-        success("garmindb już zainstalowany")
+        success("garmindb already installed")
         if upgrade:
-            info("Aktualizuję garmindb do najnowszej wersji...")
+            info("Upgrading garmindb to the latest version...")
             run_cmd([sys.executable, "-m", "pip", "install", "--upgrade", "garmindb"]) 
-            success("garmindb zaktualizowany")
+            success("garmindb upgraded")
 
 
 def valid_date(date_str: str) -> str:
     try:
         datetime.strptime(date_str, "%m/%d/%Y")
     except ValueError:
-        raise argparse.ArgumentTypeError("Data musi być w formacie MM/DD/YYYY (np. 11/01/2024)")
+        raise argparse.ArgumentTypeError("Date must be in format MM/DD/YYYY (e.g., 11/01/2024)")
     return date_str
 
 
@@ -120,7 +120,7 @@ def load_existing_config() -> Dict[str, Any] | None:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
-            warn(f"Nie udało się wczytać istniejącej konfiguracji: {e}")
+            warn(f"Failed to load existing configuration: {e}")
     return None
 
 
@@ -134,7 +134,7 @@ def prompt_bool(question: str, default: bool = True) -> bool:
             return True
         if ans in ("n", "no", "f", "false"):
             return False
-        print("Proszę odpowiedzieć y lub n.")
+        print("Please answer y or n.")
 
 
 def build_config(
@@ -154,7 +154,7 @@ def build_config(
     elif individual_dates:
         dates.update(individual_dates)
     else:
-        raise ValueError("Brak dat startowych")
+        raise ValueError("Missing start dates")
 
     config: Dict[str, Any] = {
         "db": {"type": "sqlite"},
@@ -205,7 +205,7 @@ def build_config(
 def write_password_file(password: str, path: Path):
     path.write_text(password + "\n", encoding="utf-8")
     os.chmod(path, 0o600)
-    success(f"Zapisano plik hasła: {path} (chmod 600)")
+    success(f"Password file saved: {path} (chmod 600)")
 
 
 def write_config(config: Dict[str, Any]):
@@ -213,10 +213,10 @@ def write_config(config: Dict[str, Any]):
     if CONFIG_FILE.exists():
         backup = CONFIG_FILE.with_suffix(".bak")
         CONFIG_FILE.replace(backup)
-        info(f"Istniejący config zbackupowany do {backup}")
+        info(f"Existing config backed up to {backup}")
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=4)
-    success(f"Config zapisany: {CONFIG_FILE}")
+    success(f"Config saved: {CONFIG_FILE}")
 
 
 def run_garmindb(full: bool, latest: bool):
@@ -225,27 +225,27 @@ def run_garmindb(full: bool, latest: bool):
     args = [sys.executable, "-m", "garmindb.garmindb_cli", "--all", "--download", "--import", "--analyze"]
     if latest:
         args.append("--latest")
-    info("Uruchamiam wstępne pobieranie danych garmindb...")
+    info("Starting initial garmindb data fetch...")
     try:
         run_cmd(args, check=True)
-        success("Proces garmindb zakończony")
+        success("garmindb process finished")
     except SystemExit:
-        error("Błąd podczas uruchamiania garmindb. Sprawdź logi.")
+        error("Error while running garmindb. Check logs.")
 
 
 def parse_args():
     p = argparse.ArgumentParser(description="Interactive GarminDb setup")
     p.add_argument("--username")
-    p.add_argument("--password")  # niezalecane (lepiej interaktywnie / plik)
-    p.add_argument("--start-date", dest="start_date", type=valid_date, help="Jedna data MM/DD/YYYY dla wszystkich pól startowych")
-    p.add_argument("--individual-dates", action="store_true", help="Pozwól wprowadzić osobne daty dla weight/sleep/rhr/monitoring")
+    p.add_argument("--password")  # not recommended (prefer interactive / password file)
+    p.add_argument("--start-date", dest="start_date", type=valid_date, help="Single date MM/DD/YYYY for all start fields")
+    p.add_argument("--individual-dates", action="store_true", help="Allow entering separate dates for weight/sleep/rhr/monitoring")
     p.add_argument("--download-latest-activities", type=int, default=25)
     p.add_argument("--download-all-activities", type=int, default=1000)
     p.add_argument("--use-password-file", action="store_true")
     p.add_argument("--password-file", type=Path, default=DEFAULT_PASSWORD_FILE)
-    p.add_argument("--full", action="store_true", help="Po konfiguracji wykonaj pełny run (all + latest dataset)")
-    p.add_argument("--latest", action="store_true", help="Po konfiguracji dodaj flagę --latest do runu (działa z --full)")
-    p.add_argument("--upgrade", action="store_true", help="Wymuś pip install --upgrade garmindb")
+    p.add_argument("--full", action="store_true", help="After setup, perform a full run (all + latest dataset)")
+    p.add_argument("--latest", action="store_true", help="After setup, also add --latest to the run (works with --full)")
+    p.add_argument("--upgrade", action="store_true", help="Force pip install --upgrade garmindb")
     return p.parse_args()
 
 
@@ -256,25 +256,25 @@ def main():
 
     existing = load_existing_config()
     if existing:
-        info("Znaleziono istniejący config. Zostanie utworzony nowy na podstawie Twoich odpowiedzi.")
+        info("Existing config found. A new one will be created based on your answers.")
 
-    username = args.username or input("Podaj Garmin username (email): ").strip()
+    username = args.username or input("Enter Garmin username (email): ").strip()
     while not username:
-        username = input("(Wymagane) Podaj Garmin username (email): ").strip()
+        username = input("(Required) Enter Garmin username (email): ").strip()
 
     if args.use_password_file:
-        password = args.password or getpass("Podaj hasło (nie będzie zapisane w JSON, utworzony zostanie plik): ")
+        password = args.password or getpass("Enter password (it will not be stored in JSON; a file will be created): ")
     else:
-        password = args.password or getpass("Podaj hasło (zostanie zapisane w JSON - NIEZALECANE): ")
+        password = args.password or getpass("Enter password (it will be stored in JSON - NOT RECOMMENDED): ")
 
-    # Daty
+    # Dates
     unified_start_date: str | None = None
     individual_dates: Dict[str, str] | None = None
 
     if args.individual_dates:
         individual_dates = {}
         for field in DATE_FIELDS:
-            prompt = f"Podaj {field} (MM/DD/YYYY): "
+            prompt = f"Enter {field} (MM/DD/YYYY): "
             while True:
                 v = input(prompt).strip()
                 try:
@@ -283,16 +283,16 @@ def main():
                 except argparse.ArgumentTypeError as e:
                     print(e)
     else:
-        unified_start_date = args.start_date or input("Podaj start date (MM/DD/YYYY) dla wszystkich pól: ").strip()
+        unified_start_date = args.start_date or input("Enter start date (MM/DD/YYYY) for all fields: ").strip()
         while True:
             try:
                 unified_start_date = valid_date(unified_start_date)
                 break
             except argparse.ArgumentTypeError as e:
                 print(e)
-                unified_start_date = input("Spróbuj ponownie (MM/DD/YYYY): ").strip()
+                unified_start_date = input("Try again (MM/DD/YYYY): ").strip()
 
-    use_pw_file = args.use_password_file or prompt_bool("Zapisać hasło w osobnym pliku (zalecane)?", True) if args.password is None else args.use_password_file
+    use_pw_file = args.use_password_file or prompt_bool("Save password in a separate file (recommended)?", True) if args.password is None else args.use_password_file
     pw_file = args.password_file if use_pw_file else None
 
     config = build_config(
@@ -308,27 +308,27 @@ def main():
 
     if use_pw_file and password:
         write_password_file(password, pw_file)  # type: ignore[arg-type]
-        # Usuń hasło z pamięci (best effort)
+        # Remove password from memory (best effort)
         password = None  # noqa: F841
 
     write_config(config)
 
-    # Opcjonalne pierwsze uruchomienie
-    if args.full or prompt_bool("Czy chcesz teraz uruchomić pełny import (--all --download --import --analyze)?", True):
-        latest = args.latest or prompt_bool("Dodać również --latest?", True)
+    # Optional first run
+    if args.full or prompt_bool("Do you want to run a full import now (--all --download --import --analyze)?", True):
+        latest = args.latest or prompt_bool("Also add --latest?", True)
         run_garmindb(full=True, latest=latest)
     else:
-        info("Pominięto pierwszy run. Możesz ręcznie uruchomić później:")
+        info("Skipped the first run. You can run it manually later:")
         print("  python -m garmindb.garmindb_cli --all --download --import --analyze --latest")
 
-    success("Konfiguracja zakończona.")
-    print("Sugestie:")
+    success("Configuration completed.")
+    print("Suggestions:")
     print("  - Backup DB: python -m garmindb.garmindb_cli --backup")
-    print("  - Aktualizacja: pip install --upgrade garmindb")
+    print("  - Update: pip install --upgrade garmindb")
 
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        warn("Przerwano przez użytkownika.")
+        warn("Interrupted by user.")

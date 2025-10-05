@@ -20,6 +20,7 @@ import Gym from './pages/Gym';
 import GymWorkouts from './pages/GymWorkouts';
 import Insights from './pages/Insights';
 import Settings from './pages/Settings';
+import Assistant from './pages/Assistant';
 import { HealthDataProvider } from './context/HealthDataContext';
 import './App.css';
 
@@ -91,6 +92,7 @@ function App() {
                   <Route path="/gym/workouts" element={<GymWorkouts />} />
                   <Route path="/insights" element={<Insights />} />
                   <Route path="/settings" element={<Settings />} />
+                  <Route path="/assistant" element={<Assistant />} />
                 </Routes>
               </div>
             </main>

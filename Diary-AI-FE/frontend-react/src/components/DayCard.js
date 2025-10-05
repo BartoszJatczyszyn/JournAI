@@ -1,13 +1,13 @@
 import React from 'react';
 
 /*
-  DayCard: kolorowe tło zależne od composite/recovery/mood/energy.
-  Strategia koloru:
-    - jeśli jest recovery_score -> mapujemy 0..100 na gradient czerwony->zielony
-    - fallback: średnia (mood, energy_level, sleep_quality_manual) \in 0..10 -> kolor
-  Parametry:
+  DayCard: background color depends on composite/recovery/mood/energy.
+  Color strategy:
+    - if recovery_score exists -> map 0..100 to a red->green gradient
+    - fallback: average (mood, energy_level, sleep_quality_manual) \in 0..10 -> color
+  Props:
     day: string
-    journal: object (z polami)
+    journal: object (with fields)
     recoveryScore?: number
     children: content
 */

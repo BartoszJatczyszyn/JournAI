@@ -8,6 +8,7 @@ import Sparkline from '../components/Sparkline';
 import useActivityAggregates from '../hooks/useActivityAggregates';
 import MetricCard from '../components/MetricCard';
 import SegmentedControl from '../components/SegmentedControl';
+import { formatPaceMinPerKm } from '../utils/timeUtils';
 // Advanced running-specific analytics (trend comparison, predictions, simulations)
 // have been moved to the dedicated Running page.
 
@@ -99,16 +100,14 @@ const Activity = () => {
   }, [periodActivities]);
 
   const {
-    todaySteps,
-    todayActivities,
-    todayDistance,
-    todayCalories,
+  todaySteps,
     weeklySteps,
     weeklyDistance,
   // activeDays intentionally unused in this view
-    last14DaysSeries,
-    weeklyGroups
-  } = useActivityAggregates(periodActivities);
+    lastNDaysSeries,
+    weeklyGroups,
+    pickSteps
+  } = useActivityAggregates(periodActivities, { lastNDays: Math.min(periodDays, 90) });
 
   // If weeklyGroups lack steps (aggregated from activities), try to fill steps
   // from the health dashboard window data (dashboardData.windowData) as a fallback.
@@ -158,43 +157,28 @@ const Activity = () => {
     }
   }, [weeklyGroups, dashboardData]);
 
-  // derive today's total duration in minutes from today's activities
-  const todayDuration = useMemo(() => {
-    try {
-      const arr = (todayActivities || []);
-      return arr.reduce((s, a) => s + (Number(a.duration_min) || 0), 0);
-    } catch (e) { return 0; }
-  }, [todayActivities]);
 
   // Fallback: if activity objects lack step data, derive from health dashboard daily entries
-  const { fallbackTodaySteps, fallbackWeeklySteps } = React.useMemo(() => {
-    if (todaySteps > 0 && weeklySteps > 0) return { fallbackTodaySteps: 0, fallbackWeeklySteps: 0 };
+  const { fallbackTodaySteps } = React.useMemo(() => {
+    if (todaySteps > 0 && weeklySteps > 0) return { fallbackTodaySteps: 0 };
     const rows = (dashboardData?.healthData?.all) || (dashboardData?.windowData) || [];
     if (!Array.isArray(rows) || rows.length === 0) return { fallbackTodaySteps: 0, fallbackWeeklySteps: 0 };
     const todayKey = new Date().toISOString().slice(0,10);
     let todayVal = 0;
-    const last7Keys = new Set();
-    for (let i=0;i<7;i++) {
-      const d = new Date();
-      d.setDate(d.getDate()-i);
-      last7Keys.add(d.toISOString().slice(0,10));
-    }
-    let weeklySum = 0;
     rows.forEach(r => {
       const rawDate = r.day || r.date || r.timestamp || r.day_date;
       if (!rawDate) return;
       const key = (typeof rawDate === 'string' ? rawDate : new Date(rawDate).toISOString()).slice(0,10);
       const stepsVal = Number(r.steps ?? r.total_steps ?? r.step_count ?? r.daily_steps ?? r.totalSteps ?? r.stepCount ?? 0) || 0;
       if (key === todayKey) todayVal = Math.max(todayVal, stepsVal); // if multiple entries, take max
-      if (last7Keys.has(key)) weeklySum += stepsVal;
     });
-    return { fallbackTodaySteps: todaySteps > 0 ? 0 : todayVal, fallbackWeeklySteps: weeklySteps > 0 ? 0 : weeklySum };
+    return { fallbackTodaySteps: todaySteps > 0 ? 0 : todayVal };
   }, [todaySteps, weeklySteps, dashboardData]);
 
   const displayTodaySteps = todaySteps > 0 ? todaySteps : fallbackTodaySteps;
-  const displayWeeklySteps = weeklySteps > 0 ? weeklySteps : fallbackWeeklySteps;
   const [sparkMetric, setSparkMetric] = useState('distance'); // 'distance' | 'steps' | 'calories'
-  const [weeksRange /*, setWeeksRange */] = useState(8); // can be 4 / 8 / 12
+  const initialWeeks = Math.min(Math.max(1, Math.ceil(periodDays / 7)), 52);
+  const [weeksRange /*, setWeeksRange */] = useState(initialWeeks); // adapts to selected period (weeks)
   const [weeklySortKey, setWeeklySortKey] = useState('week');
   const [weeklySortDir, setWeeklySortDir] = useState('asc');
 
@@ -257,6 +241,60 @@ const Activity = () => {
       return true;
     });
   }, [periodActivities, filterSport, search]);
+
+  // Period-level aggregates (adapt to selected periodDays)
+  const periodTotals = useMemo(() => {
+    try {
+      const totals = { distance: 0, durationMin: 0, calories: 0, steps: 0 };
+      periodActivities.forEach(a => {
+        totals.distance += Number(a.distance_km) || 0;
+        totals.durationMin += Number(a.duration_min) || 0;
+        totals.calories += Number(a.calories) || 0;
+        const s = pickSteps ? pickSteps(a) : null;
+        totals.steps += (s != null ? s : 0);
+      });
+      return totals;
+    } catch (e) {
+      return { distance:0, durationMin:0, calories:0, steps:0 };
+    }
+  }, [periodActivities, pickSteps]);
+
+  // Fallback: if activities don't contain steps, try to derive period steps from dashboardData rows
+  const periodStepsFallback = useMemo(() => {
+    try {
+      const rows = (dashboardData?.healthData?.all) || (dashboardData?.windowData) || [];
+      if (!Array.isArray(rows) || rows.length === 0) return 0;
+      const now = Date.now();
+      const cutoff = now - periodDays * 24 * 60 * 60 * 1000;
+      let sum = 0;
+      for (const r of rows) {
+        const rawDate = r.day || r.date || r.timestamp || r.day_date;
+        if (!rawDate) continue;
+        const d = new Date(rawDate);
+        if (isNaN(d.getTime())) continue;
+        const t = d.getTime();
+        if (t < cutoff || t > now) continue;
+        const stepsVal = Number(r.steps ?? r.total_steps ?? r.step_count ?? r.daily_steps ?? r.totalSteps ?? r.stepCount ?? 0) || 0;
+        sum += stepsVal;
+      }
+      return sum;
+    } catch (e) {
+      return 0;
+    }
+  }, [dashboardData, periodDays]);
+
+  const avgPerDay = useMemo(() => {
+    const days = Math.max(1, Number(periodDays) || 1);
+    const stepsTotal = (periodTotals.steps && periodTotals.steps > 0) ? periodTotals.steps : periodStepsFallback;
+    return {
+      distance: periodTotals.distance / days,
+      durationMin: periodTotals.durationMin / days,
+      steps: Math.round((stepsTotal || 0) / days),
+      calories: periodTotals.calories / days
+    };
+  }, [periodTotals, periodDays, periodStepsFallback]);
+
+  const stepsTotal = (periodTotals.steps && periodTotals.steps > 0) ? periodTotals.steps : (periodStepsFallback || 0);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -330,40 +368,40 @@ const Activity = () => {
           {/* Overview Metrics (Sleep-style) */}
           <div className="overview-metrics">
             <MetricCard
-              title="Active Minutes Today"
-              value={todayDuration.toFixed(0)}
+              title={`Active Minutes (${periodDays}d)`}
+              value={periodTotals.durationMin.toFixed(0)}
               unit="min"
               icon="⏱️"
               color="green"
-              subtitle={`${displayTodaySteps.toLocaleString()} steps · ${todayCalories || 0} kcal`}
+              subtitle={`Avg ${avgPerDay.durationMin.toFixed(0)} min/day · ${periodTotals.calories.toFixed(0)} kcal total`}
               trend={0}
-              tooltip="Sum of activity durations recorded today"
+              tooltip={`Sum of activity durations over the last ${periodDays} days`}
             />
             <MetricCard
-              title="Distance Today"
-              value={todayDistance.toFixed(2)}
+              title={`Distance (${periodDays}d)`}
+              value={periodTotals.distance.toFixed(2)}
               unit="km"
               icon="📏"
               color="indigo"
-              subtitle="Recorded distance"
+              subtitle={`Avg ${avgPerDay.distance.toFixed(2)} km/day`}
               trend={0}
             />
             <MetricCard
-              title="Weekly Distance"
-              value={weeklyDistance.toFixed(1)}
-              unit="km"
-              icon="📆"
+              title={`Workouts (${periodDays}d)`}
+              value={periodActivities.length}
+              unit=""
+              icon="🏋️"
               color="purple"
-              subtitle={`Goal ${weeklyDistanceGoal} km`}
-              trend={goalProgressDistance - 100}
+              subtitle={`${periodTotals.durationMin.toFixed(0)} min total · Avg ${periodActivities.length ? (periodTotals.durationMin / periodActivities.length).toFixed(0) : '0'} min/session`}
+              trend={0}
             />
             <MetricCard
               title="Avg Steps / Day"
-              value={displayWeeklySteps > 0 ? (displayWeeklySteps/7).toFixed(0) : (displayTodaySteps ? Math.max(0, Math.round(displayTodaySteps)) : 0)}
+              value={avgPerDay.steps}
               unit=""
               icon="📊"
               color="blue"
-              subtitle="Last 7 days avg"
+              subtitle={`${stepsTotal.toLocaleString()} steps total · ${periodDays}d window`}
               trend={0}
             />
           </div>
@@ -410,7 +448,9 @@ const Activity = () => {
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <span className="text-gray-600 dark:text-gray-400 text-sm font-medium">14-Day Trend</span>
+                  {/* Ensure series is explicitly chronological (oldest -> newest) so newest appears on the right */}
+                  {/**/}
+                  <span className="text-gray-600 dark:text-gray-400 text-sm font-medium">{lastNDaysSeries.length}-Day Trend</span>
                   <div>
                     <SegmentedControl
                       options={[{value:'distance', label:'Distance'},{value:'steps', label:'Steps'},{value:'calories', label:'Calories'}]}
@@ -422,12 +462,16 @@ const Activity = () => {
                   </div>
                 </div>
                 <div className="relative">
+                  {/* use explicit chronological ordering to guarantee left->right oldest->newest */}
                   <Sparkline
-                    data={last14DaysSeries.map(p => ({ value: p[sparkMetric] }))}
+                    data={[...lastNDaysSeries].sort((a,b) => new Date(a.date) - new Date(b.date)).map(p => ({ value: p[sparkMetric] }))}
                     height={46}
                     stroke={sparkMetric==='distance' ? '#10b981' : sparkMetric==='steps' ? '#6366f1' : '#f59e0b'}
                     fill={sparkMetric==='calories' ? 'rgba(245,158,11,0.18)' : sparkMetric==='steps' ? 'rgba(99,102,241,0.15)' : 'rgba(16,185,129,0.15)'}
-                    tooltipFormatter={(pt,i)=>`${last14DaysSeries[i].date}: ${sparkMetric==='distance'? pt.value.toFixed(2)+' km' : sparkMetric==='steps'? pt.value.toLocaleString()+' steps' : pt.value.toLocaleString()+' kcal'}`}
+                    tooltipFormatter={(pt,i)=>{
+                      const series = [...lastNDaysSeries].sort((a,b) => new Date(a.date) - new Date(b.date));
+                      return `${series[i]?.date || ''}: ${sparkMetric==='distance'? pt.value.toFixed(2)+' km' : sparkMetric==='steps'? pt.value.toLocaleString()+' steps' : pt.value.toLocaleString()+' kcal'}`;
+                    }}
                   />
                 </div>
               </div>
@@ -498,8 +542,8 @@ const Activity = () => {
                         <td className="py-2 px-3 font-medium text-gray-900 dark:text-gray-100">{typeof w.steps === 'number' ? w.steps.toLocaleString() : '-'}</td>
                         <td className="py-2 px-3 font-medium text-gray-900 dark:text-gray-100">{typeof w.calories === 'number' ? w.calories.toLocaleString() : '-'}</td>
                         <td className="py-2 px-3">{typeof w.durationMin === 'number' ? w.durationMin.toFixed(0) : '-'}</td>
-                        <td className="py-2 px-3">{w.avgPace != null ? w.avgPace.toFixed(2) : '-'}</td>
-                        <td className="py-2 px-3">{w.rollingAvgPace4 != null ? w.rollingAvgPace4.toFixed(2) : '-'}</td>
+                        <td className="py-2 px-3">{w.avgPace != null ? formatPaceMinPerKm(w.avgPace) : '-'}</td>
+                        <td className="py-2 px-3">{w.rollingAvgPace4 != null ? formatPaceMinPerKm(w.rollingAvgPace4) : '-'}</td>
                         <td className={`py-2 px-3 ${w.paceImprovementPct != null ? (w.paceImprovementPct > 0 ? 'text-green-600' : w.paceImprovementPct < 0 ? 'text-red-600' : 'text-gray-500') : 'text-gray-400'}`}>{w.paceImprovementPct != null ? `${w.paceImprovementPct>0?'+':''}${w.paceImprovementPct.toFixed(1)}%` : '—'}</td>
                         <td className="py-2 px-3">{w.avgHr != null ? w.avgHr.toFixed(0) : '-'}</td>
                         <td className="py-2 px-3 font-medium text-gray-900 dark:text-gray-100">{typeof w.trainingLoad === 'number' ? w.trainingLoad.toFixed(0) : '-'}</td>

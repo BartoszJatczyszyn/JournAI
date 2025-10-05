@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Iterator, Mapping
 import os
 
-from utils import DbConfig, load_env
+from utils import DbConfig, load_env, get_logger
 
 # Detect driver preference
 _DEFAULT_DRIVER = os.getenv("DB_DRIVER") or "psycopg"
@@ -145,4 +145,19 @@ def execute_query(
             # Rollback on any error for safety
             with suppress(Exception):  # type: ignore[name-defined]
                 conn.rollback()
-            return None
+            # Log exception details to help debugging (includes traceback)
+            try:
+                LOGGER = get_logger("db")
+                LOGGER.exception("DB query failed: %s | params=%s", query, params)
+            except Exception:
+                # Best-effort logging; don't raise from logging failures
+                pass
+            # In development, allow forcing an exception to surface via env var
+            if os.getenv("DB_DEBUG_RAISE"):
+                raise
+            # Return safe defaults so callers don't receive None unexpectedly
+            if fetch_all:
+                return []
+            if fetch_one:
+                return None
+            return False

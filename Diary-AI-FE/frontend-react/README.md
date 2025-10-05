@@ -1,79 +1,79 @@
 # 🏥 Garmin Health Analytics - React Frontend
 
-Nowoczesny frontend w React dla systemu Enhanced Garmin Health Analytics z zaawansowaną analityką AI.
+A modern React frontend for the Enhanced Garmin Health Analytics system with advanced AI analytics.
 
-## 🚀 Funkcjonalności
+## 🚀 Features
 
 ### 📊 Dashboard
-- Przegląd kluczowych metryk zdrowotnych
-- Interaktywne wykresy trendów
-- Macierz korelacji między metrykami
+- Overview of key health metrics
+- Interactive trend charts
+- Correlation matrix between metrics
 - Statystyki danych w czasie rzeczywistym
 
 ### 🧠 Enhanced Analytics
-- **Zaawansowane korelacje**: Analiza wielowymiarowych relacji (Pearson, Spearman, Kendall)
-- **Analiza klastrów**: AI-powered wykrywanie wzorców zdrowotnych
-- **Wzorce temporalne**: Analiza wzorców według dni tygodnia i trendów tygodniowych
-- **Analiza regeneracji**: Kompleksowa ocena odzyskiwania sił
+- **Advanced correlations**: Analiza wielowymiarowych relacji (Pearson, Spearman, Kendall)
+- **Cluster analysis**: AI-powered detection of health patterns
+- **Temporal patterns**: Analysis of patterns by days of the week and weekly trends
+- **Recovery analysis**: Comprehensive assessment of recovery
 
-### 🔮 Predykcje
-- Prognozy poziomu energii (7 dni)
-- Prognozy jakości snu
-- Prognozy nastroju
-- Trendy zdrowotne z oceną kierunku
+### 🔮 Predictions
+- 7-day energy level forecasts
+- Sleep quality forecasts
+- Mood forecasts
+- Health trends with direction assessment
 
-### 💡 Personalizowane Insights
-- Spersonalizowane rekomendacje
-- Optymalizacja metryk zdrowotnych
-- Porównania okresów czasowych
+### 💡 Personalized insights
+- Personalized recommendations
+- Optimization of health metrics
+- Time-period comparisons
 
-### 🔬 Specjalistyczne Analizy
-- **Analiza snu**: Efektywność, timing, wpływ na wydajność
-- **Analiza stresu**: Wzorce godzinowe, triggery, regeneracja
-- **Analiza aktywności**: Intensywność, konsystencja, korelacje
+### 🔬 Specialized analyses
+- **Sleep analysis**: Efficiency, timing, impact on performance
+- **Stress analysis**: Hourly patterns, triggers, recovery
+- **Activity analysis**: Intensity, consistency, correlations
 
-## 🛠️ Instalacja
+## 🛠️ Installation
 
-### Wymagania
+### Requirements
 - Node.js 18+ (LTS; zalecane >=18.18.0 lub >=20) 
-- npm lub yarn
-- Backend API uruchomiony na porcie 5002
+- npm or yarn
+- Backend API running on port 5002
 
-### Kroki instalacji
+### Installation steps
 
-1. **Przejdź do katalogu frontend-react:**
+1. **Go to the frontend-react directory:**
    ```bash
    cd AI/frontend-react
    ```
 
-2. **Zainstaluj zależności:**
+2. **Install dependencies:**
    ```bash
    npm install
    # lub
    yarn install
    ```
 
-3. **Skonfiguruj zmienne środowiskowe (opcjonalne):**
+3. **Configure environment variables (optional):**
    ```bash
-   # Utwórz plik .env w katalogu frontend-react
+   # Create the .env file in the frontend-react directory
    echo "REACT_APP_API_URL=http://localhost:5002" > .env
    ```
 
-4. **Uruchom aplikację:**
+4. **Run the application:**
    ```bash
    npm start
    # lub
    yarn start
    ```
 
-5. **Otwórz w przeglądarce:**
+5. **Open in browser:**
    ```
    http://localhost:3000
    ```
 
-## 🔧 Konfiguracja
+## 🔧 Configuration
 
-### Zmienne środowiskowe
+### Environment variables
 ```bash
 # .env
 REACT_APP_API_URL=http://localhost:5002  # URL backendu API
@@ -87,19 +87,19 @@ Frontend jest skonfigurowany z proxy do backendu w `package.json`:
 }
 ```
 
-## 📱 Responsywność
+## 📱 Responsiveness
 
-Aplikacja jest w pełni responsywna i działa na:
+The application is fully responsive and works on:
 - 🖥️ Desktop (1200px+)
 - 💻 Laptop (768px - 1199px)
 - 📱 Tablet (480px - 767px)
 - 📱 Mobile (< 480px)
 
-## 🎨 Funkcjonalności UI/UX
+## 🎨 UI/UX Features
 
 ### Tryb ciemny
 - Automatyczne wykrywanie preferencji systemowych
-- Przełączanie między trybem jasnym i ciemnym
+- Switching between light and dark mode
 - Zapisywanie preferencji w localStorage
 
 ### Nawigacja
@@ -108,22 +108,22 @@ Aplikacja jest w pełni responsywna i działa na:
 - Mobilne menu hamburger
 
 ### Komponenty
-- **MetricCard**: Karty metryk z trendami i animacjami
-- **HealthChart**: Wykresy zdrowotne (linia, obszar, słupki)
-- **CorrelationMatrix**: Interaktywna macierz korelacji
-- **ClusterAnalysis**: Wizualizacja wzorców AI
-- **TemporalPatterns**: Analiza wzorców czasowych
-- **RecoveryAnalysis**: Analiza regeneracji z rekomendacjami
+- **MetricCard**: Metric cards z trendami i animacjami
+- **HealthChart**: Health charts (line, area, bars)
+- **CorrelationMatrix**: Interactive correlation matrix
+- **ClusterAnalysis**: Visualization of AI patterns
+- **TemporalPatterns**: Temporal pattern analysis
+- **RecoveryAnalysis**: Recovery analysis z rekomendacjami
 
-### Wykresy i wizualizacje
-- **Recharts**: Biblioteka wykresów React
-- **Interaktywne tooltips**: Szczegółowe informacje przy hover
-- **Animacje**: Płynne przejścia i ładowanie danych
-- **Kolory adaptacyjne**: Automatyczne dostosowanie do trybu ciemnego
+### Charts and visualizations
+- **Recharts**: React charting library
+- **Interactive tooltips**: Detailed info on hover
+- **Animations**: Smooth transitions and data loading
+- **Adaptive colors**: Automatic adjustment to dark mode
 
-## 🔗 Integracja z Backend API
+## 🔗 Backend API Integration
 
-### Endpointy wykorzystywane:
+### Endpoints used:
 ```javascript
 // Enhanced Analytics
 /api/analytics/enhanced/comprehensive
@@ -148,53 +148,53 @@ Aplikacja jest w pełni responsywna i działa na:
 /api/insights/optimization
 ```
 
-### Obsługa błędów
-- Automatyczne retry przy błędach sieciowych
-- Graceful degradation przy braku danych
-- Toast notifications dla użytkownika
-- Fallback UI dla stanów błędów
+### Error handling
+- Automatic retries on network errors
+- Graceful degradation when data is missing
+- Toast notifications for the user
+- Fallback UI for error states
 
-## 📊 Struktura komponentów
+## 📊 Component structure
 
 ```
 src/
-├── components/           # Komponenty wielokrotnego użytku
-│   ├── Navbar.js        # Górny pasek nawigacji
-│   ├── Sidebar.js       # Boczne menu
-│   ├── MetricCard.js    # Karty metryk
-│   ├── HealthChart.js   # Wykresy zdrowotne
+├── components/           # Reusable components
+│   ├── Navbar.js        # Top navigation bar
+│   ├── Sidebar.js       # Side menu
+│   ├── MetricCard.js    # Metric cards
+│   ├── HealthChart.js   # Health charts
 │   ├── CorrelationMatrix.js  # Macierz korelacji
-│   ├── ClusterAnalysis.js    # Analiza klastrów
-│   ├── TemporalPatterns.js   # Wzorce temporalne
-│   ├── RecoveryAnalysis.js   # Analiza regeneracji
-│   ├── LoadingSpinner.js     # Komponenty ładowania
-│   └── ErrorMessage.js       # Obsługa błędów
+│   ├── ClusterAnalysis.js    # Cluster analysis
+│   ├── TemporalPatterns.js   # Temporal patterns
+│   ├── RecoveryAnalysis.js   # Recovery analysis
+│   ├── LoadingSpinner.js     # Loading components
+│   └── ErrorMessage.js       # Error handling
 ├── pages/               # Strony aplikacji
-│   ├── Dashboard.js     # Główny dashboard
-│   ├── Analytics.js     # Zaawansowana analityka
-│   ├── Predictions.js   # Prognozy
-│   ├── Sleep.js         # Analiza snu
-│   ├── Stress.js        # Analiza stresu
-│   ├── Activity.js      # Analiza aktywności
-│   ├── Insights.js      # Personalizowane insights
-│   └── Settings.js      # Ustawienia
+│   ├── Dashboard.js     # Main dashboard
+│   ├── Analytics.js     # Advanced analytics
+│   ├── Predictions.js   # Predictions
+│   ├── Sleep.js         # Sleep analysis
+│   ├── Stress.js        # Stress analysis
+│   ├── Activity.js      # Activity analysis
+│   ├── Insights.js      # Personalized insights
+│   └── Settings.js      # Settings
 ├── context/             # Context API
-│   └── HealthDataContext.js  # Zarządzanie stanem danych
-├── services/            # Usługi API
-│   └── api.js          # Konfiguracja i endpointy API
-└── App.js              # Główny komponent aplikacji
+│   └── HealthDateContext.js  # State management
+├── services/            # API services
+│   └── api.js          # Configuration i endpointy API
+└── App.js              # Main application component
 ```
 
-## 🎯 Najważniejsze funkcjonalności
+## 🎯 Key features
 
 ### 1. Real-time Analytics
-- Automatyczne odświeżanie danych
-- Live updates metryk zdrowotnych
-- Progresywne ładowanie danych
+- Automatic data refresh
+- Live updates of health metrics
+- Progressive data loading
 
 ### 2. AI-Powered Insights
 - Machine learning korelacje
-- Automatyczne wykrywanie wzorców
+- Automatic pattern detection
 - Predykcyjne analizy zdrowotne
 
 ### 3. Personalizacja
@@ -205,7 +205,7 @@ src/
 ### 4. Zaawansowane wizualizacje
 - Interaktywne wykresy
 - Macierze korelacji
-- Radar charts dla wzorców
+- Radar charts for patterns
 - Radial progress indicators
 
 ## 🚀 Deployment
@@ -242,23 +242,23 @@ CMD ["npm", "start"]
 
 ### Logi developerskie
 - Console.log dla API calls
-- Error boundaries dla komponentów
+- Error boundaries for components
 - Performance monitoring
 
-### Narzędzia deweloperskie
+### Developer tools
 - React Developer Tools
-- Redux DevTools (jeśli używane)
-- Network tab dla API calls
+- Redux DevTools (if used)
+- Network tab for API calls
 
 ## 📈 Performance
 
-### Optymalizacje
-- Lazy loading komponentów
-- Memoization dla ciężkich obliczeń
-- Virtualizacja dla dużych list
+### Optimizations
+- Lazy loading of components
+- Memoization for heavy computations
+- Virtualization for large lists
 - Code splitting
 
-### Metryki
+### Metrics
 - First Contentful Paint < 2s
 - Time to Interactive < 3s
 - Lighthouse Score > 90
@@ -266,17 +266,17 @@ CMD ["npm", "start"]
 ## 🤝 Contributing
 
 1. Fork repository
-2. Utwórz feature branch
+2. Create a feature branch
 3. Commit changes
-4. Push do branch
-5. Utwórz Pull Request
+4. Push to branch
+5. Create a Pull Request
 
-## 📄 Licencja
+## 📄 License
 
-MIT License - zobacz plik LICENSE dla szczegółów.
+MIT License - see the LICENSE file for details.
 
 ---
 
-**Utworzono przez**: Enhanced Analytics System v1.0  
-**Data**: 2024-01-14  
-**Status**: ✅ Gotowy do produkcji
+**Created by**: Enhanced Analytics System v1.0  
+**Date**: 2024-01-14  
+**Status**: ✅ Ready for production

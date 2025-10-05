@@ -6,7 +6,7 @@ Provides domain-specific insights for sleep, stress, activity, and nutrition
 
 from datetime import datetime
 import os
-from statistics import mean, stdev
+from statistics import mean, stdev, median
 import math
 
 from dotenv import load_dotenv
@@ -1044,6 +1044,838 @@ class ActivityAnalytics:
             recommendations.append("Consider recovery days after high activity - elevated RHR detected")
         
         return recommendations
+
+    def analyze_running(self, days: int = 90, start_date: str | None = None, end_date: str | None = None):
+        """Produce running-focused analytics using garmin_activities and related tables.
+
+        Extended version adds:
+          - Optional explicit date range (start_date, end_date) overriding days window (inclusive, ISO 'YYYY-MM-DD')
+          - Ascending ordered timeseries for charting (older -> newer) so newest appears on right side of X axis
+          - Extended correlation matrix including cadence, step length, vertical oscillation, ground contact, stress
+          - Multiple duo scatter datasets (distance↔pace, distance↔hr, cadence↔pace, step_length↔pace, vert_osc↔pace, ground_contact↔pace)
+          - Summary metrics (total distance, avg & median pace, avg HR, avg cadence, avg step length, load per week)
+          - Available field list for frontend dynamic chart building
+
+        Returns a dict with (superset of legacy keys):
+                            Basic validation; silently ignore if malformed (fallback to days).
+
+                            Returns keys (superset of legacy):
+                             * runs_desc: legacy descending order (most recent first)
+                             * weekly: weekly aggregates
+                             * correlations: legacy core correlations
+                             * correlations_extended: extended matrix (inline dates into SQL to avoid param-binding/date-casting issues)
+                             * summary: aggregate stats
+                             * meta: {'mode':'range'|'rolling','range':{...}}
+                             * available_fields: list of numeric fields present (non-null at least once)
+        """
+        # Build dynamic query depending on provided date range
+        params = []
+        if start_date and end_date:
+            # Basic validation; silently ignore if malformed (fallback to days)
+            try:
+                from datetime import date as _date
+                _date.fromisoformat(start_date)
+                _date.fromisoformat(end_date)
+                # Inline the date range into SQL (matches debug endpoint which returned rows)
+                date_clause = f"COALESCE(day, start_time::date) BETWEEN '{start_date}' AND '{end_date}'"
+                query = f"""
+                SELECT
+                    activity_id,
+                    name,
+                    sport,
+                    start_time,
+                    stop_time,
+                    day,
+                    distance,
+                    elapsed_time,
+                    moving_time,
+                    calories,
+                    training_load,
+                    avg_hr,
+                    max_hr,
+                    avg_speed,
+                    avg_pace,
+                    max_pace,
+                    avg_steps_per_min,
+                    avg_step_length,
+                    avg_vertical_oscillation,
+                    avg_ground_contact_time,
+                    steps,
+                    avg_steps_per_min,
+                    max_steps_per_min,
+                    vo2_max,
+                    avg_stress,
+                    max_stress
+                FROM garmin_activities
+                WHERE lower(sport) = 'running' AND {date_clause}
+                ORDER BY start_time DESC
+                """
+                mode = 'range'
+                params = None
+            except Exception:
+                # Fallback to rolling window if dates invalid
+                query = """
+                SELECT
+                    activity_id,
+                    name,
+                    sport,
+                    start_time,
+                    stop_time,
+                    day,
+                    distance,
+                    elapsed_time,
+                    moving_time,
+                    calories,
+                    training_load,
+                    avg_hr,
+                    max_hr,
+                    avg_speed,
+                    avg_pace,
+                    max_pace,
+                    avg_steps_per_min,
+                    avg_step_length,
+                    avg_vertical_oscillation,
+                    avg_ground_contact_time,
+                    steps,
+                    avg_steps_per_min,
+                    max_steps_per_min,
+                    vo2_max,
+                    avg_stress,
+                    max_stress
+                FROM garmin_activities
+                WHERE lower(sport) = 'running' AND (COALESCE(day, start_time::date) >= (CURRENT_DATE - (%s * INTERVAL '1 day')))
+                ORDER BY start_time DESC
+                """
+                params = [days]
+                mode = 'rolling'
+        else:
+            query = """
+            SELECT
+                activity_id,
+                name,
+                sport,
+                start_time,
+                stop_time,
+                day,
+                distance,
+                elapsed_time,
+                moving_time,
+                calories,
+                training_load,
+                avg_hr,
+                max_hr,
+                avg_speed,
+                avg_pace,
+                max_pace,
+                avg_steps_per_min,
+                avg_step_length,
+                avg_vertical_oscillation,
+                avg_ground_contact_time,
+                steps,
+                avg_steps_per_min,
+                max_steps_per_min,
+                vo2_max,
+                avg_stress,
+                max_stress
+            FROM garmin_activities
+            WHERE lower(sport) = 'running' AND (COALESCE(day, start_time::date) >= (CURRENT_DATE - (%s * INTERVAL '1 day')))
+            ORDER BY start_time DESC
+            """
+            params = [days]
+            mode = 'rolling'
+
+        # Normalize parameters: if params is None, pass None to execute_query
+        exec_params = None if not params else (tuple(params) if not isinstance(params, tuple) else params)
+        rows = execute_query(query, exec_params) or []
+        # --- Diagnostic: capture raw rows info to help debug why runs may be empty
+        _debug_raw_rows = []
+        try:
+            for r in (rows or [])[:5]:
+                entry = {}
+                for k, v in r.items():
+                    # serialize datetimes to iso strings for JSON-friendly debug output
+                    try:
+                        if hasattr(v, 'isoformat'):
+                            entry[k] = v.isoformat()
+                        else:
+                            entry[k] = v
+                    except Exception:
+                        entry[k] = str(v)
+                _debug_raw_rows.append(entry)
+        except Exception:
+            _debug_raw_rows = []
+        runs = []
+        _debug_row_errors = []
+        _debug_skipped_rows = 0
+        # Track how many times we had to fallback to start_time date because day was NULL
+        _fallback_day_assigned = 0
+        for r in rows:
+            try:
+                dist_m = r.get('distance')
+                dist_km = None
+                if dist_m is not None:
+                    try:
+                        dist_km = float(dist_m) / 1000.0
+                        # Filter out obviously bad distances (negative or unrealistically huge > 1000km)
+                        if dist_km < 0 or dist_km > 1000:
+                            dist_km = None
+                    except Exception:
+                        dist_km = None
+                dur_s = r.get('moving_time') if r.get('moving_time') not in (None, 0) else r.get('elapsed_time')
+                dur_min = None
+                if dur_s is not None and dur_s != 0:
+                    try:
+                        dur_min = float(dur_s) / 60.0
+                        if dur_min < 0:
+                            dur_min = None
+                    except Exception:
+                        dur_min = None
+                # avg_pace may already be stored as min/km; if avg_speed is present convert.
+                pace_min_per_km = None
+                def _pace_to_min_per_km(val):
+                    try:
+                        if val is None:
+                            return None
+                        import datetime as _dt
+                        # datetime.time from DB
+                        if isinstance(val, _dt.time):
+                            secs = val.hour*3600 + val.minute*60 + val.second
+                            return secs / 60.0
+                        # ISO8601 duration like PT4M35S or PT34M or PT1H05M30S
+                        if isinstance(val, str) and val.startswith('PT'):
+                            # Strip PT then parse tokens ending with H, M, S
+                            iso = val[2:]
+                            h = m = s = 0.0
+                            cur = ''
+                            for ch in iso:
+                                if ch.isdigit() or ch == '.':
+                                    cur += ch
+                                else:
+                                    try:
+                                        num = float(cur) if cur else 0.0
+                                    except Exception:
+                                        num = 0.0
+                                    if ch == 'H':
+                                        h = num
+                                    elif ch == 'M':
+                                        m = num
+                                    elif ch == 'S':
+                                        s = num
+                                    cur = ''
+                            secs = h*3600 + m*60 + s
+                            if secs > 0:
+                                return secs / 60.0
+                        # string like HH:MM:SS or MM:SS
+                        if isinstance(val, str):
+                            parts = val.split(':')
+                            parts = [p for p in parts if p!='']
+                            if len(parts) == 3:
+                                h = int(parts[0]); m = int(parts[1]); s = float(parts[2])
+                                secs = h*3600 + m*60 + s
+                                return secs / 60.0
+                            if len(parts) == 2:
+                                m = int(parts[0]); s = float(parts[1])
+                                secs = m*60 + s
+                                return secs / 60.0
+                            # fallback numeric string -> assume already minutes
+                            return float(val)
+                        # numeric: assume minutes (float)
+                        return float(val)
+                    except Exception:
+                        return None
+
+                raw_avg_pace = r.get('avg_pace')
+                if raw_avg_pace is not None:
+                    pace_min_per_km = _pace_to_min_per_km(raw_avg_pace)
+                elif r.get('avg_speed') is not None:
+                    try:
+                        spd = float(r.get('avg_speed'))
+                        # Detect unit heuristically: if spd < 25 assume km/h, if < 8 maybe m/s (convert)
+                        if spd <= 12:  # could be km/h typical easy runs 8-12
+                            pace_min_per_km = 60.0 / spd if spd > 0 else None
+                        elif spd < 25:  # still plausible km/h fast
+                            pace_min_per_km = 60.0 / spd if spd > 0 else None
+                        else:  # treat as m/s (unlikely but safeguard)
+                            pace_min_per_km = (1000.0 / spd) / 60.0 if spd > 0 else None
+                    except Exception:
+                        pace_min_per_km = None
+                elif dist_km is not None and dur_min:
+                    try:
+                        pace_min_per_km = dur_min / dist_km if dist_km > 0 else None
+                    except Exception:
+                        pace_min_per_km = None
+
+                # Fallback day if NULL using start_time
+                start_dt = r.get('start_time')
+                day_val = r.get('day')
+                if day_val is not None:
+                    try:
+                        day_iso = day_val.isoformat()
+                    except Exception:
+                        day_iso = str(day_val)
+                else:
+                    if start_dt:
+                        try:
+                            day_iso = start_dt.date().isoformat()
+                            _fallback_day_assigned += 1
+                        except Exception:
+                            day_iso = None
+                    else:
+                        day_iso = None
+
+                # Cast numerics safely (Decimal -> float)
+                def _cast_num(v):
+                    try:
+                        if v is None:
+                            return None
+                        return float(v)
+                    except Exception:
+                        return None
+
+                runs.append({
+                    'activity_id': r.get('activity_id'),
+                    'name': r.get('name'),
+                    'start_time': start_dt.isoformat() if start_dt else None,
+                    'day': day_iso,
+                    'distance_km': round(dist_km, 3) if dist_km is not None else None,
+                    'duration_min': round(dur_min, 1) if dur_min is not None else None,
+                    'avg_pace': round(pace_min_per_km, 3) if pace_min_per_km is not None else None,
+                    'avg_hr': _cast_num(r.get('avg_hr')),
+                    'max_hr': _cast_num(r.get('max_hr')),
+                    'calories': _cast_num(r.get('calories')),
+                    'training_load': _cast_num(r.get('training_load')),
+                    'avg_step_length_m': _cast_num(r.get('avg_step_length')),
+                    # No dedicated avg_cadence column in DB; use avg_steps_per_min as cadence proxy
+                    # (frontend previously consumed avg_cadence)
+                    'avg_steps_per_min': _cast_num(r.get('avg_steps_per_min')),
+                    'avg_vertical_oscillation': _cast_num(r.get('avg_vertical_oscillation')),
+                    'avg_ground_contact_time': _cast_num(r.get('avg_ground_contact_time')),
+                    'vo2_max': _cast_num(r.get('vo2_max')),
+                    'steps': _cast_num(r.get('steps')),
+                    'max_steps_per_min': _cast_num(r.get('max_steps_per_min')),
+                    'avg_stress': _cast_num(r.get('avg_stress')),
+                    'max_stress': _cast_num(r.get('max_stress')),
+                })
+            except Exception as _row_ex:
+                try:
+                    _debug_row_errors.append({'activity_id': r.get('activity_id'), 'error': str(_row_ex)})
+                except Exception:
+                    _debug_row_errors.append({'activity_id': None, 'error': 'row_error_unserializable'})
+                _debug_skipped_rows += 1
+                continue
+
+        # Weekly aggregation
+        weekly = {}
+        import datetime as _dt
+        def iso_week_key(day_str):
+            try:
+                d = _dt.date.fromisoformat(day_str)
+                y, w, _ = d.isocalendar()
+                return f"{y}-W{str(w).zfill(2)}"
+            except Exception:
+                return None
+
+        for rr in runs:
+            wk = iso_week_key(rr.get('day'))
+            if not wk:
+                continue
+            w = weekly.setdefault(wk, {'week': wk, 'total_distance_km': 0.0, 'pace_vals': [], 'active_days': set()})
+            if rr.get('distance_km'):
+                w['total_distance_km'] += rr['distance_km']
+            if rr.get('avg_pace') is not None:
+                w['pace_vals'].append(rr['avg_pace'])
+            if rr.get('day'):
+                w['active_days'].add(rr['day'])
+
+        weekly_out = []
+        for k, v in sorted(weekly.items(), reverse=True):
+            avg_pace = (sum(v['pace_vals']) / len(v['pace_vals'])) if v['pace_vals'] else None
+            weekly_out.append({'week': v['week'], 'total_distance_km': round(v['total_distance_km'], 2), 'avg_pace': round(avg_pace,3) if avg_pace else None, 'active_days': len(v['active_days'])})
+
+        # Correlations (pearson) between distance_km, duration_min, avg_pace, avg_hr, vo2_max (extended with training_load)
+        import math
+
+        def pearson(pairs):
+            try:
+                n = len(pairs)
+                if n < 3:
+                    return None
+                xs, ys = zip(*pairs)
+                mx = sum(xs)/n; my = sum(ys)/n
+                num = sum((x-mx)*(y-my) for x,y in pairs)
+                denx = sum((x-mx)**2 for x in xs)
+                deny = sum((y-my)**2 for y in ys)
+                denom = math.sqrt(denx*deny)
+                if denom == 0:
+                    return None
+                return round(num/denom, 3)
+            except Exception:
+                return None
+
+        fields = ['distance_km','duration_min','avg_pace','avg_hr','vo2_max','avg_steps_per_min','training_load']
+        corr_matrix = {f: {g: None for g in fields} for f in fields}
+        for i, a in enumerate(fields):
+            for j, b in enumerate(fields):
+                if j <= i:
+                    continue
+                pairs = [(r.get(a), r.get(b)) for r in runs if r.get(a) is not None and r.get(b) is not None]
+                v = pearson(pairs) if pairs else None
+                corr_matrix[a][b] = v
+                corr_matrix[b][a] = v
+
+        scatter = [{'x': r.get('distance_km'), 'y': r.get('avg_pace'), 'label': r.get('start_time')} for r in runs if r.get('distance_km') is not None and r.get('avg_pace') is not None]
+
+        # Extended correlations
+        extended_fields = ['distance_km','duration_min','avg_pace','avg_hr','vo2_max','avg_steps_per_min','training_load','avg_step_length_m','avg_vertical_oscillation','avg_ground_contact_time','avg_stress']
+        corr_ext = {f: {g: None for g in extended_fields} for f in extended_fields}
+        for i, a in enumerate(extended_fields):
+            for j, b in enumerate(extended_fields):
+                if j <= i:
+                    continue
+                pairs = [(r.get(a), r.get(b)) for r in runs if r.get(a) is not None and r.get(b) is not None]
+                v = pearson(pairs) if pairs else None
+                corr_ext[a][b] = v
+                corr_ext[b][a] = v
+
+        # Full correlations (raw + derived) for heatmap the user requested
+        # Prepare additional derived numeric fields inside per-run dicts (non-mutating base list except adding ephemeral keys)
+        for rr in runs:
+            try:
+                if rr.get('duration_min') and rr.get('distance_km') and rr.get('distance_km') > 0:
+                    rr['speed_kmh'] = (rr['distance_km'] / (rr['duration_min'] / 60.0))
+                else:
+                    rr['speed_kmh'] = None
+                # cadence based step length alt (already have avg_step_length_m)
+                rr['pace_min_per_km'] = rr.get('avg_pace')
+                # Energy proxy: calories per km
+                if rr.get('distance_km') and rr.get('calories'):
+                    try:
+                        rr['calories_per_km'] = rr['calories'] / rr['distance_km'] if rr['distance_km'] > 0 else None
+                    except Exception:
+                        rr['calories_per_km'] = None
+                else:
+                    rr['calories_per_km'] = None
+            except Exception:
+                rr['speed_kmh'] = rr.get('speed_kmh') or None
+        full_fields = [
+            # Core distance/time
+            'distance_km','duration_min','avg_pace','pace_min_per_km',
+            # Heart & stress
+            'avg_hr','max_hr','avg_stress','max_stress',
+            # Speed & energy
+            'speed_kmh','calories','calories_per_km',
+            # Cadence / steps
+            'avg_steps_per_min','steps','max_steps_per_min',
+            # Load
+            'training_load',
+            # Form / mechanics
+            'avg_step_length_m','avg_vertical_oscillation','avg_ground_contact_time',
+            # Performance / physiology
+            'vo2_max'
+        ]
+        correlations_full = {f: {g: None for g in full_fields} for f in full_fields}
+        for i, a in enumerate(full_fields):
+            for j, b in enumerate(full_fields):
+                if j <= i:
+                    continue
+                pairs = [(r.get(a), r.get(b)) for r in runs if r.get(a) is not None and r.get(b) is not None]
+                v = pearson(pairs) if pairs else None
+                correlations_full[a][b] = v
+                correlations_full[b][a] = v
+
+        # Running Economy Insights
+        economy = {}
+        try:
+            target_metric = 'avg_pace'  # lower is better
+            focus_candidates = [
+                'avg_hr','avg_step_length_m','avg_vertical_oscillation',
+                'avg_ground_contact_time','avg_steps_per_min','training_load','vo2_max','avg_stress','calories_per_km'
+            ]
+            focus_list = []
+            for f in focus_candidates:
+                if f == target_metric:
+                    continue
+                pairs = [(r.get(f), r.get(target_metric)) for r in runs if r.get(f) is not None and r.get(target_metric) is not None]
+                r_val = pearson(pairs) if len(pairs) >= 3 else None
+                if r_val is not None:
+                    # Interpret direction: negative r with pace => desirable (associate with faster pace)
+                    direction = 'improves_with_increase'
+                    if f in ('avg_hr','avg_vertical_oscillation','avg_ground_contact_time','avg_stress','calories_per_km'):
+                        # For these, lower values generally better
+                        direction = 'improves_with_decrease' if r_val > 0 else 'worsens_if_decreased'
+                    else:
+                        direction = 'improves_with_increase' if r_val < 0 else 'unclear_or_inverse'
+                    focus_list.append({'metric': f, 'r_vs_pace': r_val, 'direction': direction})
+            # Sort by absolute correlation strength
+            focus_list.sort(key=lambda x: abs(x['r_vs_pace'] or 0), reverse=True)
+            # Generate top textual recommendations
+            recs = []
+            alias = {
+                'avg_hr':'average HR','avg_step_length_m':'step length (m)',
+                'avg_vertical_oscillation':'vertical oscillation','avg_ground_contact_time':'ground contact time',
+                'avg_steps_per_min':'steps/min','vo2_max':'VO2max','avg_stress':'stress','calories_per_km':'calories/km'
+            }
+            for item in focus_list[:6]:
+                m = item['metric']; r_val = item['r_vs_pace']
+                label = alias.get(m, m)
+                if item['direction'] == 'improves_with_decrease':
+                    recs.append(f"Lower {label} – correlation with pace {r_val}; reducing it may help increase speed.")
+                elif item['direction'] == 'improves_with_increase':
+                    recs.append(f"Increase {label} – negative correlation with pace ({r_val}); increasing it may improve speed.")
+                elif item['direction'] == 'worsens_if_decreased':
+                    recs.append(f"Keep {label} stable – lowering it may worsen pace (r={r_val}).")
+                else:
+                    recs.append(f"{label}: correlation {r_val}; monitor further trends.")
+            # Economy composite trend (optional)
+            economy = {
+                'focus_rankings': focus_list,
+                'recommendations': recs,
+                'target_metric': target_metric,
+            }
+        except Exception as _econ_ex:  # pragma: no cover
+            economy = {'error': 'economy_computation_failed', 'details': str(_econ_ex)}
+
+        # Duo scatter datasets
+        def _scatter(x_field, y_field):
+            return [
+                {'x': r.get(x_field), 'y': r.get(y_field), 'label': r.get('start_time')}
+                for r in runs if r.get(x_field) is not None and r.get(y_field) is not None
+            ]
+        duo_scatter = {
+            'distance_vs_pace': _scatter('distance_km','avg_pace'),
+            'distance_vs_hr': _scatter('distance_km','avg_hr'),
+            'cadence_vs_pace': _scatter('avg_steps_per_min','avg_pace'),
+            'step_length_vs_pace': _scatter('avg_step_length_m','avg_pace'),
+            'vertical_osc_vs_pace': _scatter('avg_vertical_oscillation','avg_pace'),
+            'ground_contact_vs_pace': _scatter('avg_ground_contact_time','avg_pace'),
+        }
+
+        # Ascending timeseries for charts (older first)
+        runs_desc = list(runs)  # current order is DESC
+        runs_asc = sorted(runs, key=lambda x: x.get('start_time') or '')
+        timeseries = [
+            {
+                'start_time': r['start_time'],
+                'day': r['day'],
+                'distance_km': r['distance_km'],
+                'avg_pace': r['avg_pace'],
+                'avg_hr': r['avg_hr'],
+                'avg_steps_per_min': r.get('avg_steps_per_min'),
+                'avg_step_length_m': r.get('avg_step_length_m'),
+                'avg_vertical_oscillation': r.get('avg_vertical_oscillation'),
+                'avg_ground_contact_time': r.get('avg_ground_contact_time'),
+                'vo2_max': r.get('vo2_max'),
+                'avg_stress': r.get('avg_stress'),
+            }
+            for r in runs_asc
+        ]
+
+        # Summary
+        distances = [r['distance_km'] for r in runs if r.get('distance_km') is not None]
+        paces = [r['avg_pace'] for r in runs if r.get('avg_pace') is not None]
+        hrs = [r['avg_hr'] for r in runs if r.get('avg_hr') is not None]
+        cadences = [r['avg_steps_per_min'] for r in runs if r.get('avg_steps_per_min') is not None]
+        step_lengths = [r['avg_step_length_m'] for r in runs if r.get('avg_step_length_m') is not None]
+        loads = [r['training_load'] for r in runs if r.get('training_load') is not None]
+        summary = {
+            'runs_count': len(runs),
+            'total_distance_km': round(sum(distances), 2) if distances else 0.0,
+            'avg_distance_km': round(sum(distances)/len(distances), 2) if distances else None,
+            'avg_pace_min_per_km': round(sum(paces)/len(paces), 3) if paces else None,
+            'median_pace_min_per_km': round(median(paces), 3) if paces else None,
+            'avg_hr': round(sum(hrs)/len(hrs),1) if hrs else None,
+            'avg_cadence': round(sum(cadences)/len(cadences),1) if cadences else None,  # kept key for backwards compatibility
+            'avg_step_length_m': round(sum(step_lengths)/len(step_lengths),3) if step_lengths else None,
+            'total_training_load': round(sum(loads),2) if loads else None,
+            'avg_training_load': round(sum(loads)/len(loads),2) if loads else None,
+            'date_start': runs_asc[0]['day'] if runs_asc else None,
+            'date_end': runs_asc[-1]['day'] if runs_asc else None,
+        }
+        # Weekly load per week (km)
+        if weekly_out:
+            summary['avg_weekly_distance_km'] = round(sum(w['total_distance_km'] for w in weekly_out)/len(weekly_out),2)
+
+        # Pace form (z-score) & recent vs baseline comparison
+        pace_form = {}
+        if paces and len(paces) >= 3:
+            try:
+                p_mean = mean(paces)
+                p_std = stdev(paces) if len(paces) > 1 else None
+                # assign z-score to each run (lower pace => better form, so performance_score = -z)
+                for r in runs_asc:
+                    ap = r.get('avg_pace')
+                    if ap is not None and p_std and p_std > 0:
+                        r['pace_z'] = (ap - p_mean) / p_std
+                        r['performance_score'] = -r['pace_z']
+                    else:
+                        r['pace_z'] = None
+                        r['performance_score'] = None
+                # Rolling windows (7d, 30d) based on date
+                from datetime import date as _date
+                def _within_days(ref_date_str, candidate_date_str, delta_days):
+                    try:
+                        rd = _date.fromisoformat(ref_date_str)
+                        cd = _date.fromisoformat(candidate_date_str)
+                        return 0 <= (rd - cd).days <= delta_days
+                    except Exception:
+                        return False
+                if runs_asc:
+                    latest_day = runs_asc[-1]['day']
+                    last7 = [r.get('avg_pace') for r in runs_asc if r.get('day') and _within_days(latest_day, r.get('day'), 7) and r.get('avg_pace') is not None]
+                    last30 = [r.get('avg_pace') for r in runs_asc if r.get('day') and _within_days(latest_day, r.get('day'), 30) and r.get('avg_pace') is not None]
+                    if last30:
+                        base_mean = mean(last30)
+                    else:
+                        base_mean = p_mean
+                    recent_mean = mean(last7) if last7 else None
+                    delta_pct = None
+                    if recent_mean and base_mean:
+                        try:
+                            delta_pct = round((base_mean - recent_mean) / base_mean * 100, 2)  # positive => improvement
+                        except Exception:
+                            delta_pct = None
+                    current_z = runs_asc[-1].get('pace_z')
+                    pace_form = {
+                        'pace_mean_all': round(p_mean, 3),
+                        'pace_std_all': round(p_std, 3) if p_std else None,
+                        'recent_mean_pace_7d': round(recent_mean, 3) if recent_mean else None,
+                        'baseline_mean_pace_30d': round(base_mean, 3) if base_mean else None,
+                        'recent_vs_baseline_delta_pct': delta_pct,
+                        'current_pace_z': round(current_z, 3) if current_z is not None else None,
+                        'current_form_score': round(-current_z, 3) if current_z is not None else None,
+                    }
+            except Exception:
+                pace_form = {'error': 'pace_form_computation_failed'}
+        else:
+            pace_form = {'samples': len(paces)}
+
+        # Training load & monotony (Acute vs Chronic) + interpretation & timeseries
+        training_load = {}
+        if runs_asc:
+            from datetime import date as _date
+            from datetime import timedelta as _td
+            # Aggregate distance per day
+            day_distance: dict[str, float] = {}
+            for r in runs_asc:
+                d = r.get('day')
+                if d and r.get('distance_km') is not None:
+                    day_distance.setdefault(d, 0.0)
+                    day_distance[d] += r['distance_km']
+            if day_distance:
+                # Build ordered list of days (ascending)
+                ordered_days = sorted(day_distance.keys())
+                if ordered_days:
+                    first = _date.fromisoformat(ordered_days[0])
+                    last = _date.fromisoformat(ordered_days[-1])
+                    # Ensure continuity (fill gaps with 0 distance for monotony / rolling windows)
+                    cursor = first
+                    while cursor < last:
+                        iso = cursor.isoformat()
+                        day_distance.setdefault(iso, day_distance.get(iso, 0.0))
+                        cursor += _td(days=1)
+                    ordered_days = sorted(day_distance.keys())
+
+                def _rolling_sum(end_date_iso: str, window: int) -> float:
+                    try:
+                        end_d = _date.fromisoformat(end_date_iso)
+                    except Exception:
+                        return 0.0
+                    total = 0.0
+                    for i in range(window):
+                        dt = (end_d - _td(days=i)).isoformat()
+                        total += day_distance.get(dt, 0.0)
+                    return total
+
+                def _monotony(end_date_iso: str) -> tuple[float|None, float|None]:
+                    try:
+                        end_d = _date.fromisoformat(end_date_iso)
+                    except Exception:
+                        return None, None
+                    vals = []
+                    for i in range(7):
+                        dt = (end_d - _td(days=i)).isoformat()
+                        vals.append(day_distance.get(dt, 0.0))
+                    if not any(v > 0 for v in vals):
+                        return None, None
+                    try:
+                        m_mean = mean(vals)
+                        m_std = stdev(vals) if len(set(vals)) > 1 else 0.0
+                        monotony = round(m_mean / m_std, 3) if m_std > 0 else None
+                        strain = round(_rolling_sum(end_date_iso,7) * (monotony or 0), 2) if monotony else None
+                        return monotony, strain
+                    except Exception:
+                        return None, None
+
+                # Build timeseries
+                tl_timeseries = []
+                for d_iso in ordered_days:
+                    acute = _rolling_sum(d_iso, 7)
+                    chronic = _rolling_sum(d_iso, 28)
+                    acr = round(acute / chronic, 3) if chronic > 0 else None
+                    mono, strain = _monotony(d_iso)
+                    tl_timeseries.append({
+                        'day': d_iso,
+                        'distance_km': round(day_distance.get(d_iso, 0.0), 3),
+                        'acute_7d': round(acute, 2),
+                        'chronic_28d': round(chronic, 2),
+                        'acute_chronic_ratio': acr,
+                        'monotony_index': mono,
+                        'training_strain': strain,
+                    })
+
+                # Current metrics (latest day)
+                latest_day = ordered_days[-1]
+                acute_7 = tl_timeseries[-1]['acute_7d']
+                chronic_28 = tl_timeseries[-1]['chronic_28d']
+                acr = tl_timeseries[-1]['acute_chronic_ratio']
+                monotony = tl_timeseries[-1]['monotony_index']
+                strain = tl_timeseries[-1]['training_strain']
+
+                # Interpretation helpers
+                def _acr_zone(val: float|None):
+                    if val is None: return 'insufficient_data'
+                    if val < 0.8: return 'detraining'
+                    if val <= 1.3: return 'optimal'
+                    if val <= 1.5: return 'rising_load'
+                    return 'high_risk'
+                def _monotony_zone(val: float|None):
+                    if val is None: return 'unknown'
+                    if val <= 1.0: return 'varied'
+                    if val <= 1.5: return 'balanced'
+                    if val <= 2.0: return 'moderate_monotony'
+                    if val <= 2.5: return 'high_monotony'
+                    return 'very_high_monotony'
+
+                acr_zone = _acr_zone(acr)
+                monotony_zone = _monotony_zone(monotony)
+                risk_flags = []
+                if acr_zone == 'high_risk': risk_flags.append('acr_high_risk')
+                if monotony_zone in ('high_monotony','very_high_monotony'): risk_flags.append('monotony_high')
+                if strain and strain > 600:  # heuristic threshold
+                    risk_flags.append('strain_elevated')
+
+                recommendations = []
+                if 'acr_high_risk' in risk_flags:
+                    recommendations.append('Plan a lighter day/recovery – high ACR (>1.5).')
+                if acr_zone == 'detraining':
+                    recommendations.append('Gradually increase volume to avoid detraining (ACR < 0.8).')
+                if 'monotony_high' in risk_flags:
+                    recommendations.append('Vary the loads – high monotony increases overuse risk.')
+                if 'strain_elevated' in risk_flags:
+                    recommendations.append('High strain – monitor fatigue and sleep quality.')
+                if not recommendations and acr_zone == 'optimal' and monotony_zone in ('balanced','varied'):
+                    recommendations.append('Load is in the optimal zone – continue the current plan.')
+
+                training_load = {
+                    'acute_distance_7d': round(acute_7, 2),
+                    'chronic_distance_28d': round(chronic_28, 2),
+                    'acute_chronic_ratio': acr,
+                    'monotony_index': monotony,
+                    'training_strain': strain,
+                    'samples_days': len(ordered_days),
+                    'interpretation': {
+                        'acr_zone': acr_zone,
+                        'monotony_zone': monotony_zone,
+                        'risk_flags': risk_flags,
+                        'recommendations': recommendations,
+                    },
+                    'timeseries': tl_timeseries,
+                }
+        if not training_load:
+            training_load = {'samples': len(runs_asc)}
+
+        # VO2max trend extrapolation
+        vo2max_trend = {}
+        vo2_values = [ (r.get('day'), r.get('vo2_max')) for r in runs_asc if r.get('vo2_max') is not None ]
+        if len(vo2_values) >= 3:
+            try:
+                from datetime import date as _date
+                # Use ordinal day as x
+                xs = []
+                ys = []
+                for d, v in vo2_values:
+                    try:
+                        xs.append(_date.fromisoformat(d).toordinal())
+                        ys.append(float(v))
+                    except Exception:
+                        continue
+                n = len(xs)
+                if n >= 3:
+                    sx = sum(xs); sy = sum(ys)
+                    sxx = sum(x*x for x in xs); sxy = sum(x*y for x,y in zip(xs,ys)); syy = sum(y*y for y in ys)
+                    denom = (n * sxx - sx * sx)
+                    slope = (n * sxy - sx * sy) / denom if denom != 0 else 0.0
+                    intercept = (sy - slope * sx) / n if n else None
+                    # correlation r
+                    denr = ((n * sxx - sx*sx) * (n * syy - sy*sy)) ** 0.5
+                    r = (n * sxy - sx * sy) / denr if denr else None
+                    current = ys[-1]
+                    change_30 = slope * 30
+                    proj_30 = current + change_30
+                    proj_60 = current + slope * 60
+                    vo2max_trend = {
+                        'samples': n,
+                        'current': round(current, 2),
+                        'mean': round(sum(ys)/n, 2),
+                        'slope_per_day': round(slope, 4),
+                        'change_per_30d': round(change_30, 2),
+                        'projection_30d': round(proj_30, 2),
+                        'projection_60d': round(proj_60, 2),
+                        'r': round(r, 3) if r is not None else None,
+                    }
+            except Exception:
+                vo2max_trend = {'error': 'vo2_trend_failed'}
+        else:
+            vo2max_trend = {'samples': len(vo2_values)}
+
+        # Available fields (present at least once)
+        numeric_fields = ['distance_km','duration_min','avg_pace','avg_hr','max_hr','calories','training_load','avg_step_length_m','avg_vertical_oscillation','avg_ground_contact_time','vo2_max','steps','avg_steps_per_min','max_steps_per_min','avg_stress','max_stress']
+        available_fields = sorted({f for f in numeric_fields if any(r.get(f) is not None for r in runs)})
+
+        meta = {'mode': mode}
+        if mode == 'range':
+            meta['range'] = {'start_date': start_date, 'end_date': end_date}
+        else:
+            meta['rolling_days'] = days
+
+        # Attach debug diagnostics for troubleshooting data retrieval issues
+        debug_info = {
+            'raw_row_count': len(rows) if rows is not None else 0,
+            'raw_row_sample': _debug_raw_rows,
+            'query_mode': mode,
+            'query_params': params,
+            'skipped_rows': _debug_skipped_rows,
+            'row_errors': _debug_row_errors,
+        }
+        # Include the raw SQL query for diagnostics (helps detect placeholder/format issues)
+        try:
+            debug_info['query'] = query
+        except Exception:
+            debug_info['query'] = None
+
+        debug_info['fallback_day_assigned'] = _fallback_day_assigned
+        return {
+            'status': 'success',
+            'period_days': days,
+            'runs': runs_asc,  # ascending for charts
+            'runs_desc': runs_desc,  # legacy order
+            'weekly': weekly_out,
+            'correlations': corr_matrix,
+            'correlations_extended': corr_ext,
+            'correlations_full': correlations_full,
+            'scatter': scatter,
+            'duo_scatter': duo_scatter,
+            'timeseries': timeseries,
+            'summary': summary,
+            'running_economy': economy,
+            'pace_form': pace_form,
+            'training_load': training_load,
+            'vo2max_trend': vo2max_trend,
+            'available_fields': available_fields,
+            'data_points': len(runs),
+            'meta': meta,
+            'debug': debug_info,
+        }
 
 def main():
     """Test specialized analytics modules"""

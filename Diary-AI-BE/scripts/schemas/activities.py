@@ -18,7 +18,7 @@ class Activity(BaseModel):
     max_hr: Optional[float] = None
     distance_km: Optional[float] = None
     duration_min: Optional[float] = None
-    avg_pace_min_per_km: Optional[float] = None
+    avg_pace: Optional[float] = None
 
 class ActivitiesListResponse(BaseModel):
     activities: list[Activity]

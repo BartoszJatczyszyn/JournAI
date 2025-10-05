@@ -185,30 +185,33 @@ const MetricCard = ({
           position: absolute;
           top: 100%;
           left: 0;
-            z-index: 10;
-          background: rgba(15,23,42,0.95);
-          color: #f1f5f9;
+          z-index: 10;
+          background: var(--glass-bg, rgba(17,24,39,0.95));
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          border: 1px solid var(--glass-border, rgba(255,255,255,0.06));
+          box-shadow: 0 6px 18px rgba(2,6,23,0.6);
+          color: var(--text-primary, #f1f5f9);
           padding: 8px 10px;
-          font-size: 0.65rem;
+          font-size: 0.75rem;
           line-height: 1.2;
-          border-radius: 6px;
-          width: 180px;
-          margin-top: 6px;
-          box-shadow: 0 4px 12px -2px rgba(0,0,0,0.4);
+          border-radius: 8px;
+          width: 220px;
+          margin-top: 8px;
           opacity: 0;
-          transform: translateY(-4px);
-          transition: opacity 0.2s ease, transform 0.2s ease;
+          transform: translateY(-6px);
+          transition: opacity 0.18s ease, transform 0.18s ease;
           pointer-events: none;
         }
 
         .metric-tooltip::after {
           content: '';
           position: absolute;
-          top: -5px;
-          left: 10px;
-          width: 10px;
-          height: 10px;
-          background: rgba(15,23,42,0.95);
+          top: -6px;
+          left: 14px;
+          width: 12px;
+          height: 12px;
+          background: var(--glass-bg, rgba(17,24,39,0.95));
           transform: rotate(45deg);
         }
 

@@ -9,6 +9,7 @@ Highlights:
 - FastAPI backend with endpoints for sleeps, activities, trends, insights, predictions, and weight
 - React frontend dashboard (Create React App) with charts and analysis
 - Docker Compose for a one-command launch experience
+- Optional local LLM (Mistral-7B-OpenOrca GGUF via llama.cpp) for natural-language summaries
 
 Table of contents:
 - Quick start
@@ -24,18 +25,26 @@ Table of contents:
 - FAQ
 
 ## Quick start
+
+LLM setup (optional but recommended for natural-language summaries)
+1) Download the GGUF model into AI/models/ as described below (Mistral-7B-OpenOrca Q4_K_M).
+2) Start the stack with ./start_all.sh. The LLM server exposes OpenAI-compatible API at http://localhost:8080/v1.
+3) Test the backend LLM endpoints: GET /api/llm/health, POST /api/llm/chat, GET /api/llm/health-report.
+
 Pick your adventure: Docker (recommended) or local dev.
 
 Option A — All-in with Docker:
 1) Prereqs: Docker Desktop installed and running
 2) Put your Garmin export into the HealthData directory at repository root (same level as `AI/`).
 3) From the `AI/` directory, start services:
-   ./start_all.sh
+   ./start_all.sh            # starts db + backend only
+   ./start_all.sh --llm      # starts db + backend + LLM
 This builds and starts:
 - Postgres on localhost:5432
 - Backend API on http://localhost:5002
+- LLM on http://localhost:8080 (only with --llm)
 The script waits until the backend is healthy. To also spin up the frontend dev server:
-   ./start_all.sh --with-frontend
+   ./start_all.sh --with-frontend [--llm]
 Frontend will run on the first free port between 3000–3010 and proxy to the backend.
 
 Option B — Manual Docker Compose:
@@ -53,6 +62,19 @@ Stop everything with:
 - HealthData/ — Your Garmin export (mounted read-only into the backend)
 
 ## Configuration
+
+Local LLM (llama.cpp) configuration
+- Daily report scheduler: enabled by default inside the backend container.
+- Env vars: ENABLE_LLM_REPORT_SCHEDULER=1, LLM_REPORT_DAYS=30, LLM_REPORT_LANGUAGE=pl, LLM_SCHEDULE_HOUR=8, LLM_SCHEDULE_MINUTE=15
+
+- Folder AI/models is mounted to /models in the llm container.
+- Default model path: /models/mistral-7b-openorca.Q4_K_M.gguf.
+- Backend talks to the LLM via LLM_BASE_URL (default http://llm:8080/v1 inside Docker).
+- You can override via environment:
+  LLM_BASE_URL=http://llm:8080/v1
+  LLM_MODEL=mistral-7b-openorca-q4_k_m
+  LLM_HTTP_TIMEOUT=60
+
 Backend environment (inside container) is loaded from `config.env` (copied from example) and env vars.
 - Example local config: AI/Diary-AI-BE/config.env.example
 - Example Docker overrides: AI/.env.docker.example
@@ -120,6 +142,15 @@ What it does under the hood:
 Caution: This resets your Postgres data (volume removal). If you need the old data, back it up first.
 
 ## API overview
+
+LLM endpoints
+- GET /api/llm/health — checks connectivity to the local LLM server
+- POST /api/llm/chat — generic chat completions; body: { messages: [{role, content}], temperature?, max_tokens?, top_p? }
+- GET /api/llm/health-report?days=30&language=pl — generates a natural-language health summary using your data
+- GET /api/llm/reports/history?limit=10&language=pl — returns last N reports (optionally filtered by language)
+- GET /api/llm/reports/latest — returns the latest stored LLM report (if any)
+- POST /api/llm/reports/generate?days=30&language=pl — generates and stores a report for today
+
 Base URL: http://localhost:5002/api
 Interactive docs: http://localhost:5002/api/docs
 Selected endpoints:

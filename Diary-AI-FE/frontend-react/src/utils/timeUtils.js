@@ -127,3 +127,165 @@ export const circularRollingMedian = (arr, window = 14) => {
   }
   return out;
 };
+
+/**
+ * Format a pace stored as minutes (float, e.g. 5.25) into mm:ss string (e.g. "5:15").
+ * Returns null for invalid input.
+ */
+export const formatPaceMinPerKm = (minFloat) => {
+  if (minFloat == null) return null;
+  // allow strings like "5:15" passthrough
+  if (typeof minFloat === 'string' && minFloat.includes(':')) {
+    // Accept formats: MM:SS or HH:MM:SS (possibly fractional seconds). Normalize to mm:ss
+    const parts = minFloat.split(':').map(p => p.trim());
+    if (parts.length === 2) return minFloat;
+    if (parts.length === 3) {
+      const h = Number(parts[0]) || 0;
+      const m = Number(parts[1]) || 0;
+      const s = Number(parts[2].split('.')[0]) || 0;
+      const totalMinutes = h * 60 + m + s / 60;
+      const whole = Math.floor(Math.abs(totalMinutes));
+      const sec = Math.round((Math.abs(totalMinutes) - whole) * 60);
+      const minutes = totalMinutes < 0 ? -whole : whole;
+      return `${String(minutes)}:${String(sec).padStart(2, '0')}`;
+    }
+    // fallback
+    return minFloat;
+  }
+  const num = Number(minFloat);
+  if (Number.isNaN(num) || !Number.isFinite(num)) return null;
+
+  // If the value is large (likely seconds), treat as total seconds and convert to mm:ss.
+  // E.g. 93 -> 1:33, 287 -> 4:47
+  if (Math.abs(num) >= 10) {
+    const totalSeconds = Math.round(num);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = String(Math.abs(totalSeconds % 60)).padStart(2, '0');
+    return `${String(num < 0 ? -minutes : minutes)}:${seconds}`;
+  }
+
+  const whole = Math.floor(Math.abs(num));
+  const frac = Math.abs(num) - whole;
+
+  // Heuristic: if fractional part * 100 is very close to an integer between 0..59,
+  // treat input as mm.ss (minutes.seconds) representation. Otherwise treat as decimal minutes.
+  const fracTimes100 = frac * 100;
+  const frac100Rounded = Math.round(fracTimes100);
+  let seconds = 0;
+  if (Math.abs(fracTimes100 - frac100Rounded) < 0.001 && frac100Rounded >= 0 && frac100Rounded <= 59) {
+    seconds = frac100Rounded;
+  } else {
+    seconds = Math.round(frac * 60);
+  }
+
+  // Normalize (carry) if seconds === 60
+  let minutes = whole;
+  if (seconds >= 60) {
+    minutes += Math.floor(seconds / 60);
+    seconds = seconds % 60;
+  }
+  const m = num < 0 ? -minutes : minutes; // preserve sign on minutes if negative
+  const s = String(seconds).padStart(2, '0');
+  return `${String(m)}:${s}`;
+};
+
+/**
+ * Convert various duration representations into minutes (float).
+ * Accepts numbers (assumed minutes if small decimal or >0 and likely minutes),
+ * seconds values (if value > 1000 treat as ms, if >= 60 treat as seconds),
+ * or activity objects containing common duration fields.
+ */
+export const durationToMinutes = (v) => {
+  if (v == null) return null;
+  // If passed an object like activity, search common fields
+  if (typeof v === 'object') {
+    const a = v;
+    const candidates = [
+      a.duration_min, a.durationMin, a.duration_minutes, a.durationMinutes,
+      a.duration_sec, a.duration_s, a.duration_seconds, a.durationSeconds,
+      a.moving_time, a.moving_time_seconds, a.moving_time_s, a.movingTime,
+      a.elapsed_time, a.elapsed_time_seconds, a.elapsedTime,
+      a.duration, a.time_seconds, a.time_s
+    ];
+    for (const c of candidates) {
+      if (c == null) continue;
+      const converted = durationToMinutes(c);
+      if (converted != null) return converted;
+    }
+    return null;
+  }
+
+  // Primitive values
+  const num = Number(v);
+  if (Number.isNaN(num) || !Number.isFinite(num)) return null;
+
+  // Heuristics:
+  // - If value is large (>1000) treat as milliseconds
+  // - If value >= 60 and < 1000 treat as seconds
+  // - If value < 10 and has fractional part likely minutes decimal
+  // - Otherwise if between 10 and 60 could be minutes or seconds; assume minutes if <= 300
+  const abs = Math.abs(num);
+  if (abs >= 1000) {
+    // milliseconds
+    return Math.round(num) / 1000 / 60;
+  }
+  if (abs >= 60) {
+    // seconds
+    return num / 60;
+  }
+  // small numbers: treat as minutes (decimal)
+  return num;
+};
+
+/**
+ * Compute pace in minutes per km given distance_km and duration (any form supported by durationToMinutes)
+ * Returns null if input invalid.
+ */
+export const paceMinPerKm = (distanceKm, durationAny) => {
+  const d = distanceKm == null ? null : Number(distanceKm);
+  if (d == null || !Number.isFinite(d) || d <= 0) return null;
+  const minutes = durationToMinutes(durationAny);
+  if (minutes == null || !Number.isFinite(minutes) || minutes <= 0) return null;
+  return minutes / d;
+};
+
+/**
+ * Parse various avg pace representations into minutes-per-km float.
+ * Accepts:
+ * - numeric minutes (e.g. 5.25)
+ * - mm:ss strings ("5:15")
+ * - seconds numeric (e.g. 315 -> 5.25)
+ */
+export const parsePaceToMinutes = (v) => {
+  if (v == null) return null;
+  if (typeof v === 'number') {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return null;
+    // If value looks like seconds (>=60) convert
+    if (Math.abs(n) >= 60) return n / 60;
+    return n;
+  }
+  if (typeof v === 'string') {
+    if (v.includes(':')) {
+      // support MM:SS or HH:MM:SS (possibly fractional seconds)
+      const parts = v.split(':').map(p => p.trim());
+      if (parts.length === 2) {
+        const m = Number(parts[0]); const s = Number(parts[1]);
+        if (Number.isFinite(m) && Number.isFinite(s)) return Math.abs(m) + (s / 60);
+      }
+      if (parts.length === 3) {
+        const h = Number(parts[0]) || 0; const m = Number(parts[1]) || 0; const s = Number(parts[2]) || 0;
+        if (Number.isFinite(h) && Number.isFinite(m) && Number.isFinite(s)) {
+          const totalSeconds = Math.abs(h) * 3600 + (Number(m) * 60) + Number(s);
+          return totalSeconds / 60.0;
+        }
+      }
+    }
+    const n = Number(v.replace(/[^0-9.-]/g, ''));
+    if (Number.isFinite(n)) {
+      if (Math.abs(n) >= 60) return n / 60;
+      return n;
+    }
+  }
+  return null;
+};

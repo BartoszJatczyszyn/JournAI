@@ -271,20 +271,20 @@ const SleepDetail = () => {
     return '';
   };
 
-  // ZMIANA: Poprawiona logika, aby rozciągnąć wykres na cały okres snu
+  // CHANGE: Improved logic to stretch the chart across the full sleep period
   const sleepStageData = [];
   if (hasEventData && startMs && endMs) {
     const firstEvent = events[0];
     const lastEvent = events[events.length - 1];
 
-    // 1. Dodaj punkt na samym początku snu (startMs), używając fazy z pierwszego zdarzenia
+    // 1. Add a point at the very start of sleep (startMs), using the phase from the first event
     sleepStageData.push({
       t: startMs,
       stage: stageToValue(firstEvent.event),
       name: firstEvent.event.charAt(0).toUpperCase() + firstEvent.event.slice(1)
     });
 
-    // 2. Dodaj punkty dla każdego zarejestrowanego zdarzenia (fazy)
+    // 2. Add points for each recorded event (phase)
     events.forEach(e => {
       sleepStageData.push({
         t: e.t1,
@@ -293,7 +293,7 @@ const SleepDetail = () => {
       });
     });
 
-    // 3. Dodaj punkt na samym końcu snu (endMs), używając fazy z ostatniego zdarzenia
+    // 3. Add a point at the very end of sleep (endMs), using the phase from the last event
     sleepStageData.push({
       t: endMs,
       stage: stageToValue(lastEvent.event),

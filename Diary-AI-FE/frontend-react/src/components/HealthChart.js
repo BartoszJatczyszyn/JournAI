@@ -229,12 +229,12 @@ const HealthChart = ({
   const formatXAxisTick = (tickItem) => {
     if (!tickItem && tickItem !== 0) return '';
     const dowNamesShort = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-    // jeśli to już dow, zwróć bez zmian
+    // if it's already a day-of-week label, return as is
     if (typeof tickItem === 'string' && dowNamesShort.includes(tickItem)) return tickItem;
-    // jeśli to już sformatowany napis (np. 'Sep 06'), zwróć go
+    // if it's already a formatted label (e.g., 'Sep 06'), return it
     if (typeof tickItem === 'string' && /^[A-Za-z]{3}\s\d{1,2}$/.test(tickItem)) return tickItem;
     try {
-      // spróbuj sparsować ISO lub string daty
+      // try to parse ISO or a date string
       const parsed = typeof tickItem === 'string' ? parseISO(tickItem) : (tickItem instanceof Date ? tickItem : null);
       return parsed ? format(parsed, 'MMM dd') : String(tickItem);
     } catch {

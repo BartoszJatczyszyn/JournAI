@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   db:
     image: postgres:16-alpine
@@ -11,7 +9,7 @@ services:
       POSTGRES_DB: ${DB_NAME:-diary}
       PGDATABASE: ${DB_NAME:-diary}  # default DB for psql inside container
     ports:
-      - "5432:5432"
+      - "${HOST_PORT_POSTGRES:-5432}:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
@@ -19,6 +17,16 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  llm:
+    image: ghcr.io/ggerganov/llama.cpp:server
+    container_name: journal_ai_llm
+    command: ["-m", "/models/mistral-7b-openorca.Q4_K_M.gguf", "-c", "4096", "-ngl", "0", "--host", "0.0.0.0", "--port", "8080"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./models:/models:ro
+    restart: unless-stopped
 
   backend:
     build:
@@ -33,18 +41,24 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-diary123}
       # Additional optional vars
       PYTHONUNBUFFERED: 1
+      # LLM connection (llama.cpp server)
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://llm:8080/v1}
+      LLM_MODEL: ${LLM_MODEL:-mistral-7b-openorca-q4_k_m}
+      ENABLE_LLM_REPORT_SCHEDULER: ${ENABLE_LLM_REPORT_SCHEDULER:-1}
+      LLM_REPORT_DAYS: ${LLM_REPORT_DAYS:-30}
+      LLM_REPORT_LANGUAGE: ${LLM_REPORT_LANGUAGE:-pl}
+      LLM_SCHEDULE_HOUR: ${LLM_SCHEDULE_HOUR:-8}
+      LLM_SCHEDULE_MINUTE: ${LLM_SCHEDULE_MINUTE:-15}
     depends_on:
       db:
         condition: service_healthy
     ports:
-      - "5002:5002"
+      - "${HOST_PORT_BACKEND:-5002}:5002"
     volumes:
       - ./Diary-AI-BE/config.env.example:/app/config.env:ro
       - ./Diary-AI-BE/scripts/models:/app/scripts/analytics/models
       - ../HealthData:/app/HealthData:ro
     restart: unless-stopped
-
-
 
 volumes:
   pg_data:

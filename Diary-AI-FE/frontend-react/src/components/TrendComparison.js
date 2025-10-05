@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
+import { formatPaceMinPerKm } from '../utils/timeUtils';
 
 /**
  * TrendComparison renders dual-series (distance vs rolling pace) over weeks.
@@ -38,14 +39,14 @@ const TrendComparison = ({ data, forecast, height = 200, distanceColor = '#0ea5e
   const paceRange = Math.max(maxPace - minPace, 0.0001);
   const distRange = Math.max(maxDist - minDist, 0.0001);
   // Determine a dynamic pointGap based on available container width so charts scale nicely.
-  const minGap = 32; // minimum px per point
+  const minGap = 20; // allow tighter packing on narrow sections
   const maxGap = 96; // maximum px per point
-  // provisional computed gap if no container width yet
-  const provisionalGap = 72;
+  const provisionalGap = 56; // fallback gap
   const availWidth = (containerWidth && containerWidth > 0) ? (containerWidth - padding * 2) : null;
-  const rawGap = availWidth && data.length > 1 ? Math.floor(availWidth / Math.max(1, data.length - 1)) : provisionalGap;
+  const rawGap = availWidth && data.length > 1 ? Math.floor((availWidth) / Math.max(1, data.length - 1)) : provisionalGap;
   const pointGap = Math.max(minGap, Math.min(maxGap, rawGap));
   const computedWidth = (data.length - 1) * pointGap + padding * 2;
+  // prefer to match container when available, but ensure computedWidth isn't smaller than needed
   const width = availWidth ? Math.max(availWidth + padding * 2, computedWidth) : computedWidth;
   const pointsDistance = data.map((d, i) => {
     const norm = (d.distance - minDist) / distRange;
@@ -126,15 +127,15 @@ const TrendComparison = ({ data, forecast, height = 200, distanceColor = '#0ea5e
             <path d={pathFrom(pointsPace)} stroke={paceColor} strokeWidth={2} fill="none" strokeDasharray="4 2" />
             {pointsPace.map((p,i) => (
               <g key={`p-${i}`}>
-                <circle
-                  cx={p.x}
-                  cy={p.y}
-                  r={4}
-                  fill={paceColor}
-                  onMouseEnter={e => showTip(e, `${p.label}\nRolling Pace: ${p.value.toFixed(2)} min/km (lower better)`)}
-                  onMouseMove={e => moveTip(e, `${p.label}\nRolling Pace: ${p.value.toFixed(2)} min/km (lower better)`)}
-                  onMouseLeave={hideTip}
-                />
+                    <circle
+                      cx={p.x}
+                      cy={p.y}
+                      r={4}
+                      fill={paceColor}
+                      onMouseEnter={e => showTip(e, `${p.label}\nRolling Pace: ${formatPaceMinPerKm(p.value) || (p.value.toFixed(2)+' min/km')} (lower better)`)}
+                      onMouseMove={e => moveTip(e, `${p.label}\nRolling Pace: ${formatPaceMinPerKm(p.value) || (p.value.toFixed(2)+' min/km')} (lower better)`)}
+                      onMouseLeave={hideTip}
+                    />
               </g>
             ))}
           </>

@@ -22,6 +22,7 @@ from dotenv import load_dotenv
 load_dotenv("config.env")
 
 app = FastAPI(title="Diary AI Backend", version="2.0.0", openapi_url="/api/openapi.json", docs_url="/api/docs")
+
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):  # pragma: no cover
     return JSONResponse(
@@ -80,6 +81,7 @@ from blueprints import (
     trends_router,
     journal_router,
     gym_router,
+    llm_router,
 )
 
 # Include routers preserving original external paths
@@ -93,6 +95,7 @@ app.include_router(sleeps_router, prefix="/api")
 app.include_router(trends_router, prefix="/api")
 app.include_router(journal_router, prefix="/api")
 app.include_router(gym_router, prefix="/api")
+app.include_router(llm_router, prefix="/api")
 
 
 @app.get("/api/health", tags=["system"], summary="Service health check")
@@ -321,6 +324,54 @@ def weight_correlations(days: int = 90, min_abs: float = 0.0):
     out.sort(key=lambda d: abs(d["pearson_r"]), reverse=True)
     return {"days": days, "pairs": out, "sample_size": len(weight_series)}
 
+
+import asyncio, os, logging
+from datetime import datetime, date, timedelta
+from blueprints.llm import _build_health_brief
+from services.llm_service import LLMService
+from services.llm_reports_service import ensure_table, upsert_report
+
+logger = logging.getLogger("llm_scheduler")
+
+async def _scheduler_loop():  # pragma: no cover
+    try:
+        enabled = os.getenv("ENABLE_LLM_REPORT_SCHEDULER", "1").lower() in {"1","true","yes","on"}
+        if not enabled:
+            logger.info("LLM report scheduler disabled via env")
+            return
+        ensure_table()
+        llm_days = int(os.getenv("LLM_REPORT_DAYS", "30"))
+        language = os.getenv("LLM_REPORT_LANGUAGE", "pl")
+        hour = int(os.getenv("LLM_SCHEDULE_HOUR", "8"))
+        minute = int(os.getenv("LLM_SCHEDULE_MINUTE", "15"))
+        client = LLMService()
+        while True:
+            now = datetime.now()
+            run_at = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            if run_at <= now:
+                run_at = run_at + timedelta(days=1)
+            wait_sec = (run_at - now).total_seconds()
+            await asyncio.sleep(wait_sec)
+            try:
+                brief = _build_health_brief(llm_days)
+                messages = [
+                    {"role": "system", "content": f"You are a health assistant. Prepare a concise report ({llm_days} days)."},
+                    {"role": "user", "content": f"Data for the report (JSON/text):\n{brief}"}
+                ]
+                res = client.chat(messages, temperature=0.2, max_tokens=700, top_p=0.9)
+                content = res.get("content", "")
+                upsert_report(date.today().isoformat(), language, llm_days, content, res.get("raw"))
+                logger.info("Daily LLM health report stored")
+            except Exception as e:
+                logger.exception("Failed to generate/store daily LLM report: %s", e)
+            # wait a minute before reconsidering next cycle to avoid tight loop
+            await asyncio.sleep(60)
+    except Exception as outer:
+        logger.exception("LLM scheduler crashed: %s", outer)
+
+@app.on_event("startup")
+async def _on_startup():  # pragma: no cover
+    asyncio.create_task(_scheduler_loop())
 
 __all__ = ["app"]
 

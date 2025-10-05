@@ -15,12 +15,14 @@ cd "$SCRIPT_DIR"
 WITH_FRONTEND=0
 NO_CACHE=0
 RUN_GARMINDb=1  # can be disabled with --skip-garmindb
+START_LLM=0
 
 for arg in "$@"; do
   case "$arg" in
     --with-frontend) WITH_FRONTEND=1 ; shift ;;
-  --no-cache) NO_CACHE=1 ; shift ;;
-  --skip-garmindb) RUN_GARMINDb=0 ; shift ;;
+    --llm) START_LLM=1 ; shift ;;
+    --no-cache) NO_CACHE=1 ; shift ;;
+    --skip-garmindb) RUN_GARMINDb=0 ; shift ;;
     --help|-h)
       grep '^#' "$0" | sed 's/^# \{0,1\}//'
       exit 0
@@ -131,9 +133,13 @@ for i in {1..30}; do
   fi
 done
 
-# 5. Start backend
+# 5. Start backend (and optional LLM)
 echo -e "${BLUE}🚀 Starting backend...${NC}"
 $DC up -d backend
+if [ $START_LLM -eq 1 ]; then
+  echo -e "${BLUE}🧠 Starting LLM service...${NC}"
+  $DC up -d llm || true
+fi
 
 # 6. Wait until backend responds
 BACKEND_URL="http://localhost:5002/api/stats"

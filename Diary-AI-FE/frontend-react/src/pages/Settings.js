@@ -1,26 +1,32 @@
 import React, { useState } from 'react';
 
 const Settings = () => {
-  const [settings, setSettings] = useState({
-    notifications: {
-      email: true,
-      push: false,
-      sms: false,
-    },
-    privacy: {
-      dataSharing: false,
-      analytics: true,
-    },
-    preferences: {
-      units: 'metric',
-      language: 'en',
-      theme: 'auto',
-    },
-    goals: {
-      dailySteps: 10000,
-      sleepHours: 8,
-      waterIntake: 2000,
-    },
+  const [settings, setSettings] = useState(() => {
+    // Read persisted goals from localStorage if present so Activity page and Settings stay in sync
+    const persistedDaily = Number(localStorage.getItem('dailyStepsGoal')) || 10000;
+    const persistedWeeklyDistance = Number(localStorage.getItem('weeklyDistanceGoal')) || 50;
+    return {
+      notifications: {
+        email: true,
+        push: false,
+        sms: false,
+      },
+      privacy: {
+        dataSharing: false,
+        analytics: true,
+      },
+      preferences: {
+        units: 'metric',
+        language: 'en',
+        theme: 'auto',
+      },
+      goals: {
+        dailySteps: persistedDaily,
+        weeklyDistance: persistedWeeklyDistance,
+        sleepHours: 8,
+        waterIntake: 2000,
+      },
+    };
   });
 
   const handleNotificationChange = (type) => {
@@ -54,13 +60,26 @@ const Settings = () => {
   };
 
   const handleGoalChange = (key, value) => {
+    const parsed = key === 'sleepHours' ? Number(value) : parseInt(value) || 0;
     setSettings(prev => ({
       ...prev,
       goals: {
         ...prev.goals,
-        [key]: parseInt(value) || 0
+        [key]: parsed
       }
     }));
+
+    // Persist the two activity-related goals to localStorage so Activity page reads them
+    try {
+      if (key === 'dailySteps') {
+        localStorage.setItem('dailyStepsGoal', String(parsed));
+      }
+      if (key === 'weeklyDistance') {
+        localStorage.setItem('weeklyDistanceGoal', String(parsed));
+      }
+    } catch (e) {
+      // ignore storage errors
+    }
   };
 
   return (
@@ -217,6 +236,18 @@ const Settings = () => {
                     className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700"
                     min="1000"
                     max="50000"
+                  />
+                </div>
+                <div>
+                  <label className="block font-medium mb-2">Weekly Distance Goal (km)</label>
+                  <input
+                    type="number"
+                    value={settings.goals.weeklyDistance}
+                    onChange={(e) => handleGoalChange('weeklyDistance', e.target.value)}
+                    className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700"
+                    min="1"
+                    max="200"
+                    step="0.5"
                   />
                 </div>
                 <div>
