@@ -5,20 +5,30 @@ const MetricCard = ({
   value, 
   unit = '', 
   icon, 
-  trend = 0, 
+  trend = null, 
+  change = null, // percent-style change (preferred when available)
+  deltaPct = null,
+  percentChange = null,
   color = 'blue',
   subtitle,
   tooltip, // optional explanatory tooltip text
   onClick 
 }) => {
+  // Resolve percent-style change from multiple possible prop names for backward compatibility
+  const resolvedChange = (deltaPct != null && Number.isFinite(deltaPct)) ? deltaPct
+    : (percentChange != null && Number.isFinite(percentChange)) ? percentChange
+    : (change != null && Number.isFinite(change)) ? change
+    : null;
+  const sig = (resolvedChange != null) ? resolvedChange : trend;
+
   const getTrendIcon = () => {
-    if (trend > 0) {
+    if (sig > 0) {
       return (
         <svg className="trend-icon trend-up" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 17l9.2-9.2M17 17V7m0 10H7" />
         </svg>
       );
-    } else if (trend < 0) {
+  } else if (sig < 0) {
       return (
         <svg className="trend-icon trend-down" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 7l-9.2 9.2M7 7v10m0-10h10" />
@@ -33,10 +43,25 @@ const MetricCard = ({
   };
 
   const getTrendText = () => {
-    if (trend === 0) return 'No change';
-    const absValue = Math.abs(trend);
-    const direction = trend > 0 ? 'increase' : 'decrease';
-    return `${absValue.toFixed(1)} ${direction}`;
+    // Prefer percent-style `change` when provided (e.g. 3.2 -> +3.2%)
+    if (resolvedChange != null) {
+      if (resolvedChange === 0) return 'No change';
+      const sign = resolvedChange > 0 ? '+' : '';
+      const abs = Math.abs(resolvedChange);
+      // Use one decimal place for fractional percents, otherwise integer
+      const fmt = abs < 1 ? abs.toFixed(1) : Math.round(abs);
+      const dir = resolvedChange > 0 ? 'increase' : 'decrease';
+      return `${sign}${fmt}% ${dir}`;
+    }
+
+    if (trend != null && Number.isFinite(trend)) {
+      if (trend === 0) return 'No change';
+      const absValue = Math.abs(trend);
+      const direction = trend > 0 ? 'increase' : 'decrease';
+      return `${absValue.toFixed(1)} ${direction}`;
+    }
+
+    return '—';
   };
 
   const getColorClasses = () => {
@@ -66,7 +91,7 @@ const MetricCard = ({
             </div>
           )}
         </div>
-        <div className="metric-trend" title={trend !== 0 ? getTrendText() : 'No change'}>
+        <div className="metric-trend" title={(resolvedChange != null || trend != null) ? getTrendText() : ''}>
           {getTrendIcon()}
         </div>
       </div>
@@ -80,9 +105,9 @@ const MetricCard = ({
         {subtitle && <div className="metric-subtitle">{subtitle}</div>}
       </div>
 
-      <div className="metric-footer">
-        <span className="trend-text">{getTrendText()}</span>
-      </div>
+    <div className="metric-footer">
+  <span className="trend-text">{(resolvedChange != null || trend != null) ? getTrendText() : '—'}</span>
+    </div>
 
       <style jsx>{`
         .metric-card {

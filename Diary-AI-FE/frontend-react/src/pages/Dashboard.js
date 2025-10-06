@@ -216,7 +216,7 @@ const Dashboard = () => {
   const computeTrend = (field, arr) => {
     const recent = firstNumeric(field, arr);
     const older = lastNumeric(field, arr);
-    if (recent == null || older == null) return 0;
+    if (recent == null || older == null) return null;
     return +(recent - older).toFixed(1);
   };
 

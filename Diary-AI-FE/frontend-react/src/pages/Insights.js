@@ -213,10 +213,10 @@ const Insights = () => {
             </div>
 
             <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', marginBottom: 16 }}>
-              <MetricCard title="Sleep Score" value={metrics.sleep.last != null ? Math.round(metrics.sleep.last) : '-'} unit="pts" trend={metrics.sleep.change || 0} color="purple" />
-              <MetricCard title="Steps" value={metrics.steps.last != null ? fmtNumber(Math.round(metrics.steps.last)) : '-'} trend={metrics.steps.change || 0} color="yellow" />
-              <MetricCard title="Resting HR" value={metrics.rhr.last != null ? Math.round(metrics.rhr.last) : '-'} unit="bpm" trend={metrics.rhr.change || 0} color="red" />
-              <MetricCard title="Recovery" value={metrics.recovery.last != null ? Math.round(metrics.recovery.last) : '-'} trend={metrics.recovery.change || 0} color="green" />
+              <MetricCard title="Sleep Score" value={metrics.sleep.last != null ? Math.round(metrics.sleep.last) : '-'} unit="pts" change={metrics.sleep.change} color="purple" />
+              <MetricCard title="Steps" value={metrics.steps.last != null ? fmtNumber(Math.round(metrics.steps.last)) : '-'} change={metrics.steps.change} color="yellow" />
+              <MetricCard title="Resting HR" value={metrics.rhr.last != null ? Math.round(metrics.rhr.last) : '-'} unit="bpm" change={metrics.rhr.change} color="red" />
+              <MetricCard title="Recovery" value={metrics.recovery.last != null ? Math.round(metrics.recovery.last) : '-'} change={metrics.recovery.change} color="green" />
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>

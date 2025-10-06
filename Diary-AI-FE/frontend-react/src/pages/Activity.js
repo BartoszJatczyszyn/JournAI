@@ -588,7 +588,6 @@ const Activity = () => {
               icon="⏱️"
               color="green"
               subtitle={`Avg ${formatHoursMinutes(avgPerDay.durationMin)} / day`}
-              trend={0}
               tooltip={`Sum of activity durations over the last ${displayLabel}`}
             />
             <MetricCard
@@ -598,7 +597,6 @@ const Activity = () => {
               icon="📏"
               color="indigo"
               subtitle={`Avg ${avgPerDay.distance.toFixed(2)} km/day`}
-              trend={0}
             />
             <MetricCard
               title={`Workouts (${displayLabel})`}
@@ -607,7 +605,6 @@ const Activity = () => {
               icon="🏋️"
               color="purple"
               subtitle={`Avg ${(periodActivities.length/Math.max(1, displayDays)).toFixed(2)} /day · Avg ${periodActivities.length ? (periodTotals.durationMin / periodActivities.length).toFixed(0) : '0'} min/session`}
-              trend={0}
             />
             <MetricCard
               title={`Steps (${displayLabel})`}
@@ -616,7 +613,6 @@ const Activity = () => {
               icon="📊"
               color="blue"
               subtitle={`Avg ${avgPerDay.steps.toLocaleString()} / day`}
-              trend={0}
             />
           </div>
 
