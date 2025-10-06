@@ -28,17 +28,18 @@ const ChartTooltip = ({ active, payload, label, items, title, mapPayload }) => {
   if (!active || !(renderItems && renderItems.length)) return null;
 
   return (
-    <div className="custom-tooltip tooltip-glass" style={{ pointerEvents: 'none' }}>
+    <div className="custom-tooltip tooltip-glass refined-tooltip" style={{ pointerEvents: 'none' }}>
       {renderTitle != null && (
-        <p className="tooltip-label">{String(renderTitle)}</p>
+        <p className="tooltip-label refined-tooltip-title">{String(renderTitle)}</p>
       )}
-      {renderItems.map((r, i) => (
-        <p key={i} className="tooltip-value" style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-          {r.color && (<span className="tooltip-metric" style={{ color: r.color }}>{r.label}:</span>)}
-          {!r.color && (<span className="tooltip-metric">{r.label}:</span>)}
-          <span className="tooltip-number">{r.value}</span>
-        </p>
-      ))}
+      <div className="refined-tooltip-body">
+        {renderItems.map((r, i) => (
+          <div key={i} className="tooltip-value refined-tooltip-row" style={{ alignItems: 'center' }}>
+            <span className="tooltip-metric refined-tooltip-metric" style={r.color?{ color: r.color }:{}}>{r.label}</span>
+            <span className="tooltip-number refined-tooltip-value">{r.value}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };

@@ -19,6 +19,9 @@ class Activity(BaseModel):
     distance_km: Optional[float] = None
     duration_min: Optional[float] = None
     avg_pace: Optional[float] = None
+    training_load: Optional[float] = None
+    training_effect: Optional[float] = None
+    anaerobic_training_effect: Optional[float] = None
 
 class ActivitiesListResponse(BaseModel):
     activities: list[Activity]

@@ -53,17 +53,26 @@ export const HealthDataProvider = ({ children }) => {
     if (!Array.isArray(raw)) return [];
     const parseDay = (d) => {
       if (!d) return null;
-      const s = d.day || d.date || d.timestamp;
+      const s = d.day || d.date || d.timestamp || d.day_date;
       if (!s) return null;
       const dt = new Date(s);
       return Number.isNaN(dt.getTime()) ? null : dt;
     };
-    const numericKeys = ['steps','energy_level','sleep_score','rhr','stress_avg','calories_total','mood'];
+    // Accept multiple naming variants for common numeric fields so rows are not
+    // erroneously filtered out when backend uses different keys (e.g. total_steps)
+    const numericKeys = [
+      'steps','total_steps','step_count','daily_steps','steps_total','stepCount','totalSteps',
+      'energy_level','sleep_score','rhr','resting_heart_rate','stress_avg','calories_total','calories','mood'
+    ];
     const cleaned = raw
       .filter(r => !!r)
       .map(r => ({ ...r, _dayObj: parseDay(r) }))
       // keep rows that have at least one meaningful metric (non-null & not NaN)
-      .filter(r => numericKeys.some(k => r[k] != null && !Number.isNaN(Number(r[k]))));
+      .filter(r => numericKeys.some(k => {
+        if (!(k in r)) return false;
+        const v = r[k];
+        return v != null && !Number.isNaN(Number(v));
+      }));
     // Sort newest first (most recent day first) so slice(0, days) is the current window anchored on last real day
     cleaned.sort((a,b) => {
       const da = a._dayObj ? a._dayObj.getTime() : -Infinity;
@@ -432,6 +441,58 @@ export const HealthDataProvider = ({ children }) => {
     fetchDashboardData();
   }, [fetchDashboardData]);
 
+  // Fetch dashboard data for an explicit historical date range (start -> end inclusive).
+  // Since backend currently only supports ?days=N anchored to today, we request a superset
+  // from startDate until today, then slice windowData to the explicit range. This enables
+  // historical ranges that end before today to show steps & other metrics instead of 0.
+  const fetchDashboardForRange = useCallback(async (startDate, endDate) => {
+    try {
+      if (!startDate || !endDate) return;
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
+      // Clamp end to today (avoid future dates)
+      const today = new Date();
+      if (end > today) end.setTime(today.getTime());
+      // Ensure start <= end
+      if (start > end) return;
+      // Days from start to today inclusive (anchor fetch on today, since API only supports days=N)
+      const msPerDay = 24*60*60*1000;
+      const daysFromStart = Math.max(1, Math.floor((today.setHours(23,59,59,999) - start.setHours(0,0,0,0)) / msPerDay) + 1);
+      setLoading(true);
+      setError(null);
+      // Parallel requests (stats + correlations use explicit window size = daysFromStart)
+      const [statsData, healthDataRaw, correlationsData] = await Promise.all([
+        healthAPI.getStats(),
+        healthAPI.getHealthData(daysFromStart),
+        healthAPI.getEnhancedCorrelations(daysFromStart)
+      ]);
+      const { all: normalized } = normalizeHealthData(healthDataRaw, undefined); // get full list
+      // Slice rows that fall within explicit range (inclusive, based on _dayObj date only)
+      const rangeStartMs = (new Date(startDate)).setHours(0,0,0,0);
+      const rangeEndMs = (new Date(endDate)).setHours(23,59,59,999);
+      const windowSlice = normalized.filter(r => {
+        const t = r._dayObj ? r._dayObj.getTime() : NaN;
+        return !Number.isNaN(t) && t >= rangeStartMs && t <= rangeEndMs;
+      });
+      // Update state (do NOT change dateRange numeric selector; keep previous) but expose windowData override
+      setDashboardData(prev => ({
+        ...(prev || {}),
+        stats: statsData,
+        healthData: normalized, // keep full superset for other consumers
+        windowData: windowSlice,
+        correlations: correlationsData,
+        explicitRange: { start: startDate, end: endDate }
+      }));
+    } catch (err) {
+      setError('Failed to fetch historical range data');
+      console.error('fetchDashboardForRange error:', err);
+      toast.error('Failed to load historical range');
+    } finally {
+      setLoading(false);
+    }
+  }, [normalizeHealthData]);
+
   const value = useMemo(() => ({
     // State
     loading,
@@ -446,7 +507,8 @@ export const HealthDataProvider = ({ children }) => {
     // Actions
     setDateRange,
     fetchDashboardData,
-    fetchDashboardForDays,
+  fetchDashboardForDays,
+  fetchDashboardForRange,
     fetchAnalytics,
     fetchPredictions,
     fetchInsights,
@@ -458,7 +520,7 @@ export const HealthDataProvider = ({ children }) => {
     // Utilities
     clearError: () => setError(null),
     setLoading
-  }), [loading, error, dashboardData, analytics, predictions, insights, dateRange, fetchDashboardData, fetchDashboardForDays, fetchAnalytics, fetchPredictions, fetchInsights, fetchSpecializedAnalysis, comparePeriods, getHealthDataForRange, refreshAllData]);
+  }), [loading, error, dashboardData, analytics, predictions, insights, dateRange, fetchDashboardData, fetchDashboardForDays, fetchDashboardForRange, fetchAnalytics, fetchPredictions, fetchInsights, fetchSpecializedAnalysis, comparePeriods, getHealthDataForRange, refreshAllData]);
 
   return (
     <HealthDataContext.Provider value={value}>

@@ -1099,6 +1099,9 @@ class ActivityAnalytics:
                     avg_steps_per_min,
                     avg_step_length,
                     avg_vertical_oscillation,
+                    avg_vertical_ratio,
+                    avg_rr,
+                    max_rr,
                     avg_ground_contact_time,
                     steps,
                     avg_steps_per_min,
@@ -1135,6 +1138,9 @@ class ActivityAnalytics:
                     avg_steps_per_min,
                     avg_step_length,
                     avg_vertical_oscillation,
+                    avg_vertical_ratio,
+                    avg_rr,
+                    max_rr,
                     avg_ground_contact_time,
                     steps,
                     avg_steps_per_min,
@@ -1170,6 +1176,9 @@ class ActivityAnalytics:
                 avg_steps_per_min,
                 avg_step_length,
                 avg_vertical_oscillation,
+                avg_vertical_ratio,
+                avg_rr,
+                max_rr,
                 avg_ground_contact_time,
                 steps,
                 avg_steps_per_min,
@@ -1230,8 +1239,8 @@ class ActivityAnalytics:
                             dur_min = None
                     except Exception:
                         dur_min = None
-                # avg_pace may already be stored as min/km; if avg_speed is present convert.
-                pace_min_per_km = None
+                # avg_pace may already be stored as min/km; compute a canonical avg_pace value
+                avg_pace_val = None
                 def _pace_to_min_per_km(val):
                     try:
                         if val is None:
@@ -1286,24 +1295,24 @@ class ActivityAnalytics:
 
                 raw_avg_pace = r.get('avg_pace')
                 if raw_avg_pace is not None:
-                    pace_min_per_km = _pace_to_min_per_km(raw_avg_pace)
+                    avg_pace_val = _pace_to_min_per_km(raw_avg_pace)
                 elif r.get('avg_speed') is not None:
                     try:
                         spd = float(r.get('avg_speed'))
                         # Detect unit heuristically: if spd < 25 assume km/h, if < 8 maybe m/s (convert)
                         if spd <= 12:  # could be km/h typical easy runs 8-12
-                            pace_min_per_km = 60.0 / spd if spd > 0 else None
+                            avg_pace_val = 60.0 / spd if spd > 0 else None
                         elif spd < 25:  # still plausible km/h fast
-                            pace_min_per_km = 60.0 / spd if spd > 0 else None
+                            avg_pace_val = 60.0 / spd if spd > 0 else None
                         else:  # treat as m/s (unlikely but safeguard)
-                            pace_min_per_km = (1000.0 / spd) / 60.0 if spd > 0 else None
+                            avg_pace_val = (1000.0 / spd) / 60.0 if spd > 0 else None
                     except Exception:
-                        pace_min_per_km = None
+                        avg_pace_val = None
                 elif dist_km is not None and dur_min:
                     try:
-                        pace_min_per_km = dur_min / dist_km if dist_km > 0 else None
+                        avg_pace_val = dur_min / dist_km if dist_km > 0 else None
                     except Exception:
-                        pace_min_per_km = None
+                        avg_pace_val = None
 
                 # Fallback day if NULL using start_time
                 start_dt = r.get('start_time')
@@ -1339,9 +1348,11 @@ class ActivityAnalytics:
                     'day': day_iso,
                     'distance_km': round(dist_km, 3) if dist_km is not None else None,
                     'duration_min': round(dur_min, 1) if dur_min is not None else None,
-                    'avg_pace': round(pace_min_per_km, 3) if pace_min_per_km is not None else None,
+                    'avg_pace': round(avg_pace_val, 3) if avg_pace_val is not None else None,
                     'avg_hr': _cast_num(r.get('avg_hr')),
                     'max_hr': _cast_num(r.get('max_hr')),
+                    'avg_rr': _cast_num(r.get('avg_rr')),
+                    'max_rr': _cast_num(r.get('max_rr')),
                     'calories': _cast_num(r.get('calories')),
                     'training_load': _cast_num(r.get('training_load')),
                     'avg_step_length_m': _cast_num(r.get('avg_step_length')),
@@ -1349,6 +1360,7 @@ class ActivityAnalytics:
                     # (frontend previously consumed avg_cadence)
                     'avg_steps_per_min': _cast_num(r.get('avg_steps_per_min')),
                     'avg_vertical_oscillation': _cast_num(r.get('avg_vertical_oscillation')),
+                    'avg_vertical_ratio': _cast_num(r.get('avg_vertical_ratio')),
                     'avg_ground_contact_time': _cast_num(r.get('avg_ground_contact_time')),
                     'vo2_max': _cast_num(r.get('vo2_max')),
                     'steps': _cast_num(r.get('steps')),
@@ -1412,7 +1424,7 @@ class ActivityAnalytics:
             except Exception:
                 return None
 
-        fields = ['distance_km','duration_min','avg_pace','avg_hr','vo2_max','avg_steps_per_min','training_load']
+        fields = ['distance_km','duration_min','avg_pace','avg_hr','avg_rr','max_rr','vo2_max','avg_steps_per_min','training_load']
         corr_matrix = {f: {g: None for g in fields} for f in fields}
         for i, a in enumerate(fields):
             for j, b in enumerate(fields):
@@ -1426,7 +1438,7 @@ class ActivityAnalytics:
         scatter = [{'x': r.get('distance_km'), 'y': r.get('avg_pace'), 'label': r.get('start_time')} for r in runs if r.get('distance_km') is not None and r.get('avg_pace') is not None]
 
         # Extended correlations
-        extended_fields = ['distance_km','duration_min','avg_pace','avg_hr','vo2_max','avg_steps_per_min','training_load','avg_step_length_m','avg_vertical_oscillation','avg_ground_contact_time','avg_stress']
+        extended_fields = ['distance_km','duration_min','avg_pace','avg_hr','avg_rr','max_rr','vo2_max','avg_steps_per_min','training_load','avg_step_length_m','avg_vertical_oscillation','avg_vertical_ratio','avg_ground_contact_time','avg_stress']
         corr_ext = {f: {g: None for g in extended_fields} for f in extended_fields}
         for i, a in enumerate(extended_fields):
             for j, b in enumerate(extended_fields):
@@ -1446,7 +1458,7 @@ class ActivityAnalytics:
                 else:
                     rr['speed_kmh'] = None
                 # cadence based step length alt (already have avg_step_length_m)
-                rr['pace_min_per_km'] = rr.get('avg_pace')
+                # note: avg_pace is canonical
                 # Energy proxy: calories per km
                 if rr.get('distance_km') and rr.get('calories'):
                     try:
@@ -1459,9 +1471,10 @@ class ActivityAnalytics:
                 rr['speed_kmh'] = rr.get('speed_kmh') or None
         full_fields = [
             # Core distance/time
-            'distance_km','duration_min','avg_pace','pace_min_per_km',
+            'distance_km','duration_min','avg_pace',
             # Heart & stress
             'avg_hr','max_hr','avg_stress','max_stress',
+            'avg_rr','max_rr',
             # Speed & energy
             'speed_kmh','calories','calories_per_km',
             # Cadence / steps
@@ -1469,7 +1482,7 @@ class ActivityAnalytics:
             # Load
             'training_load',
             # Form / mechanics
-            'avg_step_length_m','avg_vertical_oscillation','avg_ground_contact_time',
+            'avg_step_length_m','avg_vertical_oscillation','avg_vertical_ratio','avg_ground_contact_time',
             # Performance / physiology
             'vo2_max'
         ]
@@ -1489,7 +1502,7 @@ class ActivityAnalytics:
             target_metric = 'avg_pace'  # lower is better
             focus_candidates = [
                 'avg_hr','avg_step_length_m','avg_vertical_oscillation',
-                'avg_ground_contact_time','avg_steps_per_min','training_load','vo2_max','avg_stress','calories_per_km'
+                    'avg_vertical_ratio','avg_rr','max_rr','avg_ground_contact_time','avg_steps_per_min','training_load','vo2_max','avg_stress','calories_per_km'
             ]
             focus_list = []
             for f in focus_candidates:
@@ -1512,7 +1525,7 @@ class ActivityAnalytics:
             recs = []
             alias = {
                 'avg_hr':'average HR','avg_step_length_m':'step length (m)',
-                'avg_vertical_oscillation':'vertical oscillation','avg_ground_contact_time':'ground contact time',
+                'avg_vertical_ratio':'vertical ratio (%)','avg_vertical_oscillation':'vertical oscillation (cm)','avg_ground_contact_time':'ground contact time (ms)',
                 'avg_steps_per_min':'steps/min','vo2_max':'VO2max','avg_stress':'stress','calories_per_km':'calories/km'
             }
             for item in focus_list[:6]:
@@ -1560,9 +1573,12 @@ class ActivityAnalytics:
                 'distance_km': r['distance_km'],
                 'avg_pace': r['avg_pace'],
                 'avg_hr': r['avg_hr'],
+                'avg_rr': r.get('avg_rr'),
+                'max_rr': r.get('max_rr'),
                 'avg_steps_per_min': r.get('avg_steps_per_min'),
                 'avg_step_length_m': r.get('avg_step_length_m'),
                 'avg_vertical_oscillation': r.get('avg_vertical_oscillation'),
+                'avg_vertical_ratio': r.get('avg_vertical_ratio'),
                 'avg_ground_contact_time': r.get('avg_ground_contact_time'),
                 'vo2_max': r.get('vo2_max'),
                 'avg_stress': r.get('avg_stress'),
@@ -1581,8 +1597,8 @@ class ActivityAnalytics:
             'runs_count': len(runs),
             'total_distance_km': round(sum(distances), 2) if distances else 0.0,
             'avg_distance_km': round(sum(distances)/len(distances), 2) if distances else None,
-            'avg_pace_min_per_km': round(sum(paces)/len(paces), 3) if paces else None,
-            'median_pace_min_per_km': round(median(paces), 3) if paces else None,
+            'avg_pace': round(sum(paces)/len(paces), 3) if paces else None,
+            'median_pace': round(median(paces), 3) if paces else None,
             'avg_hr': round(sum(hrs)/len(hrs),1) if hrs else None,
             'avg_cadence': round(sum(cadences)/len(cadences),1) if cadences else None,  # kept key for backwards compatibility
             'avg_step_length_m': round(sum(step_lengths)/len(step_lengths),3) if step_lengths else None,
@@ -1829,7 +1845,7 @@ class ActivityAnalytics:
             vo2max_trend = {'samples': len(vo2_values)}
 
         # Available fields (present at least once)
-        numeric_fields = ['distance_km','duration_min','avg_pace','avg_hr','max_hr','calories','training_load','avg_step_length_m','avg_vertical_oscillation','avg_ground_contact_time','vo2_max','steps','avg_steps_per_min','max_steps_per_min','avg_stress','max_stress']
+        numeric_fields = ['distance_km','duration_min','avg_pace','avg_hr','max_hr','avg_rr','max_rr','calories','training_load','avg_step_length_m','avg_vertical_oscillation','avg_vertical_ratio','avg_ground_contact_time','vo2_max','steps','avg_steps_per_min','max_steps_per_min','avg_stress','max_stress']
         available_fields = sorted({f for f in numeric_fields if any(r.get(f) is not None for r in runs)})
 
         meta = {'mode': mode}

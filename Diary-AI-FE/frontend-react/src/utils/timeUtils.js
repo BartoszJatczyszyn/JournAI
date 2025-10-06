@@ -157,7 +157,9 @@ export const formatPaceMinPerKm = (minFloat) => {
 
   // If the value is large (likely seconds), treat as total seconds and convert to mm:ss.
   // E.g. 93 -> 1:33, 287 -> 4:47
-  if (Math.abs(num) >= 10) {
+  // NOTE: previous heuristic used >=10 which caused integer minutes like 12 to be
+  // interpreted as 12 seconds (0:12). Use >=60 to detect seconds instead.
+  if (Math.abs(num) >= 60) {
     const totalSeconds = Math.round(num);
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = String(Math.abs(totalSeconds % 60)).padStart(2, '0');

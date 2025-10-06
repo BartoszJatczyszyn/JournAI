@@ -56,6 +56,13 @@ const defaultMetricConfig = (metric, color) => {
       color: '#ef4444',
       domain: ['dataMin - 5', 'dataMax + 5']
     },
+    vo2_max: {
+      name: 'VO2max',
+      unit: ' mL/kg/min',
+      color: '#6366f1',
+      // pad the domain slightly so points don't hit the chart edge
+      domain: ['dataMin - 3', 'dataMax + 3']
+    },
     mood: {
       name: 'Mood',
       unit: '/5',
@@ -86,7 +93,7 @@ const defaultMetricConfig = (metric, color) => {
 const HealthChart = ({ 
   data = [], 
   metric = 'energy_level', 
-  height = 300, 
+  height = 340, 
   type = 'line',
   showGrid = true,
   showTooltip = true,
@@ -102,6 +109,9 @@ const HealthChart = ({
   // rolling average for line charts
   rollingWindow,
   raColor = '#94a3b8',
+  // axis labels
+  xLabel,
+  yLabel,
 }) => {
 
  const chartData = useMemo(() => {
@@ -168,6 +178,22 @@ const HealthChart = ({
    }
    return ra;
  }, [chartData, rollingWindow]);
+
+  // compute simple linear trend (index -> value) for the active data series
+  const trendLine = useMemo(() => {
+    const source = rollingWindow && lineWithRolling && lineWithRolling.length ? lineWithRolling : chartData;
+    if (!source || source.length < 2) return null;
+    const pts = source.map((d, i) => ({ x: i, y: (d.value != null ? Number(d.value) : null) })).filter(p => p.y != null && Number.isFinite(p.y));
+    if (pts.length < 2) return null;
+    const n = pts.length;
+    const meanX = pts.reduce((s,p)=>s+p.x,0)/n;
+    const meanY = pts.reduce((s,p)=>s+p.y,0)/n;
+    let num=0, den=0;
+    pts.forEach(p => { const dx = p.x - meanX; num += dx * (p.y - meanY); den += dx * dx; });
+    const slope = den === 0 ? 0 : num / den;
+    const intercept = meanY - slope * meanX;
+    return source.map((d, i) => ({ value: intercept + slope * i }));
+  }, [chartData, lineWithRolling, rollingWindow]);
 
   const config = defaultMetricConfig(metric, color);
 
@@ -249,6 +275,18 @@ const HealthChart = ({
     if (metric === 'bedtime_minutes' || metric === 'wake_minutes') {
       return minutesToHHmm(value);
     }
+    // Generic pace formatting (minutes per km -> mm:ss) for any metric containing 'pace'
+    if (typeof metric === 'string' && metric.includes('pace')) {
+      if (value == null || isNaN(Number(value))) return '';
+      const totalSecs = Math.round(Number(value) * 60);
+      const m = Math.floor(totalSecs / 60);
+      const s = totalSecs % 60;
+      return `${m}:${s.toString().padStart(2,'0')}`;
+    }
+    // VO2max: show one decimal place for clarity
+    if (metric === 'vo2_max') {
+      return (value == null || isNaN(Number(value))) ? '' : Number(value).toFixed(1);
+    }
     return value;
   };
 
@@ -280,13 +318,16 @@ const HealthChart = ({
       margin: { top: 5, right: 30, left: 20, bottom: 5 }
     };
 
+    const xAxisLabelProps = xLabel ? { label: { value: xLabel, position: 'insideBottom', offset: -2, style: { fontSize: 11, fill: '#64748b' } } } : {};
+    const yAxisLabelProps = yLabel ? { label: { value: yLabel, angle: -90, position: 'insideLeft', offset: 10, style: { textAnchor: 'middle', fontSize: 11, fill: '#64748b' } } } : {};
+
     switch (type) {
       case 'stacked-area':
         return (
           <AreaChart {...commonProps}>
             {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />}
-            <XAxis dataKey={xDataKey} tickFormatter={xDataKey === 'date' ? formatXAxisTick : undefined} stroke="#64748b" fontSize={12} />
-            <YAxis domain={yDomain || ['dataMin', 'dataMax']} ticks={yTicks} stroke="#64748b" fontSize={12} />
+            <XAxis dataKey={xDataKey} tickFormatter={xDataKey === 'date' ? formatXAxisTick : undefined} stroke="#64748b" fontSize={12} {...xAxisLabelProps} />
+            <YAxis domain={yDomain || ['dataMin', 'dataMax']} ticks={yTicks} stroke="#64748b" fontSize={12} {...yAxisLabelProps} />
             {showTooltip && <ReTooltip content={<CustomTooltip />} />}
             {legend && <Legend />}
             {(stackKeys || []).map((k, idx) => (
@@ -306,8 +347,8 @@ const HealthChart = ({
         return (
           <ScatterChart {...commonProps}>
             {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />}
-            <XAxis dataKey={xKey || 'x'} name={xKey || 'x'} stroke="#64748b" fontSize={12} />
-            <YAxis dataKey={yKey || 'y'} name={yKey || 'y'} stroke="#64748b" fontSize={12} />
+            <XAxis dataKey={xKey || 'x'} name={xKey || 'x'} stroke="#64748b" fontSize={12} {...xAxisLabelProps} />
+            <YAxis dataKey={yKey || 'y'} name={yKey || 'y'} stroke="#64748b" fontSize={12} {...yAxisLabelProps} />
             {showTooltip && <ReTooltip /> }
             {/* Reference lines at medians for quick quadrant interpretation */}
             <ReferenceLine x={() => {
@@ -333,6 +374,7 @@ const HealthChart = ({
               tickFormatter={xDataKey === 'date' ? formatXAxisTick : undefined}
               stroke="#64748b"
               fontSize={12}
+              {...xAxisLabelProps}
             />
             <YAxis 
               domain={config.domain}
@@ -340,6 +382,7 @@ const HealthChart = ({
               tickFormatter={formatYAxisTick}
               stroke="#64748b"
               fontSize={12}
+              {...yAxisLabelProps}
             />
             {showTooltip && <ReTooltip content={<CustomTooltip />} />}
             <Area
@@ -362,6 +405,7 @@ const HealthChart = ({
               tickFormatter={xDataKey === 'date' ? formatXAxisTick : undefined}
               stroke="#64748b"
               fontSize={12}
+              {...xAxisLabelProps}
             />
             <YAxis 
               domain={config.domain}
@@ -369,6 +413,7 @@ const HealthChart = ({
               tickFormatter={formatYAxisTick}
               stroke="#64748b"
               fontSize={12}
+              {...yAxisLabelProps}
             />
             {showTooltip && <ReTooltip content={<CustomTooltip />} />}
             <Bar
@@ -388,6 +433,7 @@ const HealthChart = ({
               tickFormatter={xDataKey === 'date' ? formatXAxisTick : undefined}
               stroke="#64748b"
               fontSize={12}
+              {...xAxisLabelProps}
             />
             <YAxis 
               domain={config.domain}
@@ -395,6 +441,7 @@ const HealthChart = ({
               tickFormatter={formatYAxisTick}
               stroke="#64748b"
               fontSize={12}
+              {...yAxisLabelProps}
             />
             {showTooltip && <ReTooltip content={<CustomTooltip />} />}
             <Line
@@ -405,6 +452,18 @@ const HealthChart = ({
               dot={{ fill: config.color, strokeWidth: 2, r: 4 }}
               activeDot={{ r: 6, stroke: config.color, strokeWidth: 2 }}
             />
+            {trendLine && (
+              <Line
+                type="linear"
+                data={trendLine}
+                dataKey="value"
+                stroke="#f59e0b"
+                strokeWidth={2}
+                strokeDasharray="6 4"
+                dot={false}
+                isAnimationActive={false}
+              />
+            )}
             {rollingWindow && (
               <Line
                 type="monotone"
@@ -453,19 +512,63 @@ const HealthChart = ({
         }
 
         :global(.custom-tooltip) {
-          /* glassmorphism */
-          background: var(--glass-bg);
-          backdrop-filter: blur(10px);
-          -webkit-backdrop-filter: blur(10px);
-          border: 1px solid var(--glass-border);
-          box-shadow: var(--glass-shadow);
-          
-          
-          
-          
-          
-          
+          background: rgba(255,255,255,0.85);
+          backdrop-filter: blur(12px) saturate(1.2);
+          -webkit-backdrop-filter: blur(12px) saturate(1.2);
+          border: 1px solid rgba(148,163,184,0.25);
+          box-shadow: 0 4px 16px -4px rgba(15,23,42,0.25), 0 2px 6px -2px rgba(15,23,42,0.15);
+          border-radius: 10px;
+          padding: 10px 12px 8px;
+          min-width: 160px;
+          animation: tooltipFade 120ms ease-out;
         }
+
+        :global(.dark .custom-tooltip) {
+          background: rgba(30,41,59,0.78);
+          border-color: rgba(71,85,105,0.55);
+          box-shadow: 0 4px 16px -4px rgba(0,0,0,0.5), 0 2px 6px -2px rgba(0,0,0,0.35);
+        }
+
+        :global(.refined-tooltip-title) {
+          letter-spacing: .5px;
+          font-size: 12px;
+          text-transform: uppercase;
+          opacity: .85;
+        }
+
+        :global(.refined-tooltip-body) {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        :global(.refined-tooltip-row) {
+          display: flex;
+          justify-content: space-between;
+          font-size: 13px;
+          line-height: 1.15rem;
+        }
+
+        :global(.refined-tooltip-metric) {
+          font-weight: 500;
+          color: #475569;
+        }
+
+        :global(.dark .refined-tooltip-metric) {
+          color: #94a3b8;
+        }
+
+        :global(.refined-tooltip-value) {
+          font-variant-numeric: tabular-nums;
+          font-weight: 600;
+          color: #1e293b;
+        }
+
+        :global(.dark .refined-tooltip-value) {
+          color: #f1f5f9;
+        }
+
+        @keyframes tooltipFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 
         
 

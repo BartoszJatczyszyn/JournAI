@@ -16,6 +16,10 @@ import Stress from './pages/Stress';
 import Activity from './pages/Activity';
 import ActivityDetail from './pages/ActivityDetail';
 import Running from './pages/Running';
+import Walking from './pages/Walking';
+import Cycling from './pages/Cycling';
+import Hiking from './pages/Hiking';
+import Swimming from './pages/Swimming';
 import Gym from './pages/Gym';
 import GymWorkouts from './pages/GymWorkouts';
 import Insights from './pages/Insights';
@@ -88,6 +92,10 @@ function App() {
                   <Route path="/activity" element={<Activity />} />
                   <Route path="/activity/:id" element={<ActivityDetail />} />
                   <Route path="/running" element={<Running />} />
+                  <Route path="/walking" element={<Walking />} />
+                  <Route path="/cycling" element={<Cycling />} />
+                  <Route path="/hiking" element={<Hiking />} />
+                  <Route path="/swimming" element={<Swimming />} />
                   <Route path="/gym" element={<Gym />} />
                   <Route path="/gym/workouts" element={<GymWorkouts />} />
                   <Route path="/insights" element={<Insights />} />

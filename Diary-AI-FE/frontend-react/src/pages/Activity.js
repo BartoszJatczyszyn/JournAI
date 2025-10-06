@@ -13,7 +13,7 @@ import { formatPaceMinPerKm } from '../utils/timeUtils';
 // have been moved to the dedicated Running page.
 
 const Activity = () => {
-  const { error, dashboardData, fetchDashboardForDays } = useHealthData();
+  const { error, dashboardData, fetchDashboardForDays, fetchDashboardForRange } = useHealthData();
   const [activities, setActivities] = useState([]);
   const [busy, setBusy] = useState(false);
   const [limit, setLimit] = useState(400); // dynamic based on selected period
@@ -21,7 +21,8 @@ const Activity = () => {
     const raw = localStorage.getItem('activityPeriodDays');
     const parsed = Number(raw);
     return (!Number.isNaN(parsed) && parsed > 0) ? parsed : 30;
-  }); // 7 | 14 | 30 | 90
+  }); // 7 | 14 | 30 | 60 | 90 | 180 | 365
+
   const [filterSport, setFilterSport] = useState('');
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState('start_time');
@@ -29,6 +30,9 @@ const Activity = () => {
   const [dailyStepsGoal, setDailyStepsGoal] = useState(() => Number(localStorage.getItem('dailyStepsGoal')) || 10000);
   const [weeklyDistanceGoal, setWeeklyDistanceGoal] = useState(() => Number(localStorage.getItem('weeklyDistanceGoal')) || 50);
   const [editingGoal, setEditingGoal] = useState(null); // 'steps' | 'distance' | null
+  const [dateRangeMode, setDateRangeMode] = useState('rolling'); // 'rolling' | 'explicit'
+  const [rangeStart, setRangeStart] = useState('');
+  const [rangeEnd, setRangeEnd] = useState('');
 
   const loadActivities = useCallback(async (opts = {}) => {
     try {
@@ -46,9 +50,23 @@ const Activity = () => {
     loadActivities();
   }, [loadActivities]);
 
+  // If user switches date mode or edits explicit range, refresh activities
+  useEffect(() => {
+    // when user toggles mode or edits explicit range, ensure we have fresh activities
+    // only trigger when explicit range has both endpoints or when switching back to rolling
+    if (dateRangeMode === 'explicit') {
+      if (rangeStart && rangeEnd) {
+        loadActivities({ limit });
+      }
+    } else {
+      // rolling
+      loadActivities({ limit });
+    }
+  }, [dateRangeMode, rangeStart, rangeEnd, loadActivities, limit]);
+
   // Adjust fetch limit when period changes (heuristic mapping)
   useEffect(() => {
-    const map = { 7: 100, 14: 200, 30: 400, 90: 1000 };
+  const map = { 7: 100, 14: 200, 30: 400, 60: 800, 90: 1000, 180: 2000, 365: 3000 };
     const newLimit = map[periodDays] || 400;
     if (newLimit !== limit) setLimit(newLimit);
     // Reload activities for the selected period and also refresh
@@ -84,14 +102,33 @@ const Activity = () => {
 
   // Activities restricted to selected period
   const periodActivities = useMemo(() => {
-    const now = Date.now();
-    const cutoff = now - periodDays * 24 * 60 * 60 * 1000;
-    return activities.filter(a => {
-      if (!a.start_time) return false;
-      const t = new Date(a.start_time).getTime();
-      return !Number.isNaN(t) && t >= cutoff && t <= now;
-    });
-  }, [activities, periodDays]);
+    try {
+      if (dateRangeMode === 'explicit' && rangeStart && rangeEnd) {
+        const start = new Date(rangeStart);
+        const end = new Date(rangeEnd);
+        // inclusive end of day
+        end.setHours(23,59,59,999);
+        const startTs = start.getTime();
+        const endTs = end.getTime();
+        if (Number.isNaN(startTs) || Number.isNaN(endTs)) return [];
+        return activities.filter(a => {
+          if (!a.start_time) return false;
+          const t = new Date(a.start_time).getTime();
+          return !Number.isNaN(t) && t >= startTs && t <= endTs;
+        });
+      }
+      // default: rolling window based on periodDays ending now
+      const now = Date.now();
+      const cutoff = now - periodDays * 24 * 60 * 60 * 1000;
+      return activities.filter(a => {
+        if (!a.start_time) return false;
+        const t = new Date(a.start_time).getTime();
+        return !Number.isNaN(t) && t >= cutoff && t <= now;
+      });
+    } catch (e) {
+      return [];
+    }
+  }, [activities, periodDays, dateRangeMode, rangeStart, rangeEnd]);
 
   const uniqueSports = useMemo(() => {
     const set = new Set();
@@ -133,9 +170,9 @@ const Activity = () => {
       // build map weekKey -> sum steps from rows
       rows.forEach(r => {
         const rawDate = r.day || r.date || r.timestamp || r.day_date;
-        if (!rawDate) return;
-        const d = new Date(rawDate);
-        if (isNaN(d.getTime())) return;
+        // Prefer normalized parse result if provided by context
+        const d = r._dayObj ? r._dayObj : (rawDate ? new Date(rawDate) : null);
+        if (!d || isNaN(d.getTime())) return;
         // compute ISO week key same format as in hook: YYYY-Www
         const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
         const dayNum = (tmp.getUTCDay() + 6) % 7; // 0=Mon
@@ -165,10 +202,11 @@ const Activity = () => {
     if (!Array.isArray(rows) || rows.length === 0) return { fallbackTodaySteps: 0, fallbackWeeklySteps: 0 };
     const todayKey = new Date().toISOString().slice(0,10);
     let todayVal = 0;
-    rows.forEach(r => {
-      const rawDate = r.day || r.date || r.timestamp || r.day_date;
-      if (!rawDate) return;
-      const key = (typeof rawDate === 'string' ? rawDate : new Date(rawDate).toISOString()).slice(0,10);
+  rows.forEach(r => {
+  const rawDate = r.day || r.date || r.timestamp || r.day_date;
+  const d = r._dayObj ? r._dayObj : (rawDate ? new Date(rawDate) : null);
+  if (!d) return;
+  const key = d.toISOString().slice(0,10);
       const stepsVal = Number(r.steps ?? r.total_steps ?? r.step_count ?? r.daily_steps ?? r.totalSteps ?? r.stepCount ?? 0) || 0;
       if (key === todayKey) todayVal = Math.max(todayVal, stepsVal); // if multiple entries, take max
     });
@@ -176,6 +214,94 @@ const Activity = () => {
   }, [todaySteps, weeklySteps, dashboardData]);
 
   const displayTodaySteps = todaySteps > 0 ? todaySteps : fallbackTodaySteps;
+  // compute how many days are in the current display window
+  const displayDays = useMemo(() => {
+    try {
+      if (dateRangeMode === 'explicit' && rangeStart && rangeEnd) {
+        const s = new Date(rangeStart);
+        const e = new Date(rangeEnd);
+        if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return Math.max(1, Number(periodDays));
+        // inclusive days
+        const diff = Math.floor((e.setHours(23,59,59,999) - s.setHours(0,0,0,0)) / (24 * 60 * 60 * 1000)) + 1;
+        return Math.max(1, diff);
+      }
+      return Math.max(1, Number(periodDays) || 1);
+    } catch (e) {
+      return Math.max(1, Number(periodDays) || 1);
+    }
+  }, [dateRangeMode, rangeStart, rangeEnd, periodDays]);
+
+  // Display label now always shows the count of days (e.g. "44d") even for explicit ranges.
+  const displayLabel = useMemo(() => `${displayDays}d`, [displayDays]);
+
+  // Ensure dashboard window data covers the explicit selected range so
+  // periodStepsFallback can derive steps from the health rows when needed.
+  useEffect(() => {
+    try {
+      if (dateRangeMode === 'explicit' && rangeStart && rangeEnd) {
+        // Use new historical range fetch (works for past ranges not ending today)
+        fetchDashboardForRange(rangeStart, rangeEnd);
+      }
+    } catch (err) {
+      console.warn('Failed to refresh dashboard for explicit range', err);
+    }
+  }, [dateRangeMode, rangeStart, rangeEnd, fetchDashboardForRange]);
+
+  // Debug helper: when localStorage.debugShowSteps === '1', print samples
+  // of periodActivities and dashboard rows to help trace why steps fallback
+  // for explicit ranges may be returning zero.
+  useEffect(() => {
+    try {
+      if (typeof window === 'undefined') return;
+      if (localStorage.getItem('debugShowSteps') !== '1') return;
+      if (!(dateRangeMode === 'explicit' && rangeStart && rangeEnd)) return;
+      const s = new Date(rangeStart);
+      const e = new Date(rangeEnd);
+      e.setHours(23,59,59,999);
+      console.group('DEBUG: Activity steps range check');
+      console.log('Selected range', { rangeStart, rangeEnd, startTs: s.getTime(), endTs: e.getTime() });
+      console.log('Period activities (sample 0..5):', periodActivities.slice(0,6));
+      console.log('Dashboard windowData (sample 0..10):', dashboardData?.windowData?.slice(0,10));
+      const rows = (dashboardData?.healthData?.all) || (dashboardData?.windowData) || [];
+      const matched = rows.filter(r => {
+        const rawDate = r.day || r.date || r.timestamp || r.day_date;
+        if (!rawDate) return false;
+        const d = new Date(rawDate);
+        if (isNaN(d.getTime())) return false;
+        const t = d.getTime();
+        return t >= s.getTime() && t <= e.getTime();
+      });
+      console.log('Dashboard rows matched to range:', matched.length, matched.slice(0,8));
+      console.groupEnd();
+    } catch (err) {
+      console.warn('DEBUG logging failed', err);
+    }
+  }, [dateRangeMode, rangeStart, rangeEnd, dashboardData, periodActivities]);
+
+  // Compute dashboard rows that match the explicit range so we can render a
+  // visible debug panel (useful when users cannot access DevTools).
+  const matchedDashboardRows = useMemo(() => {
+    try {
+      if (!(dateRangeMode === 'explicit' && rangeStart && rangeEnd)) return [];
+      const rows = (dashboardData?.healthData?.all) || (dashboardData?.windowData) || [];
+      const s = new Date(rangeStart);
+      const e = new Date(rangeEnd);
+      e.setHours(23,59,59,999);
+      const sTs = s.getTime();
+      const eTs = e.getTime();
+      if (Number.isNaN(sTs) || Number.isNaN(eTs)) return [];
+      return rows.filter(r => {
+        const rawDate = r.day || r.date || r.timestamp || r.day_date;
+        if (!rawDate) return false;
+        const d = new Date(rawDate);
+        if (isNaN(d.getTime())) return false;
+        const t = d.getTime();
+        return t >= sTs && t <= eTs;
+      });
+    } catch (err) {
+      return [];
+    }
+  }, [dateRangeMode, rangeStart, rangeEnd, dashboardData]);
   const [sparkMetric, setSparkMetric] = useState('distance'); // 'distance' | 'steps' | 'calories'
   const initialWeeks = Math.min(Math.max(1, Math.ceil(periodDays / 7)), 52);
   const [weeksRange /*, setWeeksRange */] = useState(initialWeeks); // adapts to selected period (weeks)
@@ -246,11 +372,41 @@ const Activity = () => {
   const periodTotals = useMemo(() => {
     try {
       const totals = { distance: 0, durationMin: 0, calories: 0, steps: 0 };
+
+      const extractStepsFromObj = (obj) => {
+        if (!obj || typeof obj !== 'object') return null;
+        // Try pickSteps first (provided by hook)
+        const viaPick = pickSteps ? pickSteps(obj) : null;
+        if (viaPick != null) return viaPick;
+        // Shallow scan for any key that looks like steps (including nested common containers)
+        const candidates = [];
+        Object.keys(obj).forEach(k => { if (/step/i.test(k)) candidates.push(k); });
+        for (const k of ['summary','metrics','stats']) {
+          if (obj[k] && typeof obj[k] === 'object') {
+            Object.keys(obj[k]).forEach(nk => { if (/step/i.test(nk)) candidates.push(`${k}.${nk}`); });
+          }
+        }
+        for (const key of candidates) {
+          // support nested keys like 'metrics.steps'
+          const parts = key.split('.');
+          let val = obj;
+          for (const p of parts) {
+            if (!val) { val = null; break; }
+            val = val[p];
+          }
+          if (val == null) continue;
+          const cleaned = (typeof val === 'string') ? val.replace(/[\s,]+/g, '').replace(/[^0-9.-]/g, '') : val;
+          const n = Number(cleaned);
+          if (!Number.isNaN(n)) return n;
+        }
+        return null;
+      };
+
       periodActivities.forEach(a => {
         totals.distance += Number(a.distance_km) || 0;
         totals.durationMin += Number(a.duration_min) || 0;
         totals.calories += Number(a.calories) || 0;
-        const s = pickSteps ? pickSteps(a) : null;
+        const s = extractStepsFromObj(a);
         totals.steps += (s != null ? s : 0);
       });
       return totals;
@@ -264,14 +420,31 @@ const Activity = () => {
     try {
       const rows = (dashboardData?.healthData?.all) || (dashboardData?.windowData) || [];
       if (!Array.isArray(rows) || rows.length === 0) return 0;
+      let sum = 0;
+      if (dateRangeMode === 'explicit' && rangeStart && rangeEnd) {
+        const s = new Date(rangeStart);
+        const e = new Date(rangeEnd);
+        e.setHours(23,59,59,999);
+        const sTs = s.getTime();
+        const eTs = e.getTime();
+        if (Number.isNaN(sTs) || Number.isNaN(eTs)) return 0;
+        for (const r of rows) {
+          const rawDate = r.day || r.date || r.timestamp || r.day_date;
+          const d = r._dayObj ? r._dayObj : (rawDate ? new Date(rawDate) : null);
+          if (!d || isNaN(d.getTime())) continue;
+          const t = d.getTime();
+          if (t < sTs || t > eTs) continue;
+          const stepsVal = Number(r.steps ?? r.total_steps ?? r.step_count ?? r.daily_steps ?? r.totalSteps ?? r.stepCount ?? 0) || 0;
+          sum += stepsVal;
+        }
+        return sum;
+      }
       const now = Date.now();
       const cutoff = now - periodDays * 24 * 60 * 60 * 1000;
-      let sum = 0;
       for (const r of rows) {
         const rawDate = r.day || r.date || r.timestamp || r.day_date;
-        if (!rawDate) continue;
-        const d = new Date(rawDate);
-        if (isNaN(d.getTime())) continue;
+        const d = r._dayObj ? r._dayObj : (rawDate ? new Date(rawDate) : null);
+        if (!d || isNaN(d.getTime())) continue;
         const t = d.getTime();
         if (t < cutoff || t > now) continue;
         const stepsVal = Number(r.steps ?? r.total_steps ?? r.step_count ?? r.daily_steps ?? r.totalSteps ?? r.stepCount ?? 0) || 0;
@@ -281,10 +454,10 @@ const Activity = () => {
     } catch (e) {
       return 0;
     }
-  }, [dashboardData, periodDays]);
+  }, [dashboardData, periodDays, dateRangeMode, rangeStart, rangeEnd]);
 
   const avgPerDay = useMemo(() => {
-    const days = Math.max(1, Number(periodDays) || 1);
+    const days = displayDays;
     const stepsTotal = (periodTotals.steps && periodTotals.steps > 0) ? periodTotals.steps : periodStepsFallback;
     return {
       distance: periodTotals.distance / days,
@@ -292,9 +465,17 @@ const Activity = () => {
       steps: Math.round((stepsTotal || 0) / days),
       calories: periodTotals.calories / days
     };
-  }, [periodTotals, periodDays, periodStepsFallback]);
+  }, [periodTotals, displayDays, periodStepsFallback]);
 
   const stepsTotal = (periodTotals.steps && periodTotals.steps > 0) ? periodTotals.steps : (periodStepsFallback || 0);
+
+  // Format minutes into hours + minutes (e.g. 125 -> "2h 5m")
+  const formatHoursMinutes = (mins) => {
+    const m = Math.round(Number(mins) || 0);
+    const h = Math.floor(m / 60);
+    const r = Math.abs(m % 60);
+    return `${h}h ${String(r).padStart(2,'0')}m`;
+  };
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -329,31 +510,64 @@ const Activity = () => {
     setEditingGoal(null);
   };
 
+  // Quick navigation cards to related activity pages (colorful, iconified)
+  const quickLinks = [
+    { to: '/running', label: 'Running', icon: '🏃‍♂️', gradientIcon: 'linear-gradient(135deg,#fb7185,#ef4444)', cardBg: 'linear-gradient(90deg, rgba(239,68,68,0.06), rgba(251,113,133,0.03))', accent: '#ef4444' },
+    { to: '/walking', label: 'Walking', icon: '🚶‍♀️', gradientIcon: 'linear-gradient(135deg,#34d399,#10b981)', cardBg: 'linear-gradient(90deg, rgba(16,185,129,0.06), rgba(52,211,153,0.03))', accent: '#10b981' },
+    { to: '/cycling', label: 'Cycling', icon: '🚴‍♂️', gradientIcon: 'linear-gradient(135deg,#a78bfa,#6366f1)', cardBg: 'linear-gradient(90deg, rgba(99,102,241,0.06), rgba(167,139,250,0.03))', accent: '#6366f1' },
+    { to: '/hiking', label: 'Hiking', icon: '🥾', gradientIcon: 'linear-gradient(135deg,#fbbf24,#f59e0b)', cardBg: 'linear-gradient(90deg, rgba(245,158,11,0.06), rgba(251,191,36,0.03))', accent: '#f59e0b' },
+    { to: '/swimming', label: 'Swimming', icon: '🏊‍♀️', gradientIcon: 'linear-gradient(135deg,#38bdf8,#0ea5e9)', cardBg: 'linear-gradient(90deg, rgba(14,165,233,0.06), rgba(56,189,248,0.03))', accent: '#0ea5e9' },
+    { to: '/gym', label: 'Gym', icon: '🏋️‍♀️', gradientIcon: 'linear-gradient(135deg,#a78bfa,#7c3aed)', cardBg: 'linear-gradient(90deg, rgba(124,58,237,0.06), rgba(167,139,250,0.03))', accent: '#7c3aed' }
+  ];
+
   return (
     <div className="page-container">
       <div className="page-header">
         <div className="header-content">
           <h1 className="page-title">Activity</h1>
-          <p className="page-subtitle">Track your general daily & weekly activity. Detailed running and gym analytics moved to dedicated views.</p>
+          <p className="page-subtitle">Track your general daily & weekly activity.</p>
         </div>
-        <div className="header-controls">
-          <select
-            value={periodDays}
-            onChange={(e) => setPeriodDays(Number(e.target.value))}
-            className="period-select"
-          >
-            <option value={7}>Last 7 days</option>
-            <option value={14}>Last 2 weeks</option>
-            <option value={30}>Last 30 days</option>
-            <option value={60}>Last 2 months</option>
-            <option value={90}>Last 3 months</option>
-          </select>
-          <button aria-label="Refresh activities" className="btn btn-primary" disabled={busy} onClick={() => loadActivities({ limit })}>{busy ? 'Loading...' : 'Refresh'}</button>
-          <div className="header-links">
-            <Link to="/running" className="btn btn-outline" title="Go to Running analytics">Running →</Link>
-            <Link to="/gym" className="btn btn-outline" title="Go to Gym analytics">Gym →</Link>
+        <div className="toolbar flex gap-2 mt-2 flex-wrap items-center">
+          <div className="flex gap-2 items-center">
+            {dateRangeMode === 'rolling' && (
+              <select value={periodDays} onChange={e => setPeriodDays(Number(e.target.value))} className="period-select">
+                <option value={7}>Last 7 days</option>
+                <option value={14}>Last 2 weeks</option>
+                <option value={30}>Last 30 days</option>
+                <option value={60}>Last 2 months</option>
+                <option value={90}>Last 3 months</option>
+                <option value={180}>Last 6 months</option>
+                <option value={365}>Last 1 year</option>
+              </select>
+            )}
+            {dateRangeMode === 'explicit' && (
+              <div className="flex gap-2 items-center text-xs">
+                <input type="date" value={rangeStart} onChange={e=>setRangeStart(e.target.value)} className="input input-sm" />
+                <span>→</span>
+                <input type="date" value={rangeEnd} onChange={e=>setRangeEnd(e.target.value)} className="input input-sm" />
+              </div>
+            )}
+            <button aria-label="Refresh activities" className="btn btn-primary" disabled={busy} onClick={() => loadActivities({ limit })}>{busy ? 'Loading...' : 'Refresh'}</button>
+            <div className="flex items-center gap-2 ml-4 text-xs">
+              <select value={dateRangeMode} onChange={e=>setDateRangeMode(e.target.value)} className="select select-sm">
+                <option value="rolling">Rolling</option>
+                <option value="explicit">Range</option>
+              </select>
+            </div>
           </div>
         </div>
+      </div>
+      {/* Quick navigation cards to specific activity pages */}
+      <div className="quick-links-grid mt-4 mb-6">
+        {quickLinks.map(l => (
+          <Link key={l.to} to={l.to} className={`quick-card group`} title={l.label} style={{ background: l.cardBg }}>
+            <div className={`icon text-white rounded-xl w-12 h-12 flex items-center justify-center text-xl shadow-md`} style={{ background: l.gradientIcon }}>{l.icon}</div>
+            <div className="ml-3">
+              <div className="font-semibold" style={{ color: l.accent }}>{l.label}</div>
+              <div className="text-xs text-gray-500">Open {l.label} analytics</div>
+            </div>
+          </Link>
+        ))}
       </div>
       
       <div className="page-content">
@@ -368,17 +582,17 @@ const Activity = () => {
           {/* Overview Metrics (Sleep-style) */}
           <div className="overview-metrics">
             <MetricCard
-              title={`Active Minutes (${periodDays}d)`}
-              value={periodTotals.durationMin.toFixed(0)}
-              unit="min"
+              title={`Active Minutes (${displayLabel})`}
+              value={formatHoursMinutes(periodTotals.durationMin)}
+              unit=""
               icon="⏱️"
               color="green"
-              subtitle={`Avg ${avgPerDay.durationMin.toFixed(0)} min/day · ${periodTotals.calories.toFixed(0)} kcal total`}
+              subtitle={`Avg ${formatHoursMinutes(avgPerDay.durationMin)} / day`}
               trend={0}
-              tooltip={`Sum of activity durations over the last ${periodDays} days`}
+              tooltip={`Sum of activity durations over the last ${displayLabel}`}
             />
             <MetricCard
-              title={`Distance (${periodDays}d)`}
+              title={`Distance (${displayLabel})`}
               value={periodTotals.distance.toFixed(2)}
               unit="km"
               icon="📏"
@@ -387,106 +601,36 @@ const Activity = () => {
               trend={0}
             />
             <MetricCard
-              title={`Workouts (${periodDays}d)`}
+              title={`Workouts (${displayLabel})`}
               value={periodActivities.length}
               unit=""
               icon="🏋️"
               color="purple"
-              subtitle={`${periodTotals.durationMin.toFixed(0)} min total · Avg ${periodActivities.length ? (periodTotals.durationMin / periodActivities.length).toFixed(0) : '0'} min/session`}
+              subtitle={`Avg ${(periodActivities.length/Math.max(1, displayDays)).toFixed(2)} /day · Avg ${periodActivities.length ? (periodTotals.durationMin / periodActivities.length).toFixed(0) : '0'} min/session`}
               trend={0}
             />
             <MetricCard
-              title="Avg Steps / Day"
-              value={avgPerDay.steps}
+              title={`Steps (${displayLabel})`}
+              value={stepsTotal.toLocaleString()}
               unit=""
               icon="📊"
               color="blue"
-              subtitle={`${stepsTotal.toLocaleString()} steps total · ${periodDays}d window`}
+              subtitle={`Avg ${avgPerDay.steps.toLocaleString()} / day`}
               trend={0}
             />
           </div>
 
-          {/* Goals Card (Enhanced) */}
-          <div className="card">
-            <div className="card-header flex items-center justify-between flex-wrap gap-3">
-              <h3 className="card-title">Activity Goals</h3>
-              <div className="hidden md:flex items-center gap-4 text-[11px] text-gray-500">
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Steps</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-500 inline-block" /> Distance</span>
-              </div>
-            </div>
-            <div className="card-content space-y-5">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div className="p-3 rounded border bg-white/60 dark:bg-gray-900/40 flex flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">Daily Steps</span>
-                    {editingGoal === 'steps' ? (
-                      <input aria-label="Daily steps goal" autoFocus type="number" min={1} defaultValue={dailyStepsGoal} onBlur={e => handleGoalSave('steps', e.target.value)} onKeyDown={e => { if (e.key==='Enter') handleGoalSave('steps', e.target.value); if (e.key==='Escape') setEditingGoal(null); }} className="w-24 input input-xs" />
-                    ) : (
-                      <button onClick={()=>handleGoalEdit('steps')} className="font-semibold hover:underline" title="Edit goal">{dailyStepsGoal.toLocaleString()}</button>
-                    )}
-                  </div>
-                  <div className="w-full h-2 rounded bg-gray-200 dark:bg-gray-700 overflow-hidden">
-                    <div className="h-2 bg-gradient-to-r from-green-400 to-green-600" style={{ width: `${goalProgressSteps}%` }} />
-                  </div>
-                  <div className="text-[10px] text-gray-500 flex justify-between"><span>Progress</span><span>{goalProgressSteps.toFixed(0)}%</span></div>
-                </div>
-                <div className="p-3 rounded border bg-white/60 dark:bg-gray-900/40 flex flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">Weekly Distance</span>
-                    {editingGoal === 'distance' ? (
-                      <input aria-label="Weekly distance goal" autoFocus type="number" min={1} step={0.5} defaultValue={weeklyDistanceGoal} onBlur={e => handleGoalSave('distance', e.target.value)} onKeyDown={e => { if (e.key==='Enter') handleGoalSave('distance', e.target.value); if (e.key==='Escape') setEditingGoal(null); }} className="w-24 input input-xs" />
-                    ) : (
-                      <button onClick={()=>handleGoalEdit('distance')} className="font-semibold hover:underline" title="Edit goal">{weeklyDistanceGoal} km</button>
-                    )}
-                  </div>
-                  <div className="w-full h-2 rounded bg-gray-200 dark:bg-gray-700 overflow-hidden">
-                    <div className="h-2 bg-gradient-to-r from-indigo-400 to-indigo-600" style={{ width: `${goalProgressDistance}%` }} />
-                  </div>
-                  <div className="text-[10px] text-gray-500 flex justify-between"><span>Progress</span><span>{goalProgressDistance.toFixed(0)}%</span></div>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  {/* Ensure series is explicitly chronological (oldest -> newest) so newest appears on the right */}
-                  {/**/}
-                  <span className="text-gray-600 dark:text-gray-400 text-sm font-medium">{lastNDaysSeries.length}-Day Trend</span>
-                  <div>
-                    <SegmentedControl
-                      options={[{value:'distance', label:'Distance'},{value:'steps', label:'Steps'},{value:'calories', label:'Calories'}]}
-                      value={sparkMetric}
-                      onChange={setSparkMetric}
-                      size="sm"
-                      ariaLabel="Sparkline metric"
-                    />
-                  </div>
-                </div>
-                <div className="relative">
-                  {/* use explicit chronological ordering to guarantee left->right oldest->newest */}
-                  <Sparkline
-                    data={[...lastNDaysSeries].sort((a,b) => new Date(a.date) - new Date(b.date)).map(p => ({ value: p[sparkMetric] }))}
-                    height={46}
-                    stroke={sparkMetric==='distance' ? '#10b981' : sparkMetric==='steps' ? '#6366f1' : '#f59e0b'}
-                    fill={sparkMetric==='calories' ? 'rgba(245,158,11,0.18)' : sparkMetric==='steps' ? 'rgba(99,102,241,0.15)' : 'rgba(16,185,129,0.15)'}
-                    tooltipFormatter={(pt,i)=>{
-                      const series = [...lastNDaysSeries].sort((a,b) => new Date(a.date) - new Date(b.date));
-                      return `${series[i]?.date || ''}: ${sparkMetric==='distance'? pt.value.toFixed(2)+' km' : sparkMetric==='steps'? pt.value.toLocaleString()+' steps' : pt.value.toLocaleString()+' kcal'}`;
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
+          {/* Activity Goals moved to bottom */}
   </div>
 
-        {/* Advanced charts & simulations removed. See Running Analytics page for forecasts and goal simulations. */}
+  {/* Advanced charts & simulations removed. See Running Analytics page for forecasts and goal simulations. */}
 
         {/* Weekly Trends */}
         <div className="card mt-6">
           <div className="card-header flex flex-wrap gap-4 justify-between items-start">
             <div className="space-y-1">
               <h3 className="card-title">Weekly Trends</h3>
-              <div className="text-[11px] text-gray-500">Distance, steps, calories & pacing per ISO week</div>
+              <div className="text-[11px] text-gray-500">Distance, steps, calories, pacing & training load per ISO week (load derives from source fields or training effect × duration)</div>
             </div>
             <div className="flex flex-col items-end gap-2">
               <div className="text-[10px] text-gray-500">Click headers to sort</div>
@@ -546,7 +690,13 @@ const Activity = () => {
                         <td className="py-2 px-3">{w.rollingAvgPace4 != null ? formatPaceMinPerKm(w.rollingAvgPace4) : '-'}</td>
                         <td className={`py-2 px-3 ${w.paceImprovementPct != null ? (w.paceImprovementPct > 0 ? 'text-green-600' : w.paceImprovementPct < 0 ? 'text-red-600' : 'text-gray-500') : 'text-gray-400'}`}>{w.paceImprovementPct != null ? `${w.paceImprovementPct>0?'+':''}${w.paceImprovementPct.toFixed(1)}%` : '—'}</td>
                         <td className="py-2 px-3">{w.avgHr != null ? w.avgHr.toFixed(0) : '-'}</td>
-                        <td className="py-2 px-3 font-medium text-gray-900 dark:text-gray-100">{typeof w.trainingLoad === 'number' ? w.trainingLoad.toFixed(0) : '-'}</td>
+                        <td className="py-2 px-3 font-medium text-gray-900 dark:text-gray-100">
+                          {typeof w.trainingLoad === 'number' ? (
+                            <span className={w.trainingLoadSource === 'derived' ? 'text-indigo-600 dark:text-indigo-400' : ''} title={w.trainingLoadSource === 'derived' ? 'Derived from training_effect × duration (approximate)' : 'Explicit training load value'}>
+                              {w.trainingLoad.toFixed(0)}{w.trainingLoadSource === 'derived' ? '*' : ''}
+                            </span>
+                          ) : '-'}
+                        </td>
                         <td className="py-2 px-3">{w.trainingEffect != null ? w.trainingEffect.toFixed(1) : '-'} / {w.anaerobicEffect != null ? w.anaerobicEffect.toFixed(1) : '-'}</td>
                         <td className="py-2 px-3">
                           <span className={
@@ -626,6 +776,18 @@ const Activity = () => {
                 <div className="text-[11px] text-gray-500 mt-2">If you see a key with a numeric parsed value (e.g. <code>training_load</code> or <code>tl</code>), paste that key name here and I'll add it to the aggregator.</div>
               </div>
             ) : null}
+            {typeof window !== 'undefined' && localStorage.getItem('debugShowSteps') === '1' ? (
+              <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/10 rounded text-xs">
+                <div className="font-semibold mb-2">DEBUG: Dashboard rows matching explicit range</div>
+                <div className="text-[12px] text-gray-700 dark:text-gray-200 mb-2">Matched rows: <strong>{matchedDashboardRows.length}</strong></div>
+                <div className="text-[12px] text-gray-600 dark:text-gray-300 mb-2">Sample keys (first row):</div>
+                {matchedDashboardRows.length > 0 ? (
+                  <pre style={{maxHeight: 220, overflow: 'auto'}}>{JSON.stringify(matchedDashboardRows.slice(0,6).map(r => Object.keys(r)), null, 2)}</pre>
+                ) : (
+                  <div className="text-[12px] text-gray-500">No matching dashboard rows for the selected explicit range.</div>
+                )}
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -687,6 +849,78 @@ const Activity = () => {
           </div>
         </div>
       </div>
+        {/* Activity Goals (moved to bottom) */}
+        <div className="card mt-6">
+          <div className="card-header flex items-center justify-between flex-wrap gap-3">
+            <h3 className="card-title">Activity Goals</h3>
+            <div className="hidden md:flex items-center gap-4 text-[11px] text-gray-500">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Steps</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-500 inline-block" /> Distance</span>
+            </div>
+          </div>
+          <div className="card-content space-y-5">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="p-3 rounded border bg-white/60 dark:bg-gray-900/40 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">Daily Steps</span>
+                  {editingGoal === 'steps' ? (
+                    <input aria-label="Daily steps goal" autoFocus type="number" min={1} defaultValue={dailyStepsGoal} onBlur={e => handleGoalSave('steps', e.target.value)} onKeyDown={e => { if (e.key==='Enter') handleGoalSave('steps', e.target.value); if (e.key==='Escape') setEditingGoal(null); }} className="w-24 input input-xs" />
+                  ) : (
+                    <button onClick={()=>handleGoalEdit('steps')} className="font-semibold hover:underline" title="Edit goal">{dailyStepsGoal.toLocaleString()}</button>
+                  )}
+                </div>
+                <div className="w-full h-2 rounded bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                  <div className="h-2 bg-gradient-to-r from-green-400 to-green-600" style={{ width: `${goalProgressSteps}%` }} />
+                </div>
+                <div className="text-[10px] text-gray-500 flex justify-between"><span>Progress</span><span>{goalProgressSteps.toFixed(0)}%</span></div>
+              </div>
+              <div className="p-3 rounded border bg-white/60 dark:bg-gray-900/40 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">Weekly Distance</span>
+                  {editingGoal === 'distance' ? (
+                    <input aria-label="Weekly distance goal" autoFocus type="number" min={1} step={0.5} defaultValue={weeklyDistanceGoal} onBlur={e => handleGoalSave('distance', e.target.value)} onKeyDown={e => { if (e.key==='Enter') handleGoalSave('distance', e.target.value); if (e.key==='Escape') setEditingGoal(null); }} className="w-24 input input-xs" />
+                  ) : (
+                    <button onClick={()=>handleGoalEdit('distance')} className="font-semibold hover:underline" title="Edit goal">{weeklyDistanceGoal} km</button>
+                  )}
+                </div>
+                <div className="w-full h-2 rounded bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                  <div className="h-2 bg-gradient-to-r from-indigo-400 to-indigo-600" style={{ width: `${goalProgressDistance}%` }} />
+                </div>
+                <div className="text-[10px] text-gray-500 flex justify-between"><span>Progress</span><span>{goalProgressDistance.toFixed(0)}%</span></div>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                {/* Ensure series is explicitly chronological (oldest -> newest) so newest appears on the right */}
+                {/**/}
+                <span className="text-gray-600 dark:text-gray-400 text-sm font-medium">{lastNDaysSeries.length}-Day Trend</span>
+                <div>
+                  <SegmentedControl
+                    options={[{value:'distance', label:'Distance'},{value:'steps', label:'Steps'},{value:'calories', label:'Calories'}]}
+                    value={sparkMetric}
+                    onChange={setSparkMetric}
+                    size="sm"
+                    ariaLabel="Sparkline metric"
+                  />
+                </div>
+              </div>
+              <div className="relative">
+                {/* use explicit chronological ordering to guarantee left->right oldest->newest */}
+                <Sparkline
+                  data={[...lastNDaysSeries].sort((a,b) => new Date(a.date) - new Date(b.date)).map(p => ({ value: p[sparkMetric] }))}
+                  height={46}
+                  stroke={sparkMetric==='distance' ? '#10b981' : sparkMetric==='steps' ? '#6366f1' : '#f59e0b'}
+                  fill={sparkMetric==='calories' ? 'rgba(245,158,11,0.18)' : sparkMetric==='steps' ? 'rgba(99,102,241,0.15)' : 'rgba(16,185,129,0.15)'}
+                  tooltipFormatter={(pt,i)=>{
+                    const series = [...lastNDaysSeries].sort((a,b) => new Date(a.date) - new Date(b.date));
+                    return `${series[i]?.date || ''}: ${sparkMetric==='distance'? pt.value.toFixed(2)+' km' : sparkMetric==='steps'? pt.value.toLocaleString()+' steps' : pt.value.toLocaleString()+' kcal'}`;
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
       <style jsx>{`
         .overview-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; }
         @media (max-width: 640px){ .overview-metrics { grid-template-columns: 1fr 1fr; } }
@@ -715,6 +949,15 @@ const Activity = () => {
   /* sticky left column must be opaque */
   table.min-w-full th.sticky, table.min-w-full td.sticky { background: white; }
   .dark table.min-w-full th.sticky, .dark table.min-w-full td.sticky { background: #071028; }
+      `}</style>
+
+      <style jsx>{`
+        .quick-links-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+        .quick-card { display:flex; align-items:center; padding:10px; border-radius:12px; background:var(--card-bg, #fff); text-decoration:none; color:inherit; box-shadow:0 1px 3px rgba(16,24,40,0.04); border:1px solid rgba(15,23,42,0.04); transition:transform .12s ease, box-shadow .12s ease; }
+        .quick-card:hover { transform:translateY(-4px); box-shadow:0 6px 20px rgba(16,24,40,0.08); }
+        .quick-card .icon { flex:0 0 auto; }
+        .quick-card .ml-3 { margin-left:12px; }
+        @media (max-width:640px) { .quick-links-grid { grid-template-columns: repeat(2, 1fr); } }
       `}</style>
     </div>
   );

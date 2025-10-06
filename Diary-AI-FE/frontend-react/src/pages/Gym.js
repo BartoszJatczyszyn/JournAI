@@ -1,262 +1,335 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React from 'react';
+import { useMemo, useState, useEffect } from 'react';
+import useGymWorkouts from '../hooks/useGymWorkouts';
 import { Link } from 'react-router-dom';
-import useActivityAggregates from '../hooks/useActivityAggregates';
-import Sparkline from '../components/Sparkline';
-import SegmentedControl from '../components/SegmentedControl';
 import { activitiesAPI } from '../services';
+import MetricCard from '../components/MetricCard';
+import TonnageTimeline from '../components/TonnageTimeline';
+import Volume1RMScatter from '../components/Volume1RMScatter';
+import Sparkline from '../components/Sparkline';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
 
-/*
-  Gym Analytics View
-  - Focuses on strength / gym related activities (heuristic match on sport name)
-  - Provides weekly volume (sum distance as proxy if available, else duration), total sets/reps placeholders
-  - Re-uses aggregation hook for consistency
-  - Omits running-specific predictions & pace metrics
-*/
-
-const GYM_KEYWORDS = ['strength', 'gym', 'weight', 'crossfit', 'functional', 'resistance'];
-
+// Gym analytics view: tonnage, templates/sessions counts, exercise progress & forecasts
 const Gym = () => {
-  const [allActivities, setAllActivities] = useState([]);
+  const {
+    templates,
+    sessions,
+    exerciseMeta,
+    exerciseProgress,
+    bodyPartTonnage,
+  } = useGymWorkouts();
+
+  const [latestActivities, setLatestActivities] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const [limit, setLimit] = useState(200);
 
   useEffect(() => {
     const load = async () => {
       try {
         setBusy(true);
-        const res = await activitiesAPI.getLatestActivities(limit);
-        setAllActivities(res.activities || []);
+        const res = await activitiesAPI.getLatestActivities(1000);
+        setLatestActivities(res.activities || []);
       } catch (e) {
-        console.error(e);
+        console.warn('Failed to load latest activities for gym page', e);
         setError('Failed to load activities');
       } finally {
         setBusy(false);
       }
     };
     load();
-  }, [limit]);
+  }, []);
 
-  const gymActivities = useMemo(() => allActivities.filter(a => {
-    const s = (a.sport || '').toLowerCase();
-    return GYM_KEYWORDS.some(k => s.includes(k));
-  }), [allActivities]);
-
-  const aggregates = useActivityAggregates(gymActivities);
-  const weeklyGroups = React.useMemo(() => (aggregates.weeklyGroups || []), [aggregates.weeklyGroups]);
-
-  // Enrich weekly groups with an "advanced volume" metric:
-  // Priority order:
-  // 1. trainingLoad (if available)
-  // 2. durationMin * (avgHr / 100) (proxy for internal load)
-  // 3. durationMin + calories/100 (fallback blended proxy)
-  const enrichedWeekly = useMemo(() => weeklyGroups.map(w => {
-    let advancedVolume = null;
-    if (w.trainingLoad && w.trainingLoad > 0) {
-      advancedVolume = w.trainingLoad;
-    } else if (w.durationMin > 0 && w.avgHr) {
-      advancedVolume = w.durationMin * (w.avgHr / 100);
-    } else if (w.durationMin > 0) {
-      advancedVolume = w.durationMin + (w.calories ? (w.calories / 100) : 0);
-    } else {
-      advancedVolume = (w.distance || 0) * 10; // very last resort
+  const [periodDays, setPeriodDays] = useState(() => {
+    try {
+      const raw = localStorage.getItem('gymPeriodDays');
+      const parsed = Number(raw);
+      return (!Number.isNaN(parsed) && parsed > 0) ? parsed : 30;
+    } catch (e) {
+      return 30;
     }
-    return { ...w, advancedVolume };
-  }), [weeklyGroups]);
+  });
 
-  // Range & sorting state (similar to Activity weekly trends)
-  const [weeksRange, setWeeksRange] = useState(8); // 4 / 8 / 12
-  const [weeklySortKey, setWeeklySortKey] = useState('week');
-  const [weeklySortDir, setWeeklySortDir] = useState('asc');
+  useEffect(() => { try { localStorage.setItem('gymPeriodDays', String(periodDays)); } catch (e) { console.warn('Failed to persist gymPeriodDays', e); } }, [periodDays]);
 
-  const toggleWeeklySort = (key) => {
-    if (weeklySortKey === key) {
-      setWeeklySortDir(d => d === 'asc' ? 'desc' : 'asc');
-    } else {
-      setWeeklySortKey(key);
-      setWeeklySortDir(key === 'week' ? 'asc' : 'desc');
-    }
-  };
+  const lastSessionTs = useMemo(() => {
+    const stamps = sessions.map(s => { try { return new Date(s.date).getTime(); } catch { return null; } }).filter(Boolean);
+    return stamps.length ? Math.max(...stamps) : Date.now();
+  }, [sessions]);
 
-  // Visible weeks based on selected range
-  const visibleWeeks = useMemo(() => enrichedWeekly.slice(-weeksRange), [enrichedWeekly, weeksRange]);
+  const periodCutoff = useMemo(() => lastSessionTs - (periodDays * 24 * 60 * 60 * 1000), [lastSessionTs, periodDays]);
 
-  // For coloring & progress we base thresholds on the max advanced volume in the visible window
-  const maxAdvanced = useMemo(() => visibleWeeks.reduce((m,w) => w.advancedVolume>m ? w.advancedVolume : m, 0) || 0, [visibleWeeks]);
+  const periodSessions = useMemo(() => sessions.filter(s => {
+    try {
+      const t = new Date(s.date).getTime();
+      return !Number.isNaN(t) && t >= periodCutoff && t <= lastSessionTs;
+    } catch (e) { return false; }
+  }), [sessions, periodCutoff, lastSessionTs]);
 
-  // (Row background coloring replaced with zebra striping + progress bar for clarity)
-  const lastWeeks = visibleWeeks.slice(-8); // for the header mini charts we still show up to 8
+  // Merge Garmin / raw activities (fitness_equipment) into periodSessions as synthetic sessions
+  const combinedSessions = useMemo(() => {
+    const out = [...periodSessions];
+    try {
+      (latestActivities || []).forEach(a => {
+        const sport = (a.sport || '').toLowerCase();
+        if (sport === 'fitness_equipment' || sport === 'fitness-equipment' || sport === 'fitness equipment') {
+          const t = new Date(a.start_time || a.date || a.timestamp).getTime();
+          if (isNaN(t)) return;
+          if (t < periodCutoff || t > lastSessionTs) return;
+          // create a light-weight session-like object to include in metrics
+          const durationMin = Number(a.duration_min ?? a.duration ?? a.moving_time ?? a.elapsed_time ?? 0) || 0;
+          out.push({ id: a.activity_id || a.id || `act-${t}`, date: new Date(t).toISOString(), duration_min: durationMin, garminActivity: true, raw: a });
+        }
+      });
+    } catch (e) { /* ignore */ }
+    return out;
+  }, [periodSessions, latestActivities, periodCutoff, lastSessionTs]);
 
-  // Build a generic weekly volume metric: prefer duration, fallback distance
-  const weeklyVolumeSeries = lastWeeks.map(w => ({
-    week: w.week,
-    // Show advancedVolume for the sparkline (normalized) if available, else duration fallback
-    volume: w.advancedVolume != null ? w.advancedVolume : (w.durationMin > 0 ? w.durationMin : (w.distance * 10))
-  }));
+  const combinedSessionsCount = combinedSessions.length;
+  const garminSessionsCount = combinedSessions.filter(s => s.garminActivity).length;
 
-  const durationSpark = weeklyVolumeSeries.map(v => ({ value: v.volume }));
+  // sample list of matched garmin activities (in window)
+  const garminSample = useMemo(() => {
+    try {
+      return (latestActivities || []).filter(a => {
+        const sport = (a.sport || '').toLowerCase();
+        if (!(sport === 'fitness_equipment' || sport === 'fitness-equipment' || sport === 'fitness equipment')) return false;
+        const t = new Date(a.start_time || a.date || a.timestamp).getTime();
+        if (isNaN(t)) return false;
+        return t >= periodCutoff && t <= lastSessionTs;
+      }).slice(0, 12).map(a => ({ id: a.activity_id || a.id, sport: a.sport, start_time: a.start_time || a.date || a.timestamp, distance: a.distance_km ?? a.distance, duration_min: a.duration_min ?? a.duration }));
+    } catch (e) { return []; }
+  }, [latestActivities, periodCutoff, lastSessionTs]);
 
-  // Derive intensity proxy: avgHR if present, else calories / duration
-  const intensitySeries = lastWeeks.map(w => {
-    let intensity = null;
-    if (w.avgHr) intensity = w.avgHr;
-    else if (w.calories && w.durationMin) intensity = w.calories / w.durationMin; // kcal/min
-    return { value: intensity };
-  }).filter(p => p.value != null);
+  // compute tonnage timeline points compatible with TonnageTimeline
+  const tonnageTimelineData = useMemo(() => {
+    const out = [];
+    periodSessions.forEach(s => {
+      const day = new Date(s.date).toISOString().slice(0,10);
+      (s.exercises || []).forEach(ex => {
+        const meta = exerciseMeta.get(ex.exerciseId) || {};
+        const name = meta.name || 'exercise';
+        let vol = 0;
+        (ex.sets || []).forEach(st => { if (st.weight != null && st.reps) vol += st.weight * st.reps; });
+        if (vol > 0) {
+          out.push({ date: day, bodyPart: name.toLowerCase(), volume: vol });
+        }
+      });
+    });
+    return out;
+  }, [periodSessions, exerciseMeta]);
+
+  // Period totals: tonnage, sessions, templates, exercises
+  const periodTotals = useMemo(() => {
+    let tonnage = 0; let sets = 0; let sessionsCount = periodSessions.length;
+    periodSessions.forEach(s => {
+      (s.exercises || []).forEach(ex => {
+        (ex.sets || []).forEach(st => { if (st.weight!=null && st.reps) { tonnage += st.weight * st.reps; sets += 1; } });
+      });
+    });
+    return { tonnage, sets, sessionsCount, templatesCount: templates.length, exercisesCount: exerciseMeta.size };
+  }, [periodSessions, templates.length, exerciseMeta]);
+
+  // Active minutes: prefer explicit session.duration_min / duration, else estimate by sets * 3min (reasonable default)
+  const periodActiveMinutes = useMemo(() => {
+    try {
+      return combinedSessions.reduce((sum, s) => {
+        const explicit = Number(s.duration_min ?? s.duration ?? s.durationMin ?? null);
+        if (!Number.isNaN(explicit) && explicit > 0) return sum + explicit;
+        // estimate from sets: assume ~3 minutes per set (includes rest & transition)
+        const setsCount = (s.exercises || []).reduce((c, ex) => c + ((ex.sets && ex.sets.length) || 0), 0);
+        if (setsCount > 0) return sum + setsCount * 3;
+        // fallback per-session estimate: shorter for Garmin quick workouts (30m)
+        return sum + (s.garminActivity ? 30 : 45);
+      }, 0);
+    } catch (e) { return 0; }
+  }, [combinedSessions]);
+
+  const avgActivePerDay = useMemo(() => {
+    const days = Math.max(1, Number(periodDays) || 1);
+    return (periodActiveMinutes || 0) / days;
+  }, [periodActiveMinutes, periodDays]);
+
+  // Top N exercises by recent volume / progress
+  const topExercises = useMemo(() => {
+    const arr = Object.entries(exerciseProgress || {}).map(([id, p]) => ({ id, name: exerciseMeta.get(id)?.name || 'Exercise', record1RM: p.record1RM || 0, volume: (p.history || []).slice(-6).reduce((s,h)=>s+(h.volume||0),0), slope: p.progressSpeed || 0 }));
+    arr.sort((a,b) => b.volume - a.volume);
+    return arr.slice(0,6);
+  }, [exerciseProgress, exerciseMeta]);
+
+  if (!sessions) return <LoadingSpinner message="Loading gym data..." />;
 
   return (
     <div className="page-container">
       <div className="page-header">
         <h1 className="page-title">Gym Analytics</h1>
-  <p className="page-subtitle">Focused analytics for strength / functional training: volume, intensity, consistency.</p>
-        <div className="toolbar flex gap-2 mt-4 flex-wrap items-center">
-          <div className="flex gap-2 order-1">
-            <button className="btn btn-primary" disabled={busy} onClick={() => setLimit(l => l + 100)}>Load +100</button>
-            <button className="btn btn-secondary" disabled={busy} onClick={() => { setLimit(l=>l); }}>Refresh</button>
-          </div>
-          <div className="ml-auto flex gap-2 order-3 md:order-2">
-            <Link to="/gym/workouts" className="btn btn-outline" title="Planer treningowy">Workout Planner →</Link>
-          </div>
+        <p className="page-subtitle">Tonnage, exercise progress and simple forecasts for strength training.</p>
+        <div className="toolbar flex items-center gap-3">
+          <select value={periodDays} onChange={e=>setPeriodDays(Number(e.target.value))} className="period-select">
+            <option value={7}>Last 7 days</option>
+            <option value={14}>Last 2 weeks</option>
+            <option value={30}>Last 30 days</option>
+            <option value={60}>Last 2 months</option>
+            <option value={90}>Last 3 months</option>
+            <option value={180}>Last 6 months</option>
+            <option value={365}>Last 1 year</option>
+          </select>
+          <Link to="/gym/workouts" className="btn btn-primary">Open Workouts</Link>
         </div>
       </div>
+
       <div className="page-content space-y-6">
-        {busy && gymActivities.length === 0 && <LoadingSpinner message="Loading gym activities..." />}
-        {error && gymActivities.length === 0 && <ErrorMessage message={error} />}
+        {busy && <LoadingSpinner message="Loading activities..." />}
+        {error && <ErrorMessage message={error} />}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+          <div className="md:col-span-3 flex flex-col gap-4">
+            <MetricCard
+              title={`Tonnage (${periodDays}d)`}
+              value={periodTotals.tonnage.toFixed(0)}
+              unit="kg"
+              icon="🏋️"
+              color="purple"
+              subtitle={`${periodTotals.sessionsCount} sessions · ${periodTotals.sets} sets`}
+              tooltip={`Sum of weight × reps across logged sets in the selected window`}
+            />
+            <MetricCard
+              title={`Active Minutes (${periodDays}d)`}
+              value={((periodActiveMinutes || 0) / 60).toFixed(1)}
+              unit="h"
+              icon="⏱️"
+              color="yellow"
+              subtitle={`Avg ${((avgActivePerDay || 0) / 60).toFixed(2)} h/day`}
+              tooltip={`Estimated active minutes for gym sessions in the selected window`}
+            />
+            <MetricCard
+              title={`Sessions (${periodDays}d)`}
+              value={String(combinedSessionsCount)}
+              unit="" 
+              icon="📅"
+              color="indigo"
+              subtitle={`${garminSessionsCount} garmin · ${periodTotals.templatesCount} templates`}
+            />
+            <MetricCard
+              title={`Exercises`}
+              value={String(periodTotals.exercisesCount)}
+              unit=""
+              icon="⚙️"
+              color="green"
+              subtitle={`Tracked exercises`}
+            />
+          </div>
+
+          <div className="card md:col-span-6">
+            <div className="card-header flex items-center justify-between"><h3 className="card-title">Tonnage Timeline</h3><span className="text-[10px] text-gray-500">kg</span></div>
+            <div className="card-content">
+              {tonnageTimelineData.length ? (
+                <TonnageTimeline data={tonnageTimelineData} />
+              ) : <div className="text-xs text-gray-500">No tonnage data for selected period</div>}
+            </div>
+          </div>
+
+          <div className="card md:col-span-3">
+            <div className="card-header"><h3 className="card-title">Top Exercises</h3></div>
+            <div className="card-content space-y-3">
+              {topExercises.length === 0 && <div className="text-xs text-gray-500">No exercise progress yet</div>}
+              {topExercises.map((ex) => (
+                <div key={ex.id} className="p-2 rounded border bg-gray-50 dark:bg-gray-900/30">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <div className="font-semibold">{ex.name}</div>
+                      <div className="text-[11px] text-gray-500">Vol (recent): {ex.volume.toFixed(0)} kg</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-mono text-sm">{ex.record1RM ? ex.record1RM.toFixed(1) + ' kg' : '—'}</div>
+                      <div className="text-[11px] text-gray-500">Slope: {ex.slope ? ex.slope.toFixed(2) : '—'}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="card">
-            <div className="card-header flex items-center justify-between">
-              <h3 className="card-title">Last 8 Weeks Volume</h3>
-              <span className="text-[10px] text-gray-500">units</span>
-            </div>
-            <div className="card-content">
-              {durationSpark.length > 0 ? (
-                <Sparkline data={durationSpark} height={52} stroke="#6366f1" fill="rgba(99,102,241,0.15)" tooltipFormatter={(pt,i)=>`Week ${i+1}: ${pt.value.toFixed(0)} units`} />
-              ) : <div className="text-xs text-gray-500">No data</div>}
+          <div className="md:col-span-2 card">
+            <div className="card-header"><h3 className="card-title">Exercise Progress (Est 1RM)</h3></div>
+            <div className="card-content space-y-4">
+              {Object.keys(exerciseProgress || {}).length === 0 ? (
+                <div className="text-xs text-gray-500">No progress data available</div>
+              ) : (
+                <div className="grid grid-cols-1 gap-3">
+                  {Object.entries(exerciseProgress).slice(0,6).map(([id, prog]) => {
+                    const meta = exerciseMeta.get(id) || {};
+                    const estSeries = prog.history.map(h => ({ value: h.est1RM || h.topWeight || 0 }));
+                    return (
+                      <div key={id} className="p-3 rounded border bg-gray-50 dark:bg-gray-900/30">
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <div className="font-semibold">{meta.name || 'Exercise'}</div>
+                            <div className="text-[11px] text-gray-500">PR: {prog.record1RM ? prog.record1RM.toFixed(1)+' kg' : '—'}</div>
+                          </div>
+                          <div className="text-[11px] text-gray-500">Slope {prog.progressSpeed ? prog.progressSpeed.toFixed(2) : '—'}</div>
+                        </div>
+                        <div>
+                          {estSeries.length > 1 ? (
+                            <Sparkline data={estSeries} height={48} stroke="#10b981" fill="rgba(16,185,129,0.12)" tooltipFormatter={(pt,i)=>`#${i+1}: ${pt.value.toFixed(1)} kg`} />
+                          ) : <div className="text-xs text-gray-500">Insufficient points</div>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
+
           <div className="card">
-            <div className="card-header flex items-center justify-between">
-              <h3 className="card-title">Intensity Proxy</h3>
-              <span className="text-[10px] text-gray-500">HR / kcal·min</span>
-            </div>
+            <div className="card-header"><h3 className="card-title">Volume vs Est1RM</h3></div>
             <div className="card-content">
-              {intensitySeries.length > 1 ? (
-                <Sparkline data={intensitySeries} height={52} stroke="#f59e0b" fill="rgba(245,158,11,0.15)" tooltipFormatter={(pt,i)=>`Week ${i+1}: ${pt.value.toFixed(1)}`} />
-              ) : <div className="text-xs text-gray-500">Insufficient data</div>}
-            </div>
-          </div>
-          <div className="card">
-            <div className="card-header flex items-center justify-between">
-              <h3 className="card-title">Current Week Snapshot</h3>
-              <span className="text-[10px] text-gray-500">Status</span>
-            </div>
-            <div className="card-content grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] md:text-sm">
-              <div className="font-medium text-gray-500">Workouts</div><div>{gymActivities.filter(a => a.start_time && (a.sport || '').length).slice(-7).length}</div>
-              <div className="font-medium text-gray-500">Duration</div><div>{aggregates.weeklyGroups?.[aggregates.weeklyGroups.length-1]?.durationMin?.toFixed?.(0) || 0} min</div>
-              <div className="font-medium text-gray-500">Active Days</div><div>{aggregates.activeDays} / 7</div>
-              <div className="font-medium text-gray-500">Avg HR</div><div>{weeklyGroups[weeklyGroups.length-1]?.avgHr?.toFixed?.(0) || '-'}</div>
-              <div className="font-medium text-gray-500">Tr. Load</div><div>{weeklyGroups[weeklyGroups.length-1]?.trainingLoad?.toFixed?.(0) || '-'}</div>
+              {topExercises.length > 0 ? (
+                <Volume1RMScatter points={topExercises.map(ex => ({ volume: ex.volume, est1RM: ex.record1RM }))} />
+              ) : <div className="text-xs text-gray-500">No scatter data</div>}
             </div>
           </div>
         </div>
 
         <div className="card">
-          <div className="card-header flex flex-wrap items-center justify-between gap-3">
-            <h3 className="card-title">Weekly Details</h3>
-            <div className="flex items-center gap-4">
-              <div className="hidden md:block text-[11px] text-gray-500">Advanced Volume = heuristic proxy for weekly load</div>
-              <SegmentedControl
-                options={[4,8,12].map(v=>({label:`${v}w`, value:v}))}
-                value={weeksRange}
-                onChange={setWeeksRange}
-                size="sm"
-                ariaLabel="Weeks range"
-              />
-            </div>
-          </div>
-          <div className="card-content overflow-x-auto">
-            {enrichedWeekly.length === 0 ? <div className="text-xs text-gray-500">No weekly data</div> : (
-              <table className="min-w-full text-[11px] md:text-sm">
-                <thead>
-                  <tr className="text-left border-b border-gray-700/40 align-bottom">
-                    <th className="py-2 pr-4 font-medium sticky left-0 bg-gray-900/90 backdrop-blur z-10">Week</th>
-                    <th className="py-2 pr-4 cursor-pointer" onClick={()=>toggleWeeklySort('durationMin')}>Duration {weeklySortKey==='durationMin' ? (weeklySortDir==='asc'?'▲':'▼') : ''}</th>
-                    <th className="py-2 pr-4 cursor-pointer" onClick={()=>toggleWeeklySort('calories')}>Calories {weeklySortKey==='calories' ? (weeklySortDir==='asc'?'▲':'▼') : ''}</th>
-                    <th className="py-2 pr-4 cursor-pointer" onClick={()=>toggleWeeklySort('avgHr')}>Avg HR {weeklySortKey==='avgHr' ? (weeklySortDir==='asc'?'▲':'▼') : ''}</th>
-                    <th className="py-2 pr-4 cursor-pointer" onClick={()=>toggleWeeklySort('trainingLoad')}>Training Load {weeklySortKey==='trainingLoad' ? (weeklySortDir==='asc'?'▲':'▼') : ''}</th>
-                    <th className="py-2 pr-4 cursor-pointer" onClick={()=>toggleWeeklySort('activeDaysCount')}>Active Days {weeklySortKey==='activeDaysCount' ? (weeklySortDir==='asc'?'▲':'▼') : ''}</th>
-                    <th className="py-2 pr-4 cursor-pointer" onClick={()=>toggleWeeklySort('advancedVolume')}>Adv Volume {weeklySortKey==='advancedVolume' ? (weeklySortDir==='asc'?'▲':'▼') : ''}</th>
-                    <th className="py-2 pr-4">Progress</th>
-                    <th className="py-2 pr-4">Volume Spark</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(() => {
-                    const sorted = (function() {
-                      const arr = [...visibleWeeks];
-                      arr.sort((a,b) => {
-                        let va = a[weeklySortKey];
-                        let vb = b[weeklySortKey];
-                        if (va == null && vb == null) return 0;
-                        if (va == null) return 1;
-                        if (vb == null) return -1;
-                        if (typeof va === 'number' && typeof vb === 'number') return weeklySortDir==='asc' ? va - vb : vb - va;
-                        return weeklySortDir==='asc' ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
-                      });
-                      return arr;
-                    })();
-                    return sorted.map((w,i) => {
-                    const pct = maxAdvanced ? (w.advancedVolume / maxAdvanced) * 100 : 0;
-                    const zebra = i % 2 === 0 ? 'bg-gray-800/20' : 'bg-gray-800/10';
-                    return (
-                      <tr key={w.week} className={`${zebra} border-b border-gray-800/30 last:border-0 hover:bg-gray-800/40 transition`} title={`Advanced Volume: ${w.advancedVolume.toFixed(1)} (${pct.toFixed(0)}% of max in range)`}>
-                        <td className="py-2 pr-4 font-mono text-[11px] sticky left-0 bg-inherit backdrop-blur z-10">{w.week}</td>
-                        <td className="py-2 pr-4">{w.durationMin.toFixed(0)}</td>
-                        <td className="py-2 pr-4">{w.calories.toLocaleString()}</td>
-                        <td className="py-2 pr-4">{w.avgHr != null ? w.avgHr.toFixed(0) : '-'}</td>
-                        <td className="py-2 pr-4">{w.trainingLoad.toFixed(0)}</td>
-                        <td className="py-2 pr-4">{w.activeDaysCount} / 7</td>
-                        <td className="py-2 pr-4">{w.advancedVolume.toFixed(1)}</td>
-                        <td className="py-2 pr-4 w-28">
-                          <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded overflow-hidden">
-                            <div className={`h-2 ${pct>=100?'bg-green-600':pct>=80?'bg-green-500':pct>=60?'bg-yellow-500':pct>=40?'bg-orange-500':'bg-red-500'}`} style={{ width: `${Math.min(100,pct)}%` }} />
-                          </div>
-                          <div className="text-[10px] mt-1 text-gray-500">{pct.toFixed(0)}%</div>
-                        </td>
-                        <td className="py-2 pr-4 w-32">
-                          <Sparkline
-                            data={w.dailyDistanceSeries.map(v => ({ value: v }))}
-                            height={24}
-                            stroke="#10b981"
-                            fill="rgba(16,185,129,0.12)"
-                            tooltipFormatter={(pt,i)=>`Day ${i+1}: ${pt.value.toFixed(2)}`}
-                          />
-                        </td>
-                      </tr>
-                    );
-                    });
-                    })()}
-                </tbody>
-              </table>
+          <div className="card-header"><h3 className="card-title">Body Part Tonnage (last 4w)</h3></div>
+          <div className="card-content text-xs">
+            {Object.keys(bodyPartTonnage || {}).length === 0 ? <div className="text-gray-500">No data</div> : (
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+                {Object.entries(bodyPartTonnage).map(([bp, val]) => (
+                  <div key={bp} className="p-2 rounded border bg-gray-50 dark:bg-gray-900/30">
+                    <div className="text-[10px] uppercase text-gray-500">{bp}</div>
+                    <div className="font-semibold">{val.toFixed(0)} kg</div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>
 
-        <div className="text-[10px] text-gray-500 space-y-2">
-          <div className="flex flex-wrap gap-4">
-            <span><strong>Legend:</strong></span>
-            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 bg-green-100 border border-green-300" />Peak (&gt;=100%)</span>
-            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 bg-green-50 border border-green-200" />High (80–99%)</span>
-            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 bg-yellow-50 border border-yellow-200" />Moderate (60–79%)</span>
-            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 bg-orange-50 border border-orange-200" />Low (40–59%)</span>
-            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 bg-red-50 border border-red-200" />Very Low (&lt;40%)</span>
+        <div className="card">
+          <div className="card-header"><h3 className="card-title">Garmin fitness_equipment (sample)</h3></div>
+          <div className="card-content text-xs">
+            {garminSample.length === 0 ? (
+              <div className="text-gray-500">No matching Garmin fitness_equipment activities in selected window</div>
+            ) : (
+              <div className="space-y-2">
+                {garminSample.map(g => (
+                  <div key={g.id} className="p-2 rounded border bg-gray-50 dark:bg-gray-900/30">
+                    <div className="flex justify-between items-center">
+                      <div className="text-sm font-medium">{g.sport}</div>
+                      <div className="text-[11px] text-gray-500">{g.start_time ? new Date(g.start_time).toLocaleString() : '-'}</div>
+                    </div>
+                    <div className="text-[11px] text-gray-500">Duration: {g.duration_min ? `${g.duration_min} min` : '-'} · Distance: {g.distance ? `${g.distance}` : '-'}</div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-          <div>Heuristic strength sport filters: {GYM_KEYWORDS.join(', ')}.</div>
-          <div><strong>Advanced Volume</strong>: trainingLoad → duration * (avgHR/100) → duration + calories/100 → distance*10 (fallback). Colors and progress bar refer to the maximum in the selected range (last 12w or active range).</div>
         </div>
+
       </div>
     </div>
   );

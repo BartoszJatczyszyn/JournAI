@@ -131,11 +131,15 @@ const CorrelationHeatmap = ({
     );
   }
 
+  const computedTitle = title === false ? null : (title || (method.charAt(0).toUpperCase()+method.slice(1)+' Matrix'));
+
   return (
     <div ref={containerRef} className={`corr-heatmap mini ${compactMode ? 'compact' : ''} ${shrinkToContent ? 'shrink' : ''}`} style={shrinkToContent ? { maxWidth: explicitTableWidth ? explicitTableWidth + 8 : undefined } : undefined}>
-      <div className="heatmap-header">
-        <div className="heatmap-title">{title || (method.charAt(0).toUpperCase()+method.slice(1)+' Matrix')}</div>
-      </div>
+      {computedTitle && (
+        <div className="heatmap-header">
+          <div className="heatmap-title">{computedTitle}</div>
+        </div>
+      )}
       <div className="heatmap-scroll dark" style={shrinkToContent ? { overflowX: 'auto' } : undefined}>
         <table className="heatmap-table" style={{ '--cell-size': `${size}px`, '--cols': metrics.length, '--first-col': shrinkToContent ? `${firstColPx}px` : (compactMode ? '18%' : '22%'), width: shrinkToContent ? (explicitTableWidth ? `${explicitTableWidth}px` : 'auto') : (containerWidth ? `${containerWidth}px` : '100%') }}>
           <thead>

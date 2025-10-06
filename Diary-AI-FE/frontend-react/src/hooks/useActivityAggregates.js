@@ -41,6 +41,15 @@ const pickTrainingLoad = (a) => {
     a.trainingLoadValue,
     a.training_load_est,
     a.trainingload,
+    // Additional common or observed variants
+    a.training_load_metric,
+    a.training_load_today,
+    a.total_training_load,
+    a.totalTrainingLoad,
+    a.load,
+    a.load_total,
+    a.total_load,
+    a.totalLoad,
     a.load_score,
     a.loadScore,
     a.workload,
@@ -48,7 +57,12 @@ const pickTrainingLoad = (a) => {
     a.workLoad,
     a.trimp,
     a.session_load,
-    a.sessionLoad
+    a.sessionLoad,
+    a.aerobic_training_load,
+    a.anaerobic_training_load,
+    a.aerobicTrainingLoad,
+    a.anaerobicTrainingLoad,
+    a.trainingImpulse, // generic TRIMP key in some exports
   ];
   for (const v of candidates) {
     if (v == null) continue;
@@ -178,7 +192,7 @@ export const useActivityAggregates = (activities, opts = {}) => {
       const week = 1 + Math.round(((tmp - firstThursday) / 86400000 - 3) / 7);
       const year = tmp.getUTCFullYear();
       const key = `${year}-W${String(week).padStart(2,'0')}`;
-      if (!map.has(key)) map.set(key, { distance:0, steps:null, calories:0, durationMin:0, daily:new Map(), hrWeighted:0, hrDuration:0, trainingLoad:null, trainingEffectVals:[], anaerobicEffectVals:[], paceSum:0, paceCount:0 });
+      if (!map.has(key)) map.set(key, { distance:0, steps:null, calories:0, durationMin:0, daily:new Map(), hrWeighted:0, hrDuration:0, trainingLoad:null, trainingLoadDerived:0, derivedSamples:0, trainingEffectVals:[], anaerobicEffectVals:[], paceSum:0, paceCount:0 });
         const rec = map.get(key);
   const dist = Number(a.distance_km) || 0;
   rec.distance += dist;
@@ -209,9 +223,44 @@ export const useActivityAggregates = (activities, opts = {}) => {
           // fallback: common training load field name patterns
     tl = findNumericFieldByPattern(a, ['training[_A-Za-z]*load','\\btl\\b','load[_A-Za-z]*score','load[_A-Za-z]*value','acute_load','chronic_load','loadscore','training_load','work[_A-Za-z]*load','workload','trimp','session[_A-Za-z]*load','loadscore','work[_A-Za-z]*load']);
         }
-        if (tl != null) rec.trainingLoad = (rec.trainingLoad || 0) + tl;
-      if (a.training_effect) rec.trainingEffectVals.push(Number(a.training_effect));
-      if (a.anaerobic_training_effect) rec.anaerobicEffectVals.push(Number(a.anaerobic_training_effect));
+        if (tl != null) {
+          rec.trainingLoad = (rec.trainingLoad || 0) + tl;
+        } else {
+          // Fallback derivation: if no explicit training load value, approximate using training_effect * duration (Garmin-ish proxy)
+          // This prevents the Weekly Trends table from showing '-' when only training_effect is present.
+          const te = (a.training_effect != null ? Number(a.training_effect) : null) || (a.aerobic_training_effect != null ? Number(a.aerobic_training_effect) : null);
+          if (te != null && Number.isFinite(te) && durMin != null && dist > 0) {
+            // Scale: training_effect (typically 0-5) * duration minutes gives a rough internal load proxy.
+            const derived = te * durMin;
+            if (Number.isFinite(derived)) {
+              rec.trainingLoadDerived += derived;
+              rec.derivedSamples += 1;
+            }
+          }
+        }
+      // Collect aerobic / total training effect variants
+      const teCandidates = [
+        a.training_effect,
+        a.trainingEffect,
+        a.aerobic_training_effect,
+        a.aerobicTrainingEffect
+      ];
+      for (const te of teCandidates) {
+        if (te != null && te !== '' && Number.isFinite(Number(te))) {
+          rec.trainingEffectVals.push(Number(te));
+          break; // prefer first available
+        }
+      }
+      const anaerCandidates = [
+        a.anaerobic_training_effect,
+        a.anaerobicTrainingEffect
+      ];
+      for (const ane of anaerCandidates) {
+        if (ane != null && ane !== '' && Number.isFinite(Number(ane))) {
+          rec.anaerobicEffectVals.push(Number(ane));
+          break;
+        }
+      }
       // daily distance accumulation and mark if day has pace
       const dateKey = a.start_time.slice(0,10);
       if (!rec.daily.has(dateKey)) rec.daily.set(dateKey, { distance:0, hasPace: false });
@@ -247,6 +296,11 @@ export const useActivityAggregates = (activities, opts = {}) => {
         dailyDistanceSeries.push(day ? day.distance : 0);
       }
       const avgHr = vals.hrDuration ? (vals.hrWeighted / vals.hrDuration) : null;
+      // Prefer explicit accumulated trainingLoad; else if we derived some samples, use their total (normalized by samples to stabilize)
+      const trainingLoadFinal = (vals.trainingLoad != null)
+        ? vals.trainingLoad
+        : (vals.derivedSamples > 0 ? vals.trainingLoadDerived : null);
+      const trainingLoadSource = vals.trainingLoad != null ? 'explicit' : (vals.derivedSamples > 0 ? 'derived' : null);
       const trainingEffect = vals.trainingEffectVals.length ? (vals.trainingEffectVals.reduce((a,b)=>a+b,0)/vals.trainingEffectVals.length) : null;
       const anaerobicEffect = vals.anaerobicEffectVals.length ? (vals.anaerobicEffectVals.reduce((a,b)=>a+b,0)/vals.anaerobicEffectVals.length) : null;
       // count active days based on presence of pace data for the day
@@ -261,7 +315,7 @@ export const useActivityAggregates = (activities, opts = {}) => {
   // If source provided per-activity paces, prefer their average for the week's avgPace
   const avgPaceFromSource = vals.paceCount ? (vals.paceSum / vals.paceCount) : null;
   const finalAvgPace = avgPaceFromSource != null ? avgPaceFromSource : avgPace;
-  return { week, distance: vals.distance, steps: vals.steps, calories: vals.calories, durationMin: vals.durationMin, avgPace: finalAvgPace, dailyDistanceSeries, avgHr, trainingLoad: vals.trainingLoad, trainingEffect, anaerobicEffect, activeDaysCount };
+  return { week, distance: vals.distance, steps: vals.steps, calories: vals.calories, durationMin: vals.durationMin, avgPace: finalAvgPace, dailyDistanceSeries, avgHr, trainingLoad: trainingLoadFinal, trainingLoadSource, trainingEffect, anaerobicEffect, activeDaysCount };
     });
     // Compute streak of consecutive weeks that have avgPace available (preferred)
     let streak = 0;

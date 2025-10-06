@@ -8,6 +8,7 @@ import HealthTrendsCard from '../components/dashboard/HealthTrendsCard';
 // CorrelationSection is not currently used in this file
 // import CorrelationSection from '../components/dashboard/CorrelationSection';
 import CorrelationMatrix from '../components/CorrelationMatrix';
+import { lowerIsBetterNote } from '../utils/metricUtils';
 import DataOverviewCard from '../components/dashboard/DataOverviewCard';
 
 const Dashboard = () => {
@@ -337,7 +338,7 @@ const Dashboard = () => {
                   <strong>Notable correlations:</strong>
                   <ul>
                     {notableCorrelations.map((c, idx) => (
-                      <li key={idx}>{c.field1} ↔ {c.field2}: r = {c.correlation != null ? c.correlation.toFixed(2) : 'N/A'} (n={c.n})</li>
+                      <li key={idx}>{c.field1} ↔ {c.field2}: r = {c.correlation != null ? c.correlation.toFixed(2) : 'N/A'} (n={c.n}){(lowerIsBetterNote(c.field1) || lowerIsBetterNote(c.field2))}</li>
                     ))}
                   </ul>
                 </li>

@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { lowerIsBetterNote } from '../utils/metricUtils';
 
 const methodColors = {
   pearson: '#3b82f6',
@@ -108,8 +109,10 @@ const CorrelationMatrix = ({ data = [], maxItems = 10, minAbs = 0.3, selectedMet
     const direction = correlation >= 0 ? 'positively' : 'negatively';
     const strengthText = strength === 'strong' ? 'strongly' : 
                         strength === 'moderate' ? 'moderately' : 'weakly';
-    
-    return `${formatFieldName(field1)} is ${strengthText} ${direction} correlated with ${formatFieldName(field2)}`;
+    const base = `${formatFieldName(field1)} is ${strengthText} ${direction} correlated with ${formatFieldName(field2)}`;
+    // append note if either metric is lower-is-better
+    const note = (lowerIsBetterNote(field1) || lowerIsBetterNote(field2)) || '';
+    return base + note;
   }
 
   if (!processedData.length) {

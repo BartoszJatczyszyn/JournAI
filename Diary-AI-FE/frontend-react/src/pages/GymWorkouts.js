@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import useGymWorkouts from '../hooks/useGymWorkouts';
+import MetricCard from '../components/MetricCard';
 import Sparkline from '../components/Sparkline';
 import TonnageTimeline from '../components/TonnageTimeline';
 import Volume1RMScatter from '../components/Volume1RMScatter';
@@ -155,6 +156,11 @@ const GymWorkouts = () => {
   <p className="page-subtitle">Manage templates, log sessions, track progress and forecasts</p>
       </div>
       <div className="page-content space-y-8">
+        <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <MetricCard title={`Templates`} value={templates.length} unit="" icon="🗂️" color="indigo" subtitle="Saved templates" />
+          <MetricCard title={`Sessions`} value={sessions.length} unit="" icon="📅" color="purple" subtitle="Logged sessions" />
+          <MetricCard title={`Exercises`} value={Array.from(exerciseMeta?.entries?.() || []).length} unit="" icon="⚙️" color="green" subtitle="Known exercises" />
+        </div>
         {/* Template Creation */}
         <div className="card">
           <div className="card-header flex justify-between flex-wrap gap-4 items-center">

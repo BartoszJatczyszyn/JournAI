@@ -35,19 +35,30 @@ function ewma(values, alpha = 0.5) {
   return prev;
 }
 
-export const useActivityPredictions = (weeklyGroups, { window = 6, ewmaAlpha = 0.5, blend = 0.5 } = {}) => {
+export const useActivityPredictions = (weeklyGroups, { windowSize = 6, ewmaAlpha = 0.5, blend = 0.5 } = {}) => {
   return useMemo(() => {
-    const weeks = weeklyGroups.slice(-window);
+    const weeks = weeklyGroups.slice(-windowSize);
     // index weeks chronologically 0..k-1
     const distancePoints = weeks.filter(w => w.distance != null).map((w,i)=>({ x:i, y:w.distance }));
-    const stepsPoints = weeks.filter(w => w.steps != null).map((w,i)=>({ x:i, y:w.steps }));
+    // robustly pick steps from multiple possible week field names
+    const pickWeekSteps = (w) => {
+      if (w == null) return null;
+      const candidates = [w.steps, w.total_steps, w.step_count, w.totalSteps, w.stepCount, w.steps_total, w.steps_total_count, w.stepsCount, w.daily_steps];
+      for (const v of candidates) {
+        if (v == null) continue;
+        const n = Number(v);
+        if (!Number.isNaN(n)) return n;
+      }
+      return null;
+    };
+    const stepsPoints = weeks.map((w,i)=>({ x:i, y: pickWeekSteps(w) })).filter(p => p.y != null);
     const pacePoints = weeks.filter(w => w.rollingAvgPace4 != null).map((w,i)=>({ x:i, y:w.rollingAvgPace4 }));
 
     const distReg = distancePoints.length >= 3 ? linearRegression(distancePoints) : null;
     const stepsReg = stepsPoints.length >= 3 ? linearRegression(stepsPoints) : null;
     const paceReg = pacePoints.length >= 3 ? linearRegression(pacePoints) : null;
 
-    const nextIndex = weeks.length; // forecast next sequential week
+  const nextIndex = weeks.length; // forecast next sequential week
     const regDistance = distReg ? distReg.slope * nextIndex + distReg.intercept : null;
     const regSteps = stepsReg ? stepsReg.slope * nextIndex + stepsReg.intercept : null;
     const regPace = paceReg ? paceReg.slope * nextIndex + paceReg.intercept : null;
@@ -65,7 +76,7 @@ export const useActivityPredictions = (weeklyGroups, { window = 6, ewmaAlpha = 0
       return blend * regVal + (1 - blend) * ewVal;
     };
 
-    const predictedDistance = blendVal(regDistance, ewmaDistance);
+  const predictedDistance = blendVal(regDistance, ewmaDistance);
     const predictedSteps = blendVal(regSteps, ewmaSteps);
     const predictedRollingPace = blendVal(regPace, ewmaPace);
 
@@ -105,7 +116,7 @@ export const useActivityPredictions = (weeklyGroups, { window = 6, ewmaAlpha = 0
       paceConfidence,
       paceImprovement
     };
-  }, [weeklyGroups, window, ewmaAlpha, blend]);
+  }, [weeklyGroups, windowSize, ewmaAlpha, blend]);
 };
 
 export default useActivityPredictions;

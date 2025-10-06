@@ -9,12 +9,12 @@ export default function RunningDuoScatter({ duo }) {
   const options = Object.keys(duo||{});
   const points = (duo && duo[key]) ? duo[key].map(p=>({ x:p.x, y:p.y, label:p.label })) : [];
   const labels = {
-    distance_vs_pace: { x:'Distance (km)', y:'Pace (min/km)' },
+    distance_vs_pace: { x:'Distance (km)', y:'Avg Pace' },
     distance_vs_hr: { x:'Distance (km)', y:'Avg HR' },
-    cadence_vs_pace: { x:'Cadence', y:'Pace (min/km)' },
-    step_length_vs_pace: { x:'Step Length (m)', y:'Pace (min/km)' },
-    vertical_osc_vs_pace: { x:'Vertical Osc (cm?)', y:'Pace (min/km)' },
-    ground_contact_vs_pace: { x:'Ground Contact (ms)', y:'Pace (min/km)' },
+    cadence_vs_pace: { x:'Cadence', y:'Avg Pace' },
+    step_length_vs_pace: { x:'Step Length (m)', y:'Avg Pace' },
+    vertical_osc_vs_pace: { x:'Vertical Osc (cm?)', y:'Avg Pace' },
+    ground_contact_vs_pace: { x:'Ground Contact (ms)', y:'Avg Pace' },
   };
   const meta = labels[key] || { x:'X', y:'Y' };
   return (
