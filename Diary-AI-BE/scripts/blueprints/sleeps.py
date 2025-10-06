@@ -149,5 +149,38 @@ def get_sleep_detail(sleep_id: int):
     except Exception as e:  # pragma: no cover
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get('/sleep/events/{day}')
+def get_sleep_events_for_day(day: str):
+    """Return sleep events from garmin_sleep_events for the requested day.
+
+    Response: { events: [ { timestamp, event, duration }, ... ] }
+    """
+    try:
+        query = """
+        SELECT timestamp, event, duration
+        FROM garmin_sleep_events
+        WHERE timestamp >= %s::date AND timestamp < (%s::date + INTERVAL '1 day')
+        ORDER BY timestamp
+        """
+        rows = execute_query(query, (day, day)) or []
+        out = []
+        for r in rows:
+            item = dict(r)
+            ts = item.get('timestamp')
+            if hasattr(ts, 'isoformat'):
+                item['timestamp'] = ts.isoformat()
+            # duration may be TIME or INTERVAL; convert to string when possible
+            dur = item.get('duration')
+            if dur is not None:
+                try:
+                    item['duration'] = str(dur)
+                except Exception:
+                    item['duration'] = dur
+            out.append(item)
+        return { 'events': out }
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=str(e))
+
 sleeps_router = router
 __all__ = ["router", "sleeps_router"]

@@ -55,7 +55,10 @@ const Days = () => {
         sleep_score: r.sleep_score ?? r.sleepScore ?? null,
         avg_stress: r.stress_avg ?? r.avg_sleep_stress ?? r.avg_stress ?? r.stress ?? null,
         rhr: r.rhr ?? r.avg_rhr ?? r.avg_sleep_hr ?? null,
-        resp: r.respiration_rate ?? r.avg_sleep_rr ?? null,
+        // handle several possible respiration field names from different schemas
+        // prefer explicit avg_rr when available
+        resp_avg: r.avg_rr ?? r.avg_sleep_rr ?? r.respiration_rate ?? r.respiration_avg ?? r.resp_rate ?? null,
+        resp_max: r.max_rr ?? r.respiration_max ?? r.resp_max ?? null,
         steps: r.steps ?? null,
         tib_minutes: r.time_in_bed_minutes ?? r.time_in_bed ?? r.tib ?? r.sleep_duration_minutes ?? null,
         raw: r
@@ -117,6 +120,86 @@ const Days = () => {
     return m;
   }, [recovery]);
 
+  // Simple sparkline component (SVG) for small inline charts in metric cards
+  const Sparkline = ({ data = [], width = 120, height = 28, stroke = '#60a5fa' }) => {
+    const vals = (data || []).map(v => (v == null || isNaN(v) ? null : Number(v)));
+    const cleaned = vals.filter(v => v != null);
+    if (!cleaned.length) {
+      return (
+        <svg width={width} height={height} style={{ display: 'block' }}>
+          <rect width={width} height={height} fill="transparent" />
+        </svg>
+      );
+    }
+    const min = Math.min(...cleaned);
+    const max = Math.max(...cleaned);
+    const range = max - min || 1;
+    const step = width / Math.max(1, data.length - 1);
+    const points = vals.map((v, i) => {
+      if (v == null) return null;
+      const x = i * step;
+      const y = height - ((v - min) / range) * height;
+      return `${x},${y}`;
+    }).filter(Boolean).join(' ');
+    return (
+      <svg width={width} height={height} style={{ display: 'block' }}>
+        <polyline fill="none" stroke={stroke} strokeWidth={2} points={points} strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  };
+
+  // Metric card component
+  const MetricCard = ({ title, value, unit, delta, sparkData, color='#60a5fa' }) => (
+    <div className="metric-card" style={{ background:'rgba(255,255,255,0.03)', padding:12, borderRadius:10, minWidth:160, flex:1, border:'1px solid rgba(255,255,255,0.04)' }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
+        <div>
+          <div style={{ fontSize:12, color:'#94a3b8', marginBottom:6 }}>{title}</div>
+          <div style={{ fontSize:18, fontWeight:700, color:'var(--card-text,#e2e8f0)' }}>{value}{unit ? <span style={{ fontSize:12, marginLeft:6 }}>{unit}</span> : null}</div>
+        </div>
+        <div style={{ width:120 }}>
+          <Sparkline data={sparkData} stroke={color} />
+        </div>
+      </div>
+      <div style={{ marginTop:8, fontSize:12, color:'#94a3b8' }}>{delta != null ? (delta >= 0 ? (<span style={{ color:'#34d399' }}>▲ {Math.round(delta)}%</span>) : (<span style={{ color:'#fb7185' }}>▼ {Math.abs(Math.round(delta))}%</span>)) : <span>-</span>}</div>
+    </div>
+  );
+
+  // derive series and simple stats for metric cards
+  const metrics = useMemo(() => {
+    const sorted = [...rows].sort((a,b) => new Date(String(a.day)) - new Date(String(b.day)));
+    const sleepSeries = sorted.map(r => r.sleep_score == null ? null : Number(r.sleep_score));
+    const stepsSeries = sorted.map(r => r.steps == null ? null : Number(r.steps));
+    const rhrSeries = sorted.map(r => r.rhr == null ? null : Number(r.rhr));
+    const recoverySeries = sorted.map(r => {
+      const key = String(r.day);
+      return recoveryMap.get(key) == null ? null : Number(recoveryMap.get(key));
+    });
+
+    const calc = (arr) => {
+      const cleaned = arr.filter(v => v != null && !Number.isNaN(v));
+      if (!cleaned.length) return { last: null, change: null };
+      const last = cleaned[cleaned.length-1];
+      const half = Math.max(1, Math.floor(cleaned.length/2));
+      const recent = cleaned.slice(-half);
+      const prev = cleaned.slice(0, Math.max(0, cleaned.length - half));
+      const avg = a => a.reduce((s,x)=>s+x,0)/a.length;
+      const recentAvg = avg(recent);
+      const prevAvg = prev.length ? avg(prev) : recentAvg;
+      const change = prevAvg ? ((recentAvg - prevAvg)/Math.abs(prevAvg))*100 : null;
+      return { last, change };
+    };
+
+    const sleep = calc(sleepSeries);
+    const steps = calc(stepsSeries);
+    const rhr = calc(rhrSeries);
+    const recoveryM = calc(recoverySeries);
+
+    return {
+      sleepSeries, stepsSeries, rhrSeries, recoverySeries,
+      sleep, steps, rhr, recovery: recoveryM
+    };
+  }, [rows, recoveryMap]);
+
   if (loading && rows.length === 0) return <LoadingSpinner message="Loading daily summaries..." />;
   if (error && rows.length === 0) return <ErrorMessage message={error} />;
 
@@ -137,6 +220,44 @@ const Days = () => {
               {[7,14,30,90].map(n => <option key={n} value={n}>{n}</option>)}
             </select>
           </div>
+        </div>
+      </div>
+
+      {/* Metrics grid inserted above the summaries list */}
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ display:'flex', gap:12, flexWrap:'wrap' }}>
+          <MetricCard
+            title="Sleep Score"
+            value={metrics?.sleep?.last != null ? Math.round(metrics.sleep.last) : '-'}
+            unit="pts"
+            delta={metrics?.sleep?.change}
+            sparkData={metrics?.sleepSeries}
+            color="#60a5fa"
+          />
+          <MetricCard
+            title="Steps"
+            value={metrics?.steps?.last != null ? fmtNumber(Math.round(metrics.steps.last)) : '-'}
+            unit=""
+            delta={metrics?.steps?.change}
+            sparkData={metrics?.stepsSeries}
+            color="#f59e0b"
+          />
+          <MetricCard
+            title="Resting HR"
+            value={metrics?.rhr?.last != null ? Math.round(metrics.rhr.last) : '-'}
+            unit="bpm"
+            delta={metrics?.rhr?.change}
+            sparkData={metrics?.rhrSeries}
+            color="#f97316"
+          />
+          <MetricCard
+            title="Recovery"
+            value={metrics?.recovery?.last != null ? Math.round(metrics.recovery.last) : '-'}
+            unit=""
+            delta={metrics?.recovery?.change}
+            sparkData={metrics?.recoverySeries}
+            color="#34d399"
+          />
         </div>
       </div>
 
@@ -162,7 +283,7 @@ const Days = () => {
                       <div><span style={{ color:'#94a3b8' }}>Sleep</span><div>{r.sleep_score ?? '-'}</div></div>
                       <div><span style={{ color:'#94a3b8' }}>Stress</span><div>{r.avg_stress != null ? Math.round(r.avg_stress) : '-'}</div></div>
                       <div><span style={{ color:'#94a3b8' }}>RHR</span><div>{r.rhr != null ? Math.round(r.rhr) : '-'}</div></div>
-                      <div><span style={{ color:'#94a3b8' }}>Resp</span><div>{r.resp != null ? r.resp : '-'}</div></div>
+                      <div><span style={{ color:'#94a3b8' }}>Resp</span><div>{(r.resp_avg != null || r.resp_max != null) ? (r.resp_avg != null && r.resp_max != null ? `${Number(r.resp_avg).toFixed(1)} / ${r.resp_max}` : (r.resp_avg != null ? Number(r.resp_avg).toFixed(1) : r.resp_max)) : '-'}</div></div>
                       <div><span style={{ color:'#94a3b8' }}>TIB</span><div>{r.tib_minutes != null ? formatMinutesToHhMm(r.tib_minutes) : '-'}</div></div>
                       <div><span style={{ color:'#94a3b8' }}>Steps</span><div>{r.steps != null ? fmtNumber(r.steps) : '-'}</div></div>
                     </div>

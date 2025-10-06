@@ -31,6 +31,7 @@ const DayDetail = () => {
   const [stress, setStress] = useState(null);
   const [rr, setRr] = useState(null);
   const [sleepEvents, setSleepEvents] = useState([]);
+  const [sleepTooltip, setSleepTooltip] = useState(null);
   const [dailySummary, setDailySummary] = useState(null);
   const [journal, setJournal] = useState(null);
 
@@ -81,6 +82,9 @@ const DayDetail = () => {
           try {
             // Try summary endpoint
             const summaryRes = await monitoringAPI.getHeartRateSummary(day).catch(() => null);
+              if (summaryRes && (Array.isArray(summaryRes.samples) && summaryRes.samples.length)) {
+                setHr({ samples: summaryRes.samples });
+              }
             setHrAttempts(prev => [...prev, { endpoint: 'getHeartRateSummary', attempted: String(day), found: !!summaryRes }]);
             if (summaryRes && (Array.isArray(summaryRes.samples) && summaryRes.samples.length)) {
               setHr({ samples: summaryRes.samples });
@@ -112,7 +116,49 @@ const DayDetail = () => {
         }
         setStress(stressRes || null);
         setRr(rrRes || null);
-        setSleepEvents((sleepEvRes && sleepEvRes.events) || sleepEvRes || []);
+        // If respiratory samples are missing, try raw minute-level rr rows
+        const hasRrSamples = rrRes && (Array.isArray(rrRes.samples) && rrRes.samples.length);
+        if (!hasRrSamples) {
+          try {
+            const rawRr = await monitoringAPI.getRespiratoryRateRaw(day).catch(() => null);
+            if (Array.isArray(rawRr) && rawRr.length) {
+              setRr({ samples: rawRr });
+            }
+          } catch (e) {
+            console.warn('getRespiratoryRateRaw failed', e);
+          }
+        }
+        // If stress samples are missing, try raw minute-level stress rows
+        const hasStressSamples = stressRes && (Array.isArray(stressRes.samples) && stressRes.samples.length);
+        if (!hasStressSamples) {
+          try {
+            const rawStress = await monitoringAPI.getStressRaw(day).catch(() => null);
+            if (Array.isArray(rawStress) && rawStress.length) {
+              // set stress as object with samples to be normalized by stressChartData
+              setStress({ samples: rawStress });
+            }
+          } catch (e) {
+            console.warn('getStressRaw failed', e);
+          }
+        }
+        // Normalize sleep events response into an array. Different endpoints may return
+        // { events: [...] } or { rows: [...] } or { data: [...] } or an array directly.
+        let sleepArr = [];
+        if (sleepEvRes) {
+          if (Array.isArray(sleepEvRes)) sleepArr = sleepEvRes;
+          else if (Array.isArray(sleepEvRes.events)) sleepArr = sleepEvRes.events;
+          else if (Array.isArray(sleepEvRes.rows)) sleepArr = sleepEvRes.rows;
+          else if (Array.isArray(sleepEvRes.data)) sleepArr = sleepEvRes.data;
+          else if (Array.isArray(sleepEvRes.items)) sleepArr = sleepEvRes.items;
+          else if (sleepEvRes.events && typeof sleepEvRes.events === 'object') {
+            // single-event object -> wrap into array
+            sleepArr = [sleepEvRes.events];
+          } else {
+            // Unknown shape: keep as single item for inspection
+            sleepArr = [];
+          }
+        }
+        setSleepEvents(sleepArr);
         setJournal(journalRes || null);
 
         // Try to locate the matching daily summary from healthData
@@ -126,6 +172,19 @@ const DayDetail = () => {
           match = healthDataRes.data.find(d => String(d.day ?? d.date ?? d.label ?? d.x) === String(day));
         }
         // Merge in current weight (if for same day) or attach separately when viewing that exact date
+          // If still no samples, try retrieving raw minute-level rows from garmin_heart_rate_data
+          if (!hrNormalized || !(hrNormalized.samples && hrNormalized.samples.length)) {
+            try {
+              const rawRows = await monitoringAPI.getHeartRateRaw(day).catch(() => null);
+              setHrAttempts(prev => [...prev, { endpoint: 'getHeartRateRaw', attempted: String(day), found: !!rawRows }]);
+              if (Array.isArray(rawRows) && rawRows.length) {
+                // normalize into samples array
+                setHr({ samples: rawRows });
+              }
+            } catch (e) {
+              console.warn('getHeartRateRaw failed', e);
+            }
+          }
         let enriched = match ? { ...match } : null;
         if (currentWeight && currentWeight.day) {
           // If viewing the day equal to latest weight day, surface weight_kg
@@ -249,6 +308,97 @@ const DayDetail = () => {
 
     return rows;
   }, [stress, stressRaw]);
+
+  // Normalize respiratory rate samples into rrChartData
+  const rrChartData = useMemo(() => {
+    let samples = null;
+    if (!rr) return [];
+    if (Array.isArray(rr?.samples)) samples = rr.samples;
+    else if (rr && rr.summary && typeof rr.summary === 'object') {
+      const keys = ['rows','data','items','samples','points'];
+      for (const k of keys) {
+        if (Array.isArray(rr.summary[k]) && rr.summary[k].length) {
+          samples = rr.summary[k];
+          break;
+        }
+      }
+      if (!samples && Array.isArray(rr.summary) && rr.summary.length) samples = rr.summary;
+    }
+    if (!samples && Array.isArray(rr)) samples = rr;
+    if (!samples) return [];
+
+    const rows = samples
+      .map((s) => {
+        let ts = s.ts ?? s.t ?? s.timestamp ?? s.time;
+        if (ts == null && s.day && s.time) ts = `${s.day} ${s.time}`;
+        let tms = null;
+        if (typeof ts === 'number') tms = ts > 1e12 ? ts : ts * 1000;
+        else if (typeof ts === 'string') {
+          let s2 = ts.trim();
+          if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(s2)) s2 = s2.replace(' ', 'T');
+          const parsed = Date.parse(s2);
+          if (!Number.isNaN(parsed)) tms = parsed;
+        }
+        if (!tms) return null;
+        const val = s.rr ?? s.value ?? s.v ?? s.rate ?? null;
+        const num = val != null ? Number(val) : null;
+        if (num == null || Number.isNaN(num)) return null;
+        return { t: tms, rr: num };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.t - b.t);
+    return rows;
+  }, [rr]);
+
+  // Hourly averages for respiratory rate (simple mean)
+  const rrHourly = useMemo(() => {
+    if (!rrChartData || !rrChartData.length) return [];
+    const buckets = Array.from({ length: 24 }).map(() => []);
+    for (const r of rrChartData) {
+      const dt = new Date(r.t);
+      if (Number.isNaN(dt.getTime())) continue;
+      const h = dt.getHours();
+      if (typeof r.rr === 'number') buckets[h].push(r.rr);
+    }
+    return buckets.map((vals, h) => {
+      const count = vals.length;
+      const mean = count ? vals.reduce((a, b) => a + b, 0) / count : null;
+      const label = `${String(h).padStart(2, '0')}:00`;
+      return { hour: h, hourLabel: label, mean, count };
+    });
+  }, [rrChartData]);
+
+  const RRTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length) {
+      const d = payload[0].payload;
+      return (
+        <div className="custom-tooltip">
+          <p className="tooltip-label">{new Date(d.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+          <p className="tooltip-value">
+            <span className="tooltip-metric">RR:</span>
+            <span className="tooltip-number">{d.rr != null ? Number(d.rr).toFixed(2) : 'n/a'}</span>
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  const RRBarTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length) {
+      const d = payload[0].payload;
+      return (
+        <div className="custom-tooltip">
+          <p className="tooltip-label">{d.hourLabel}</p>
+          <p className="tooltip-value"><span className="tooltip-metric">Mean:</span> <span className="tooltip-number">{d.mean != null ? Number(d.mean).toFixed(2) : 'n/a'}</span></p>
+          <p className="tooltip-value"><span className="tooltip-metric">Median:</span> <span className="tooltip-number">{d.median != null ? Number(d.median).toFixed(2) : 'n/a'}</span></p>
+          <p className="tooltip-value"><span className="tooltip-metric">IQR:</span> <span className="tooltip-number">{d.q1 != null && d.q3 != null ? `${Number(d.q1).toFixed(2)}–${Number(d.q3).toFixed(2)}` : 'n/a'}</span></p>
+          <p className="tooltip-extra">Samples: {d.count || 0}</p>
+        </div>
+      );
+    }
+    return null;
+  };
 
   // Compute hourly averages for HR (hours 0..23). Result: [{ hour: 0..23, hourLabel: 'HH:00', avg }]
   function median(arr) {
@@ -502,15 +652,151 @@ const DayDetail = () => {
 
     <div className="card" style={{ padding: 16 }}>
           <h3 style={{ marginTop: 0 }}>Respiratory Rate</h3>
-          {rr ? (
-            <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(rr, null, 2)}</pre>
-          ) : (<div style={{ color: '#64748b' }}>No respiratory rate data.</div>)}
+          {rrChartData && rrChartData.length ? (
+            <>
+              <div style={{ width: '100%', height: 200 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={rrChartData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                    <XAxis dataKey="t" tickFormatter={(v) => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} stroke="#cbd5e1" />
+                    <YAxis stroke="#cbd5e1" />
+                    <RTooltip content={<RRTooltip />} />
+                    <Line type="monotone" dataKey="rr" stroke="#10b981" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <div style={{ width: '100%', height: 110, marginTop: 8 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={rrHourly} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+                    <XAxis dataKey="hourLabel" stroke="#cbd5e1" tick={{ fontSize: 11 }} />
+                    <YAxis stroke="#cbd5e1" />
+                      <RTooltip content={<RRBarTooltip />} />
+                    <Bar dataKey="mean" fill="#10b981" />
+                  </ComposedChart>
+                </ResponsiveContainer>
+                <div style={{ marginTop: 6, color: '#94a3b8', fontSize: 12 }}>Samples per hour — N: {rrHourly.reduce((s, x) => s + (x.count || 0), 0)}</div>
+              </div>
+            </>
+          ) : (
+            <div style={{ color: '#64748b' }}>
+              {rr ? (
+                <div>
+                  <div>Respiratory response returned (no chartable samples):</div>
+                  <pre style={{ whiteSpace: 'pre-wrap', marginTop: 8 }}>{JSON.stringify(rr, null, 2)}</pre>
+                </div>
+              ) : (
+                <div>No respiratory rate data.</div>
+              )}
+            </div>
+          )}
         </div>
 
   <div className="card" style={{ padding: 16 }}>
           <h3 style={{ marginTop: 0 }}>Sleep Events</h3>
           {Array.isArray(sleepEvents) && sleepEvents.length ? (
-            <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(sleepEvents, null, 2)}</pre>
+            (() => {
+              // Helper: parse duration string "HH:MM:SS" into seconds
+              const parseDuration = (dur) => {
+                if (!dur) return 60; // default 1min
+                if (typeof dur === 'number') return Math.floor(dur);
+                const parts = String(dur).split(':').map((p) => Number(p));
+                if (!parts.length) return 60;
+                // support SS, MM:SS or HH:MM:SS
+                if (parts.length === 1) return parts[0];
+                if (parts.length === 2) return parts[0] * 60 + parts[1];
+                return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
+              };
+
+              const dayStart = new Date(String(day) + 'T00:00:00').getTime();
+              const secondsInDay = 24 * 60 * 60;
+
+              const colorFor = (ev) => {
+                const map = {
+                  deep_sleep: '#0ea5a4',
+                  light_sleep: '#60a5fa',
+                  rem: '#a78bfa',
+                  awake: '#ef4444',
+                  movement: '#f59e0b'
+                };
+                return map[ev] || '#94a3b8';
+              };
+
+              // Build visual items with left% and width%
+              const items = sleepEvents.map((e, idx) => {
+                const ts = e.timestamp ?? e.ts ?? e.time ?? e.t;
+                const ev = e.event ?? e.type ?? e.name ?? 'event';
+                const dur = e.duration ?? e.length ?? e.seconds ?? null;
+                const parsed = Date.parse(String(ts));
+                if (Number.isNaN(parsed)) return null;
+                const startSec = (parsed - dayStart) / 1000;
+                const durSec = typeof dur === 'number' ? dur : parseDuration(dur);
+                // clamp inside day for visual
+                const clippedStart = Math.max(0, Math.min(startSec, secondsInDay));
+                const clippedDur = Math.max(1, Math.min(durSec, secondsInDay));
+                const left = (clippedStart / secondsInDay) * 100;
+                const width = (clippedDur / secondsInDay) * 100;
+                return { key: idx, ev, ts: parsed, durSec, left, width, color: colorFor(ev), raw: e };
+              }).filter(Boolean);
+
+              // Hour ticks 0..23
+              const hours = Array.from({ length: 24 }).map((_, h) => {
+                const label = `${String(h).padStart(2, '0')}:00`;
+                const left = (h / 24) * 100;
+                return { h, label, left };
+              });
+
+              return (
+                <div>
+                  <div style={{ display: 'flex', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
+                    {/* legend */}
+                    {Object.entries({ deep_sleep: 'Deep', light_sleep: 'Light', rem: 'REM', awake: 'Awake' }).map(([k, label]) => (
+                      <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ width: 18, height: 12, background: colorFor(k), borderRadius: 2 }} />
+                        <div style={{ color: '#94a3b8', fontSize: 13 }}>{label}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ position: 'relative', height: 56, background: '#071028', borderRadius: 6, overflow: 'hidden', padding: '8px 6px' }}>
+                    {/* hour grid */}
+                    {hours.map(hrTick => (
+                      <div key={hrTick.h} style={{ position: 'absolute', left: `${hrTick.left}%`, top: 0, bottom: 0, width: 0, borderLeft: '1px solid rgba(148,163,184,0.06)' }} />
+                    ))}
+                    {/* event bars */}
+                    {items.map(it => (
+                      <div
+                        key={it.key}
+                        onMouseEnter={() => setSleepTooltip({ item: it })}
+                        onMouseLeave={() => setSleepTooltip(null)}
+                        style={{ position: 'absolute', left: `${it.left}%`, width: `${Math.max(0.3, it.width)}%`, top: 10, height: 36, background: it.color, borderRadius: 4, opacity: 0.98, display: 'flex', alignItems: 'center', paddingLeft: 8, color: '#021018', fontWeight: 700, fontSize: 12, cursor: 'default', boxShadow: '0 1px 4px rgba(0,0,0,0.3)' }}>
+                        <div style={{ textShadow: 'none', color: '#021018' }}>{it.ev.replace('_', ' ')}</div>
+                      </div>
+                    ))}
+                    {/* tooltip */}
+                    {sleepTooltip && sleepTooltip.item && (
+                      (() => {
+                        const it = sleepTooltip.item;
+                        const center = Math.min(99, it.left + (it.width || 0) / 2);
+                        const start = new Date(it.ts);
+                        const end = new Date(it.ts + (it.durSec || 0) * 1000);
+                        const fmt = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                        const durSec = Math.round(it.durSec || 0);
+                        const hh = String(Math.floor(durSec / 3600)).padStart(2,'0');
+                        const mm = String(Math.floor((durSec % 3600) / 60)).padStart(2,'0');
+                        const ss = String(durSec % 60).padStart(2,'0');
+                        return (
+                          <div style={{ position: 'absolute', left: `${center}%`, transform: 'translateX(-50%)', top: -56, minWidth: 160, background: '#0b1220', border: '1px solid rgba(148,163,184,0.08)', padding: 8, borderRadius: 6, boxShadow: '0 4px 12px rgba(2,6,23,0.6)', color: '#e6eef8', fontSize: 13 }}>
+                            <div style={{ fontWeight: 700, marginBottom: 4 }}>{it.ev.replace('_', ' ')}</div>
+                            <div style={{ color: '#94a3b8' }}>{fmt(start)} → {fmt(end)}</div>
+                            <div style={{ color: '#94a3b8', marginTop: 4 }}>Duration: {hh}:{mm}:{ss}</div>
+                          </div>
+                        );
+                      })()
+                    )}
+                  </div>
+                  <div style={{ marginTop: 8, color: '#94a3b8', fontSize: 12 }}>Events: {items.length}</div>
+                </div>
+              );
+            })()
           ) : (<div style={{ color: '#64748b' }}>No sleep events for this day.</div>)}
         </div>
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { sleepsAPI } from '../services';
+import { sleepsAPI, monitoringAPI } from '../services';
 import { Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 import {
@@ -124,40 +124,80 @@ const SleepDetail = () => {
 
   useEffect(() => {
     if (!sleep) return;
-    const toMs = (x) => {
-      try {
-        return x ? new Date(x).getTime() : null;
-      } catch {
-        return null;
-      }
+
+    // Build chart data; if the sleep record doesn't contain embedded per-minute
+    // series (hr_series / stress_series / rr_series), fall back to the
+    // monitoring endpoints (raw minute-level rows) for the start/end dates.
+    const build = async () => {
+      const robustToMs = (x) => {
+        try {
+          if (x == null) return null;
+          // numeric timestamp: treat as seconds when small, ms when large
+          if (typeof x === 'number') return x > 1e12 ? x : x * 1000;
+          const asNum = Number(x);
+          if (!Number.isNaN(asNum)) return asNum > 1e12 ? asNum : asNum * 1000;
+          const parsed = Date.parse(String(x));
+          return Number.isNaN(parsed) ? null : parsed;
+        } catch (e) {
+          return null;
+        }
+      };
+
+      const startDate = sleep.sleep_start ? new Date(sleep.sleep_start).toISOString().slice(0, 10) : null;
+      const endDate = sleep.sleep_end ? new Date(sleep.sleep_end).toISOString().slice(0, 10) : startDate;
+
+      // Helper to attempt to load from the sleep object first, otherwise fetch raw rows
+  const loadSeries = async (fieldName, rawFetchFn) => {
+        const series = Array.isArray(sleep[fieldName]) ? sleep[fieldName] : [];
+        if (series && series.length) return series;
+        // try fetch for start and end dates (in case sleep spans midnight)
+        try {
+          const a = startDate ? await rawFetchFn(startDate).catch(() => null) : null;
+          const b = endDate && endDate !== startDate ? await rawFetchFn(endDate).catch(() => null) : null;
+          const rows = [];
+          if (Array.isArray(a)) rows.push(...a);
+          else if (a && Array.isArray(a.data)) rows.push(...a.data);
+          if (Array.isArray(b)) rows.push(...b);
+          else if (b && Array.isArray(b.data)) rows.push(...b.data);
+          return rows;
+        } catch (e) {
+          return [];
+        }
+      };
+
+      const hrSeries = await loadSeries('hr_series', monitoringAPI.getHeartRateRaw);
+      const stressSeries = await loadSeries('stress_series', monitoringAPI.getStressRaw);
+      const rrSeries = await loadSeries('rr_series', monitoringAPI.getRespiratoryRateRaw);
+
+      const hrMap = new Map(
+        (hrSeries || []).map((p) => [robustToMs(p.ts ?? p.timestamp ?? p.t ?? p.time), (p.bpm ?? p.value ?? p.v ?? p.hr ?? null)])
+      );
+      const stressMap = new Map(
+        (stressSeries || []).map((p) => [robustToMs(p.ts ?? p.timestamp ?? p.t ?? p.time), (p.stress ?? p.value ?? p.v ?? p.level ?? null)])
+      );
+      const rrMap = new Map(
+        (rrSeries || []).map((p) => [robustToMs(p.ts ?? p.timestamp ?? p.t ?? p.time), (p.rr ?? p.value ?? p.v ?? p.rate ?? null)])
+      );
+
+      const allTimestamps = [
+        ...Array.from(hrMap.keys()),
+        ...Array.from(stressMap.keys()),
+        ...Array.from(rrMap.keys()),
+      ];
+      const uniqueTimestamps = [...new Set(allTimestamps)].filter(Boolean);
+      uniqueTimestamps.sort((a, b) => a - b);
+
+      setChartData(
+        uniqueTimestamps.map((t) => ({
+          t,
+          hr: hrMap.get(t),
+          stress: stressMap.get(t),
+          rr: rrMap.get(t),
+        }))
+      );
     };
 
-    const hrMap = new Map(
-      (sleep.hr_series || []).map((p) => [toMs(p.ts), p.bpm])
-    );
-    const stressMap = new Map(
-      (sleep.stress_series || []).map((p) => [toMs(p.ts), p.stress])
-    );
-    const rrMap = new Map(
-      (sleep.rr_series || []).map((p) => [toMs(p.ts), p.rr])
-    );
-
-    const allTimestamps = [
-      ...hrMap.keys(),
-      ...stressMap.keys(),
-      ...rrMap.keys(),
-    ];
-    const uniqueTimestamps = [...new Set(allTimestamps)].filter(Boolean);
-    uniqueTimestamps.sort((a, b) => a - b);
-
-    setChartData(
-      uniqueTimestamps.map((t) => ({
-        t,
-        hr: hrMap.get(t),
-        stress: stressMap.get(t),
-        rr: rrMap.get(t),
-      }))
-    );
+    build();
   }, [sleep]);
 
   if (loading && !sleep) return <div>Loading sleep...</div>;
@@ -168,15 +208,30 @@ const SleepDetail = () => {
   const startMs = toMs(sleep.sleep_start);
   const endMs = toMs(sleep.sleep_end);
 
-  const rawEvents = Array.isArray(sleep.sleep_events)
+  // Prefer various possible embedded event arrays; legacy data may put stages
+  // under `sleep_events`, `events` or `garmin_sleep_events` (Postgres migration)
+  const sourceEvents = Array.isArray(sleep.sleep_events)
     ? sleep.sleep_events
-        .filter((e) => e.timestamp && e.event)
-        .map((e) => ({
-          event: String(e.event || '').toLowerCase(),
-          t1: toMs(e.timestamp),
-          dur: typeof e.duration_sec === 'number' ? e.duration_sec * 1000 : null
-        }))
-    : [];
+    : (Array.isArray(sleep.events) ? sleep.events : (Array.isArray(sleep.garmin_sleep_events) ? sleep.garmin_sleep_events : []));
+
+  const rawEvents = (sourceEvents || [])
+    .filter((e) => {
+      if (!e) return false;
+      const hasName = (e.event || e.stage || e.type);
+      const hasTs = (e.timestamp || e.ts || (typeof e.t === 'number' ? e.t : null));
+      return Boolean(hasName && hasTs);
+    })
+    .map((e) => {
+      const name = String(e.event || e.stage || e.type || '').toLowerCase();
+      const ts = toMs(e.timestamp || e.ts || (typeof e.t === 'number' ? e.t : null));
+      // duration may be named duration_sec or duration (seconds) depending on source
+      const durSeconds = (typeof e.duration_sec === 'number' ? e.duration_sec : (typeof e.duration === 'number' ? e.duration : null));
+      return {
+        event: name,
+        t1: ts,
+        dur: durSeconds != null ? durSeconds * 1000 : null
+      };
+    });
   const sortedEvents = rawEvents
     .filter((e) => typeof e.t1 === 'number')
     .sort((a, b) => a.t1 - b.t1);

@@ -61,3 +61,5 @@ Diary-AI-BE/scripts/_list_journal_columns.py
 
 # Archive folder
 archive/
+models/
+models/mistral-7b-openorca.Q4_K_M.gguf

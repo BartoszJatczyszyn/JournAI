@@ -463,9 +463,10 @@ const Sleep = () => {
     };
 
     return timeseriesAsc.map(row => {
-        const evs = Array.isArray(row?.sleep_events)
-          ? row.sleep_events
-          : (Array.isArray(row?.events) ? row.events : (Array.isArray(row?.garmin_sleep_events) ? row.garmin_sleep_events : null));
+        // Prefer garmin_sleep_events (migrated Postgres table) when present
+        const evs = Array.isArray(row?.garmin_sleep_events)
+          ? row.garmin_sleep_events
+          : (Array.isArray(row?.sleep_events) ? row.sleep_events : (Array.isArray(row?.events) ? row.events : null));
       if (!evs || !evs.length) return { x: row.day, phaseValue: null, phaseLabel: null };
       const toMs = (e) => e && e.timestamp ? new Date(e.timestamp).getTime() : (e && e.ts ? new Date(e.ts).getTime() : (typeof e.t === 'number' ? e.t : null));
       const mapped = evs

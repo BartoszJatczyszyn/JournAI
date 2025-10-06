@@ -83,4 +83,92 @@ def get_health_data(days: int = Query(30, ge=1, le=365)):
     except Exception as e:  # pragma: no cover
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/heart-rate/raw/{day}")
+def get_heart_rate_raw(day: str):
+    """Return minute-level heart rate rows from garmin_heart_rate_data for the requested day.
+
+    Response: list of { ts, day, bpm }
+    """
+    try:
+        query = """
+        SELECT ts, day, bpm
+        FROM garmin_heart_rate_data
+        WHERE day = %s
+        ORDER BY ts
+        """
+        rows = execute_query(query, (day,), fetch_all=True) or []
+        out = []
+        for r in rows:
+            item = dict(r)
+            # convert datetimes to iso strings when applicable
+            dts = item.get('ts')
+            if hasattr(dts, 'isoformat'):
+                item['ts'] = dts.isoformat()
+            dday = item.get('day')
+            if hasattr(dday, 'isoformat'):
+                item['day'] = dday.isoformat()
+            out.append(item)
+        return out
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/stress/raw/{day}")
+def get_stress_raw(day: str):
+    """Return minute-level stress rows from garmin_stress_data for the requested day.
+
+    Response: list of { ts, day, stress }
+    """
+    try:
+        query = """
+        SELECT ts, day, stress
+        FROM garmin_stress_data
+        WHERE day = %s
+        ORDER BY ts
+        """
+        rows = execute_query(query, (day,), fetch_all=True) or []
+        out = []
+        for r in rows:
+            item = dict(r)
+            dts = item.get('ts')
+            if hasattr(dts, 'isoformat'):
+                item['ts'] = dts.isoformat()
+            dday = item.get('day')
+            if hasattr(dday, 'isoformat'):
+                item['day'] = dday.isoformat()
+            out.append(item)
+        return out
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/respiratory-rate/raw/{day}")
+def get_respiratory_rate_raw(day: str):
+    """Return minute-level respiratory rate rows from garmin_respiratory_rate_data for the requested day.
+
+    Response: list of { ts, day, rr }
+    """
+    try:
+        query = """
+        SELECT ts, day, rr
+        FROM garmin_respiratory_rate_data
+        WHERE day = %s
+        ORDER BY ts
+        """
+        rows = execute_query(query, (day,), fetch_all=True) or []
+        out = []
+        for r in rows:
+            item = dict(r)
+            dts = item.get('ts')
+            if hasattr(dts, 'isoformat'):
+                item['ts'] = dts.isoformat()
+            dday = item.get('day')
+            if hasattr(dday, 'isoformat'):
+                item['day'] = dday.isoformat()
+            out.append(item)
+        return out
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=str(e))
+
 __all__ = ["router"]

@@ -18,7 +18,19 @@ export default function HealthReport({ llmAvailable = true }) {
       const { data } = await llm.getHealthReport(days, language);
       setReport(data?.report || '');
     } catch (e) {
-      const msg = e?.response?.data?.detail || e.message;
+      const msg = (() => {
+        try {
+          if (!e) return 'Unknown error';
+          if (e.response && e.response.data) {
+            const d = e.response.data;
+            return d.detail || d.error || d.message || JSON.stringify(d);
+          }
+          if (e.message && typeof e.message === 'string') return e.message;
+          return typeof e === 'string' ? e : JSON.stringify(e);
+        } catch (xx) {
+          return String(xx);
+        }
+      })();
       setError(msg);
       toast.error(`Generate failed: ${msg}`);
     } finally {
@@ -47,7 +59,19 @@ export default function HealthReport({ llmAvailable = true }) {
       toast.success('Report saved');
       await fetchLatest();
     } catch (e) {
-      const msg = e?.response?.data?.detail || e.message;
+      const msg = (() => {
+        try {
+          if (!e) return 'Unknown error';
+          if (e.response && e.response.data) {
+            const d = e.response.data;
+            return d.detail || d.error || d.message || JSON.stringify(d);
+          }
+          if (e.message && typeof e.message === 'string') return e.message;
+          return typeof e === 'string' ? e : JSON.stringify(e);
+        } catch (xx) {
+          return String(xx);
+        }
+      })();
       setError(msg);
       toast.error(`Save failed: ${msg}`);
     } finally {
