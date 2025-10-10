@@ -145,9 +145,10 @@ class JournalUpdate(BaseModel):
 
 
 @router.get("/{day}")
-def get_journal_entry(day: date):
-    svc = JournalService()
-    row = svc.get_entry(day)
+async def get_journal_entry(day: date):
+    from services.journal_service import AsyncJournalService
+    svc = AsyncJournalService()
+    row = await svc.get_entry(day)
     if not row:
         raise HTTPException(status_code=404, detail="journal entry not found")
     return row
@@ -156,8 +157,9 @@ def get_journal_entry(day: date):
 
 
 @router.put("/{day}")
-def upsert_journal_entry(day: date, payload: JournalUpdate):
-    svc = JournalService()
+async def upsert_journal_entry(day: date, payload: JournalUpdate):
+    from services.journal_service import AsyncJournalService
+    svc = AsyncJournalService()
     update_dict = payload.to_update_dict()
 
     # Filter by allow‑list (silently ignore unknowns already prevented by Pydantic)
@@ -165,12 +167,12 @@ def upsert_journal_entry(day: date, payload: JournalUpdate):
 
     if not filtered:
         # Ensure a stub row exists even if no (valid) fields supplied
-        svc.upsert_entry(day, {})
-        row = svc.get_entry(day)
+        await svc.upsert_entry(day, {})
+        row = await svc.get_entry(day)
         return {"updated": [], "ignored": list(update_dict.keys()), "entry": row}
 
-    svc.upsert_entry(day, filtered)
-    row = svc.get_entry(day)
+    await svc.upsert_entry(day, filtered)
+    row = await svc.get_entry(day)
     ignored: List[str] = [k for k in update_dict.keys() if k not in filtered]
     return {"updated": list(filtered.keys()), "ignored": ignored, "entry": row}
 

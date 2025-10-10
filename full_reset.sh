@@ -2,10 +2,12 @@
 # full_reset.sh — full reset of the database (remove volume), rebuild images,
 # start Postgres + backend and run migrations, then (optionally) start frontend locally.
 # Usage:
-#   ./full_reset.sh            # reset + migration + backend
-#   ./full_reset.sh --with-frontend  # also starts React frontend locally
-#   ./full_reset.sh --no-cache       # build without cache
-#   You can combine flags: ./full_reset.sh --no-cache --with-frontend
+#   ./full_reset.sh                         # reset + migration + backend
+#   ./full_reset.sh --with-frontend         # also starts React frontend locally
+#   ./full_reset.sh --no-cache              # build without cache
+#   ./full_reset.sh --preserve-db           # do NOT remove DB volume; keep existing data and only migrate
+#   ./full_reset.sh --no-drop-db            # alias of --preserve-db
+#   You can combine flags: ./full_reset.sh --no-cache --with-frontend --preserve-db
 
 set -euo pipefail
 
@@ -16,6 +18,7 @@ WITH_FRONTEND=0
 NO_CACHE=0
 RUN_GARMINDb=1  # can be disabled with --skip-garmindb
 START_LLM=0
+PRESERVE_DB=0  # when 1, do not drop DB volume; only (re)start services and run migrations
 
 for arg in "$@"; do
   case "$arg" in
@@ -23,6 +26,7 @@ for arg in "$@"; do
     --llm) START_LLM=1 ; shift ;;
     --no-cache) NO_CACHE=1 ; shift ;;
     --skip-garmindb) RUN_GARMINDb=0 ; shift ;;
+    --preserve-db|--no-drop-db) PRESERVE_DB=1 ; shift ;;
     --help|-h)
       grep '^#' "$0" | sed 's/^# \{0,1\}//'
       exit 0
@@ -99,9 +103,14 @@ else
   echo -e "${RED}❌ docker / docker-compose not found${NC}"; exit 1
 fi
 
-# 1. Stop and remove the stack + volumes
-echo -e "${BLUE}🧹 Stopping containers and removing volumes (database will be cleared)...${NC}"
-$DC down -v || true
+# 1. Stop and remove the stack (+ volumes unless preserved)
+if [ $PRESERVE_DB -eq 1 ]; then
+  echo -e "${BLUE}🧹 Stopping containers without removing DB volume (preserving existing data)...${NC}"
+  $DC down || true
+else
+  echo -e "${BLUE}🧹 Stopping containers and removing volumes (database will be cleared)...${NC}"
+  $DC down -v || true
+fi
 
 # 2. (Optional) remove dangling images
 if docker images -f dangling=true -q | grep -q .; then

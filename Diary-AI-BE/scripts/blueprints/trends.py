@@ -2,6 +2,7 @@ from __future__ import annotations
 from datetime import datetime
 from math import sqrt
 from fastapi import APIRouter, Query, HTTPException
+import asyncio
 import time
 import os
 from enhanced_analytics_engine import EnhancedHealthAnalytics
@@ -47,13 +48,13 @@ def _classify_direction(slope: float | None, pct_change: float | None, std: floa
     return 'stable'
 
 @router.get("/health")
-def health_trends(days: int = Query(90, ge=2, le=365)):
+async def health_trends(days: int = Query(90, ge=2, le=365)):
     try:
         now = time.time()
         cached = _CACHE.get(days)
         if cached and cached[0] > now:
             return cached[1]
-        data = _engine.get_comprehensive_health_data_v2(days)
+        data = await asyncio.to_thread(_engine.get_comprehensive_health_data_v2, days)
         if not data:
             raise HTTPException(status_code=404, detail="No data available")
         series = sorted(data, key=lambda r: r.get('day'))

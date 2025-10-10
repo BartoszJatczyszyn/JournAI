@@ -15,13 +15,48 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+import time
+from prometheus_client import Histogram, Counter, generate_latest, CONTENT_TYPE_LATEST
 from dotenv import load_dotenv
 
 # Load env early
 load_dotenv("config.env")
 
 app = FastAPI(title="Diary AI Backend", version="2.0.0", openapi_url="/api/openapi.json", docs_url="/api/docs")
+
+# Prometheus metrics
+REQ_LATENCY = Histogram(
+    "http_request_duration_seconds",
+    "HTTP request latency",
+    ["path", "method", "status"],
+    buckets=(0.05,0.1,0.25,0.5,1,2,3,5,8,13,21,34,55)
+)
+REQ_COUNT = Counter(
+    "http_requests_total",
+    "Total HTTP requests",
+    ["path", "method", "status"]
+)
+
+@app.middleware("http")
+async def metrics_middleware(request: Request, call_next):  # pragma: no cover
+    start = time.perf_counter()
+    response = await call_next(request)
+    dt = time.perf_counter() - start
+    path = request.url.path
+    method = request.method
+    status = str(response.status_code)
+    try:
+        REQ_LATENCY.labels(path=path, method=method, status=status).observe(dt)
+        REQ_COUNT.labels(path=path, method=method, status=status).inc()
+    except Exception:
+        pass
+    return response
+
+@app.get("/metrics")
+async def metrics():  # pragma: no cover
+    data = generate_latest()
+    return Response(content=data, media_type=CONTENT_TYPE_LATEST)
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):  # pragma: no cover
@@ -358,7 +393,7 @@ async def _scheduler_loop():  # pragma: no cover
                     {"role": "system", "content": f"You are a health assistant. Prepare a concise report ({llm_days} days)."},
                     {"role": "user", "content": f"Data for the report (JSON/text):\n{brief}"}
                 ]
-                res = client.chat(messages, temperature=0.2, max_tokens=700, top_p=0.9)
+                res = await client.chat(messages, temperature=0.2, max_tokens=700, top_p=0.9)
                 content = res.get("content", "")
                 upsert_report(date.today().isoformat(), language, llm_days, content, res.get("raw"))
                 logger.info("Daily LLM health report stored")

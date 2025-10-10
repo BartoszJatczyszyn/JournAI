@@ -14,12 +14,13 @@ Environment:
 """
 from __future__ import annotations
 
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager, suppress, asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, Iterable, Iterator, Mapping
 import os
 
 from utils import DbConfig, load_env, get_logger
+from typing import Optional
 
 # Detect driver preference
 _DEFAULT_DRIVER = os.getenv("DB_DRIVER") or "psycopg"
@@ -85,6 +86,83 @@ def _connect_psycopg2(cfg: _ConnConfig):  # pragma: no cover - I/O wrapper
         password=cfg.password,
     )
 
+
+# ========== Async support (requires psycopg3 + psycopg_pool) ==========
+_ASYNC_POOL: Optional["AsyncConnectionPool"] = None
+
+if _USING_PSYCOPG3:
+    try:
+        from psycopg_pool import AsyncConnectionPool  # type: ignore
+        _ASYNC_POOL_DSN = None  # lazily built from env
+    except Exception:  # pragma: no cover - optional dep missing
+        AsyncConnectionPool = None  # type: ignore
+
+@asynccontextmanager
+async def get_async_connection():
+    """Yield an async connection from a global pool.
+
+    If psycopg3 or psycopg_pool are not available, raises RuntimeError.
+    """
+    if not _USING_PSYCOPG3:
+        raise RuntimeError("Async DB not available: psycopg3 not in use")
+    try:
+        from psycopg_pool import AsyncConnectionPool  # type: ignore
+    except Exception as e:  # pragma: no cover
+        raise RuntimeError("psycopg_pool not installed; run `pip install psycopg[pool]`") from e
+
+    global _ASYNC_POOL
+    if _ASYNC_POOL is None:
+        cfg = _ConnConfig.from_env()
+        conninfo = f"host={cfg.host} port={cfg.port} dbname={cfg.name} user={cfg.user} password={cfg.password}"
+        _ASYNC_POOL = AsyncConnectionPool(
+            conninfo=conninfo,
+            min_size=int(os.getenv("DB_POOL_MIN", "1")),
+            max_size=int(os.getenv("DB_POOL_MAX", "20")),
+            kwargs={"autocommit": False},
+        )
+    async with _ASYNC_POOL.connection() as conn:  # type: ignore[union-attr]
+        yield conn
+
+async def async_execute_query(
+    query: str,
+    params: Iterable[Any] | Mapping[str, Any] | None = None,
+    *,
+    fetch_one: bool = False,
+    fetch_all: bool = True,
+) -> list[dict[str, Any]] | dict[str, Any] | bool | None:
+    if not _USING_PSYCOPG3:
+        raise RuntimeError("async_execute_query requires psycopg3")
+    from psycopg.rows import dict_row  # type: ignore
+
+    async with get_async_connection() as conn:  # type: ignore
+        try:
+            async with conn.cursor(row_factory=dict_row) as cur:  # type: ignore[attr-defined]
+                await cur.execute(query, params)
+                if fetch_one:
+                    row = await cur.fetchone()
+                    return dict(row) if row is not None else None
+                if fetch_all:
+                    rows = await cur.fetchall()
+                    return [dict(r) for r in rows]
+                await conn.commit()
+                return True
+        except Exception:
+            try:
+                await conn.rollback()
+            except Exception:
+                pass
+            try:
+                LOGGER = get_logger("db")
+                LOGGER.exception("DB async query failed: %s | params=%s", query, params)
+            except Exception:
+                pass
+            if os.getenv("DB_DEBUG_RAISE"):
+                raise
+            if fetch_all:
+                return []
+            if fetch_one:
+                return None
+            return False
 
 @contextmanager
 def get_connection():  # -> Iterator[Connection]

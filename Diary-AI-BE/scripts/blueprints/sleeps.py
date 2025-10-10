@@ -1,12 +1,12 @@
 from __future__ import annotations
 from fastapi import APIRouter, Query, HTTPException
-from db import execute_query
+from db import async_execute_query
 from schemas import SleepListResponse, SleepDetailResponse, SleepSession
 
 router = APIRouter(tags=["sleeps"], prefix="")
 
 @router.get("/sleeps/latest", response_model=SleepListResponse)
-def get_latest_sleeps(
+async def get_latest_sleeps(
     limit: int = Query(20, ge=1, le=200),
     offset: int = Query(0, ge=0),
     start_date: str | None = None,
@@ -27,9 +27,9 @@ def get_latest_sleeps(
         FROM garmin_sleep_sessions
         WHERE {where_clause}
         """
-        total_row = execute_query(count_query, tuple(params), fetch_one=True)
+        total_row = await async_execute_query(count_query, tuple(params), fetch_one=True)
         total_count = (total_row or {}).get('total_count', 0)
-        cols_check = execute_query(
+        cols_check = await async_execute_query(
             "SELECT column_name FROM information_schema.columns WHERE table_name = 'garmin_sleep_sessions' AND column_name IN ('avg_sleep_hr','avg_sleep_rr','avg_respiration','respiratory_rate','respRate','avg_sleep_stress','last_sleep_phase')",
             None,
             fetch_all=True,
@@ -59,7 +59,7 @@ def get_latest_sleeps(
         ORDER BY sleep_start DESC
         LIMIT {limit} OFFSET {offset}
         """
-        rows = execute_query(query, tuple(params)) or []
+        rows = await async_execute_query(query, tuple(params)) or []
         res: list[SleepSession] = []
         for r in rows:
             item = dict(r)
@@ -95,7 +95,7 @@ def get_latest_sleeps(
             start_dt = r.get('sleep_start')
             end_dt = r.get('sleep_end')
             if start_dt and end_dt:
-                ev_rows = execute_query(
+                ev_rows = await async_execute_query(
                     """
                     SELECT timestamp, event, duration
                     FROM garmin_sleep_events
@@ -114,9 +114,9 @@ def get_latest_sleeps(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/sleeps/{sleep_id}", response_model=SleepDetailResponse)
-def get_sleep_detail(sleep_id: int):
+async def get_sleep_detail(sleep_id: int):
     try:
-        row = execute_query(
+        row = await async_execute_query(
             """
             SELECT *
             FROM garmin_sleep_sessions
@@ -151,7 +151,7 @@ def get_sleep_detail(sleep_id: int):
 
 
 @router.get('/sleep/events/{day}')
-def get_sleep_events_for_day(day: str):
+async def get_sleep_events_for_day(day: str):
     """Return sleep events from garmin_sleep_events for the requested day.
 
     Response: { events: [ { timestamp, event, duration }, ... ] }
@@ -163,7 +163,7 @@ def get_sleep_events_for_day(day: str):
         WHERE timestamp >= %s::date AND timestamp < (%s::date + INTERVAL '1 day')
         ORDER BY timestamp
         """
-        rows = execute_query(query, (day, day)) or []
+        rows = await async_execute_query(query, (day, day)) or []
         out = []
         for r in rows:
             item = dict(r)

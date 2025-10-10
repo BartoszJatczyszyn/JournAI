@@ -5,7 +5,8 @@ import os
 import time
 from typing import List, Dict, Any, Optional
 
-import requests
+import asyncio
+import httpx
 
 DEFAULT_TIMEOUT = float(os.getenv("LLM_HTTP_TIMEOUT", "60"))
 
@@ -24,17 +25,18 @@ class LLMService:
         self.model = model or os.getenv("LLM_MODEL") or "local-gguf"
         self.timeout = timeout or DEFAULT_TIMEOUT
 
-    def health(self) -> Dict[str, Any]:
+    async def health(self) -> Dict[str, Any]:
         # Try models list endpoint if available
         url = f"{self.base_url}/models"
         try:
-            r = requests.get(url, timeout=10)
-            r.raise_for_status()
-            return {"status": "ok", "models": (r.json().get("data") if r.headers.get("content-type", "").startswith("application/json") else None)}
+            async with httpx.AsyncClient(timeout=10) as client:
+                r = await client.get(url)
+                r.raise_for_status()
+                return {"status": "ok", "models": (r.json().get("data") if r.headers.get("content-type", "").startswith("application/json") else None)}
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
-    def chat(self, messages: List[Dict[str, str]], temperature: float = 0.3, max_tokens: int = 512, top_p: float = 0.95) -> Dict[str, Any]:
+    async def chat(self, messages: List[Dict[str, str]], temperature: float = 0.3, max_tokens: int = 512, top_p: float = 0.95) -> Dict[str, Any]:
         """Send a chat completion request to the LLM.
 
         messages: [{role: system|user|assistant, content: str}, ...]
@@ -52,9 +54,10 @@ class LLMService:
         }
         headers = {"content-type": "application/json"}
         try:
-            r = requests.post(url, json=payload, timeout=self.timeout, headers=headers)
-            r.raise_for_status()
-            data = r.json()
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                r = await client.post(url, json=payload, headers=headers)
+                r.raise_for_status()
+                data = r.json()
             content = None
             try:
                 content = data.get("choices", [{}])[0].get("message", {}).get("content")
@@ -69,14 +72,15 @@ class LLMService:
             try:
                 fallback_url = f"{self.base_url}/completion" if self.base_url.endswith("/v1") else f"{self.base_url}/completion"
                 prompt = self._messages_to_prompt(messages)
-                r = requests.post(fallback_url, json={
-                    "prompt": prompt,
-                    "n_predict": max_tokens,
-                    "temperature": temperature,
-                    "top_p": top_p,
-                }, timeout=self.timeout, headers=headers)
-                r.raise_for_status()
-                data = r.json()
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    r = await client.post(fallback_url, json={
+                        "prompt": prompt,
+                        "n_predict": max_tokens,
+                        "temperature": temperature,
+                        "top_p": top_p,
+                    }, headers=headers)
+                    r.raise_for_status()
+                    data = r.json()
                 content = data.get("content") or data.get("completion") or ""
                 return {"content": content, "raw": data}
             except Exception as ee:

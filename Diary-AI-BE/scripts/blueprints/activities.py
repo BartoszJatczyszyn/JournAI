@@ -1,6 +1,6 @@
 from __future__ import annotations
 from fastapi import APIRouter, Query, HTTPException
-from db import execute_query
+from db import async_execute_query
 from schemas import ActivitiesListResponse, ActivityDetailResponse, Activity
 import logging
 import traceback
@@ -12,7 +12,7 @@ from typing import Any
 router = APIRouter(tags=["activities"], prefix="/activities")
 
 @router.get("/latest", response_model=ActivitiesListResponse)
-def get_latest_activities(
+async def get_latest_activities(
     limit: int = Query(20, ge=1, le=10000),
     start_date: str | None = Query(None, description="ISO date (YYYY-MM-DD) to filter start_time >= start_date"),
     end_date: str | None = Query(None, description="ISO date (YYYY-MM-DD) to filter start_time <= end_date"),
@@ -54,7 +54,7 @@ def get_latest_activities(
         LIMIT %s
         """
         params.append(limit)
-        rows = execute_query(query, params) or []
+        rows = await async_execute_query(query, params) or []
         res: list[Activity] = []
         for r in rows:
             item = dict(r)
@@ -124,9 +124,9 @@ def get_latest_activities(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/{activity_id}", response_model=ActivityDetailResponse)
-def get_activity_detail(activity_id: int):
+async def get_activity_detail(activity_id: int):
     try:
-        row = execute_query("SELECT * FROM garmin_activities WHERE activity_id = %s", (activity_id,), fetch_one=True)
+        row = await async_execute_query("SELECT * FROM garmin_activities WHERE activity_id = %s", (activity_id,), fetch_one=True)
         if not row:
             raise HTTPException(status_code=404, detail="Activity not found")
         item = dict(row)
@@ -156,7 +156,7 @@ __all__ = ["router", "activities_router"]
 
 
 @router.get('/debug/count')
-def debug_activities_count():
+async def debug_activities_count():
     """Debug helper: return counts of running activities the backend can see.
 
     - total_count: total rows in garmin_activities
@@ -166,10 +166,10 @@ def debug_activities_count():
     """
     try:
         # total
-        total = execute_query('SELECT count(*) as cnt FROM garmin_activities', fetch_one=True) or {'cnt': 0}
-        running_total = execute_query("SELECT count(*) as cnt FROM garmin_activities WHERE sport ILIKE 'running'", fetch_one=True) or {'cnt': 0}
-        running_365 = execute_query("SELECT count(*) as cnt FROM garmin_activities WHERE sport ILIKE 'running' AND start_time >= now() - interval '365 days'", fetch_one=True) or {'cnt': 0}
-        sample = execute_query("SELECT activity_id, start_time, distance FROM garmin_activities WHERE sport ILIKE 'running' ORDER BY start_time DESC LIMIT 10") or []
+        total = await async_execute_query('SELECT count(*) as cnt FROM garmin_activities', fetch_one=True) or {'cnt': 0}
+        running_total = await async_execute_query("SELECT count(*) as cnt FROM garmin_activities WHERE sport ILIKE 'running'", fetch_one=True) or {'cnt': 0}
+        running_365 = await async_execute_query("SELECT count(*) as cnt FROM garmin_activities WHERE sport ILIKE 'running' AND start_time >= now() - interval '365 days'", fetch_one=True) or {'cnt': 0}
+        sample = await async_execute_query("SELECT activity_id, start_time, distance FROM garmin_activities WHERE sport ILIKE 'running' ORDER BY start_time DESC LIMIT 10") or []
         # normalize datetimes to iso strings
         for r in sample:
             if r.get('start_time'):
@@ -188,7 +188,7 @@ def debug_activities_count():
 
 
 @router.get('/debug/advanced')
-def debug_activities_advanced(days: int = Query(90, ge=1, le=365)):
+async def debug_activities_advanced(days: int = Query(90, ge=1, le=365)):
         """Advanced debug: run COALESCE(day, start_time::date) queries to mirror analytics filter.
 
         Returns:
@@ -202,7 +202,7 @@ def debug_activities_advanced(days: int = Query(90, ge=1, le=365)):
                 WHERE (LOWER(sport) = 'running' OR LOWER(sport) = 'run')
                     AND (COALESCE(day, start_time::date) >= CURRENT_DATE - INTERVAL '%s days')
                 """ % days
-                c = execute_query(q_count, fetch_one=True) or {'cnt': 0}
+                c = await async_execute_query(q_count, fetch_one=True) or {'cnt': 0}
 
                 q_pace = """
                 SELECT COUNT(*) as cnt FROM garmin_activities
@@ -210,7 +210,7 @@ def debug_activities_advanced(days: int = Query(90, ge=1, le=365)):
                     AND avg_pace IS NOT NULL
                     AND (COALESCE(day, start_time::date) >= CURRENT_DATE - INTERVAL '%s days')
                 """ % days
-                p = execute_query(q_pace, fetch_one=True) or {'cnt': 0}
+                p = await async_execute_query(q_pace, fetch_one=True) or {'cnt': 0}
 
                 q_sample = """
                 SELECT activity_id, sport, start_time, day, distance, avg_pace
@@ -220,7 +220,7 @@ def debug_activities_advanced(days: int = Query(90, ge=1, le=365)):
                 ORDER BY start_time DESC
                 LIMIT 20
                 """ % days
-                sample = execute_query(q_sample) or []
+                sample = await async_execute_query(q_sample) or []
                 for r in sample:
                         if r.get('start_time') and hasattr(r['start_time'], 'isoformat'):
                                 r['start_time'] = r['start_time'].isoformat()
