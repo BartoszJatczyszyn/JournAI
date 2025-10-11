@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Button } from '../components/ui';
 import { API_BASE_URL } from '../services';
 import { useHealthData } from '../context/HealthDataContext';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -167,13 +168,13 @@ const Predictions = () => {
             <option value={14}>14 days ahead</option>
           </select>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={handleRefresh} disabled={loading} className="btn btn-primary">
+            <Button onClick={handleRefresh} disabled={loading} variant="primary">
               {loading ? (<><div className="loading-spinner"></div>Predicting...</>) : (<><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>Refresh Predictions</>)}
-            </button>
-            <button onClick={handleRetrain} disabled={loading} className="btn" title="Retrain predictive models">
+              </Button>
+              <Button onClick={handleRetrain} disabled={loading} variant="ghost" title="Retrain predictive models">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.29 3.86l-1.5 1.5A7.5 7.5 0 1012 19.5" /></svg>
               Retrain Models
-            </button>
+            </Button>
           </div>
         </div>
       </div>

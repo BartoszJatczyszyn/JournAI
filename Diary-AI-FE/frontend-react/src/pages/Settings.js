@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../components/ui';
 
 const Settings = () => {
   const [settings, setSettings] = useState(() => {
@@ -286,15 +287,15 @@ const Settings = () => {
           </div>
           <div className="card-content">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <button className="btn btn-primary">
+              <Button variant="primary">
                 Export Data
-              </button>
-              <button className="btn btn-secondary">
+              </Button>
+              <Button variant="secondary">
                 Reset Settings
-              </button>
-              <button className="btn btn-danger">
+              </Button>
+              <Button variant="danger">
                 Delete Account
-              </button>
+              </Button>
             </div>
           </div>
         </div>

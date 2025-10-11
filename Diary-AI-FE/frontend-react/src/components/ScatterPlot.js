@@ -149,24 +149,7 @@ const ScatterPlot = ({ points = [], xLabel = 'X', yLabel = 'Y', height = 260, re
           ))}
         </div>
       )}
-      <style jsx>{`
-        :global(.custom-tooltip) {
-          background: rgba(255,255,255,0.85);
-          backdrop-filter: blur(12px) saturate(1.15);
-          -webkit-backdrop-filter: blur(12px) saturate(1.15);
-          border: 1px solid rgba(148,163,184,0.3);
-          box-shadow: 0 4px 16px -4px rgba(15,23,42,0.25), 0 2px 6px -2px rgba(15,23,42,0.15);
-          border-radius: 10px;
-          padding: 10px 12px 8px;
-          min-width: 150px;
-          animation: tooltipFade 120ms ease-out;
-        }
-        :global(.dark .custom-tooltip) {
-          background: rgba(30,41,59,0.78);
-          border-color: rgba(71,85,105,0.55);
-        }
-        @keyframes tooltipFade { from { opacity:0; transform: translateY(4px);} to { opacity:1; transform: translateY(0);} }
-      `}</style>
+      {/* tooltip styling unified in src/index.css */}
     </div>
   );
 };

@@ -49,17 +49,23 @@ const SleepHistogram = ({
       const m = d?.[metric];
       if (m != null && !isNaN(m)) {
         validDays += 1;
-        // Accept minute values that may be >1440 (e.g. adjusted bedtimes like 1500).
-        // Normalize to time-of-day by taking modulo 1440 so bins reflect hour of day.
-        const raw = Math.round(Number(m));
-        const mins = ((raw % 1440) + 1440) % 1440; // safe modulo for negatives
-        const bin = Math.floor(mins / res) % binCount;
-        bins[bin].count += 1;
-        if (typeof d.sleep_score === 'number') bins[bin].scores.push(d.sleep_score);
+        try {
+          const minutes = Math.round(Number(m));
+          const mm = ((minutes % 1440) + 1440) % 1440;
+          const idx = Math.floor(mm / res);
+          if (bins[idx]) {
+            bins[idx].count = (bins[idx].count || 0) + 1;
+            // push possible score if present (some timeseries include sleep_score)
+            if (d.sleep_score != null && !isNaN(d.sleep_score)) bins[idx].scores.push(Number(d.sleep_score));
+          }
+        } catch (e) {
+          // ignore malformed entries
+        }
       }
     });
 
-    bins.forEach(b => { b.medianScore = median(b.scores); });
+    // compute median score per bin
+    bins.forEach(b => { if (b.scores && b.scores.length) b.medianScore = median(b.scores); });
 
     // Determine minimal circular arc covering active bins, and expand by ±1 hour
     const binsPerHour = Math.max(1, Math.round(60 / res));
@@ -211,29 +217,7 @@ const SleepHistogram = ({
       </div>
 
       <style jsx>{`
-        :global(.sleep-histogram .custom-tooltip) {
-          /* glassmorphism */
-          background: var(--glass-bg);
-          backdrop-filter: blur(10px);
-          -webkit-backdrop-filter: blur(10px);
-          border: 1px solid var(--glass-border);
-          box-shadow: var(--glass-shadow);
-          
-          
-          
-          
-          
-          
-        }
-        
-        :global(.sleep-histogram .tooltip-label) {
-          color: var(--text-primary);
-           font-weight: 600; margin: 0 0 8px 0; }
-        :global(.sleep-histogram .tooltip-metric) {
-          color: var(--text-muted);
-           color: #64748b; }
-        :global(.dark .sleep-histogram .tooltip-metric) { color: #94a3b8; }
-        :global(.sleep-histogram .tooltip-number) { font-weight: 600; }
+        /* tooltip styling unified in src/index.css */
       `}</style>
     </div>
   );

@@ -13,6 +13,7 @@ import { activitiesAPI } from '../services';
 import api from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
+import { Button } from '../components/ui';
 
 // Cycling-specific analytics (sport key: 'cycling' or 'Cycling')
 const Cycling = () => {
@@ -205,7 +206,7 @@ const Cycling = () => {
                 <option value={365}>Last 1 year</option>
               </select>
             )}
-            <button aria-label="Refresh data" className="btn btn-secondary" disabled={busy} onClick={() => { setLimit(l=>l); }}>Refresh</button>
+            <Button aria-label="Refresh data" variant="secondary" disabled={busy} onClick={() => { setLimit(l=>l); }}>Refresh</Button>
             <div className="flex items-center gap-2 ml-4 text-xs">
               <select value={dateRangeMode} onChange={e=>setDateRangeMode(e.target.value)} className="select select-sm">
                 <option value="rolling">Rolling</option>

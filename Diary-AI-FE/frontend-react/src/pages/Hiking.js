@@ -9,8 +9,9 @@ import { formatPaceMinPerKm } from '../utils/timeUtils';
 import { activitiesAPI } from '../services';
 import api from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { Button } from '../components/ui';
 import ErrorMessage from '../components/ErrorMessage';
-import TooltipStyles from '../components/TooltipStyles';
+// TooltipStyles injected globally in App
 
 const Hiking = () => {
   const sportKey = 'hiking';
@@ -103,7 +104,7 @@ const Hiking = () => {
 
   return (
     <div className="page-container">
-      <TooltipStyles />
+      
       <div className="page-header">
         <h1 className="page-title">Hiking Analytics</h1>
   <p className="page-subtitle">Specialized hiking metrics: distance, pace, elevation-aware trends and goal simulations.</p>
@@ -120,7 +121,7 @@ const Hiking = () => {
                 <option value={365}>Last 1 year</option>
               </select>
             )}
-            <button aria-label="Refresh data" className="btn btn-secondary" disabled={busy} onClick={() => { setLimit(l=>l); }}>Refresh</button>
+            <Button aria-label="Refresh data" variant="secondary" disabled={busy} onClick={() => { setLimit(l=>l); }}>Refresh</Button>
             <div className="flex items-center gap-2 ml-4 text-xs">
               <select value={dateRangeMode} onChange={e=>setDateRangeMode(e.target.value)} className="select select-sm">
                 <option value="rolling">Rolling</option>

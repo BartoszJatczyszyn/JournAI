@@ -1,7 +1,8 @@
 import React from 'react';
+import { Button } from '../components/ui';
+import { Link } from 'react-router-dom';
 import { useMemo, useState, useEffect } from 'react';
 import useGymWorkouts from '../hooks/useGymWorkouts';
-import { Link } from 'react-router-dom';
 import { activitiesAPI } from '../services';
 import MetricCard from '../components/MetricCard';
 import TonnageTimeline from '../components/TonnageTimeline';
@@ -174,7 +175,7 @@ const Gym = () => {
             <option value={180}>Last 6 months</option>
             <option value={365}>Last 1 year</option>
           </select>
-          <Link to="/gym/workouts" className="btn btn-primary">Open Workouts</Link>
+          <Button as={Link} to="/gym/workouts" variant="primary">Open Workouts</Button>
         </div>
       </div>
 

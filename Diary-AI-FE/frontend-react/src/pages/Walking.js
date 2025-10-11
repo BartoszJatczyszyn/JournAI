@@ -2,22 +2,23 @@ import React, { useMemo, useState } from 'react';
 // Link import removed (not used in this view)
 import useActivityAggregates from '../hooks/useActivityAggregates';
 import useActivityPredictions from '../hooks/useActivityPredictions';
-import useGoalSimulation from '../hooks/useGoalSimulation';
+// useGoalSimulation not used in walking view
 import TrendComparison from '../components/TrendComparison';
 import WeeklyDistanceChart from '../components/WeeklyDistanceChart';
 import WeeklyPaceChart from '../components/WeeklyPaceChart';
 import MetricCard from '../components/MetricCard';
-import CorrelationHeatmap from '../components/CorrelationHeatmap';
 import { formatPaceMinPerKm, paceMinPerKm, durationToMinutes, parsePaceToMinutes } from '../utils/timeUtils';
-import { lowerIsBetterNote } from '../utils/metricUtils';
 import { activitiesAPI } from '../services';
 import api from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
 // Running-specific panels removed for walking view
-import TooltipStyles from '../components/TooltipStyles';
-import DistanceBucketComparison from '../components/DistanceBucketComparison';
+// TooltipStyles injected globally in App
+// DistanceBucketComparison removed from walking view
+import { Button } from '../components/ui';
 import PaceHrChart from '../components/PaceHrChart';
+import DistanceHistogram from '../components/DistanceHistogram';
+import DistanceHistogramByDay from '../components/DistanceHistogramByDay';
 
 // Focused walking analytics view: filters activities to sport 'walking'
 const Walking = () => {
@@ -30,17 +31,15 @@ const Walking = () => {
     const parsed = Number(raw);
     return (!Number.isNaN(parsed) && parsed > 0) ? parsed : 30;
   });
-  const [predWindow, setPredWindow] = useState(() => {
+  const [predWindow] = useState(() => {
     try { const raw = localStorage.getItem('walkingPredWindow'); const v = Number(raw); return Number.isFinite(v) && v > 0 ? v : 8; } catch (e) { return 8; }
   });
-  const [predAlpha, setPredAlpha] = useState(() => {
+  const [predAlpha] = useState(() => {
     try { const raw = localStorage.getItem('walkingPredAlpha'); const v = Number(raw); return Number.isFinite(v) ? v : 0.5; } catch (e) { return 0.5; }
   });
-  const [predBlend, setPredBlend] = useState(() => {
+  const [predBlend] = useState(() => {
     try { const raw = localStorage.getItem('walkingPredBlend'); const v = Number(raw); return Number.isFinite(v) ? v : 0.6; } catch (e) { return 0.6; }
   });
-  const [simDistanceGoal, setSimDistanceGoal] = useState('');
-  const [simPaceGoal, setSimPaceGoal] = useState('');
 
   const [walkingAnalysis, setWalkingAnalysis] = useState(null);
   const [dateRangeMode, setDateRangeMode] = useState('rolling');
@@ -135,12 +134,6 @@ const Walking = () => {
   const aggregates = useActivityAggregates(walkingActivities);
   const weeklyGroups = React.useMemo(() => (aggregates.weeklyGroups || aggregates.weeklyActivities || []), [aggregates.weeklyGroups, aggregates.weeklyActivities]);
   const predictions = useActivityPredictions(weeklyGroups, { windowSize: predWindow, ewmaAlpha: predAlpha, blend: predBlend });
-  const simulationWindow = weeklyGroups.slice(-predWindow);
-  const simulation = useGoalSimulation(simulationWindow, predictions, {
-    distanceGoal: simDistanceGoal ? Number(simDistanceGoal) : null,
-    paceGoal: simPaceGoal ? Number(simPaceGoal) : null,
-    maxWeeks: 104,
-  });
 
   const weeksToDisplay = Math.min(52, Math.max(1, Math.ceil(periodDays / 7)));
   const buildIsoWeekKey = (d) => {
@@ -211,7 +204,7 @@ const Walking = () => {
   const distanceSeries = displayedWeeks.map((w, i) => ({ value: w.distance != null ? w.distance : (w.total_distance_km ?? 0), label: w.week || `W${i+1}` }));
   const paceSeries = displayedWeeks.map((w, i) => ({ value: w.rollingAvgPace4 != null ? w.rollingAvgPace4 : (w.avg_pace ?? null), label: w.week || `W${i+1}` }));
 
-  const [corrThreshold, setCorrThreshold] = React.useState(() => {
+  const [corrThreshold] = React.useState(() => {
     try {
       const raw = localStorage.getItem('walkingMinAbsR');
       const v = parseFloat(raw);
@@ -221,8 +214,7 @@ const Walking = () => {
     }
   });
   React.useEffect(() => { try { localStorage.setItem('walkingMinAbsR', String(corrThreshold)); } catch (e) { /* ignore */ } }, [corrThreshold]);
-  const corrSource = 'full';
-  const corrColorScheme = 'rg';
+  // corrSource and corrColorScheme not used in walking view
 
   const walkingCorrelations = React.useMemo(() => {
     const fields = ['distance_km', 'duration_min', 'calories', 'avg_pace', 'avg_rr', 'max_rr', 'avg_vertical_ratio', 'avg_vertical_oscillation'];
@@ -379,7 +371,7 @@ const Walking = () => {
 
   return (
     <div className="page-container">
-      <TooltipStyles />
+      
       <div className="page-header">
         <h1 className="page-title">Walking Analytics</h1>
   <p className="page-subtitle">Specialized walking metrics: distance, avg_pace, trend forecasts and goal simulations.</p>
@@ -403,7 +395,7 @@ const Walking = () => {
                 <input type="date" value={rangeEnd} onChange={e=>setRangeEnd(e.target.value)} className="input input-sm" />
               </div>
             )}
-            <button aria-label="Refresh data" className="btn btn-secondary" disabled={busy} onClick={() => { setLimit(l=>l); }}>Refresh</button>
+            <Button aria-label="Refresh data" variant="secondary" disabled={busy} onClick={() => { setLimit(l=>l); }}>Refresh</Button>
             <div className="flex items-center gap-2 ml-4 text-xs">
               <select value={dateRangeMode} onChange={e=>setDateRangeMode(e.target.value)} className="select select-sm">
                 <option value="rolling">Rolling</option>
@@ -484,6 +476,22 @@ const Walking = () => {
               ) : <div className="text-xs text-gray-500">Insufficient pace data (need at least 2 weeks)</div>}
             </div>
           </div>
+          <div className="card md:col-span-12">
+            <div className="card-header flex items-center justify-between"><h3 className="card-title">Distance distribution & Avg Speed</h3>
+              <span className="text-[10px] text-gray-500">bins ({'0,5 km'} increments) · km/h</span>
+            </div>
+            <div className="card-content">
+              <DistanceHistogram activities={walkingActivities} sport="walking" binWidth={5} maxBins={12} height={220} />
+            </div>
+          </div>
+          <div className="card md:col-span-12">
+            <div className="card-header flex items-center justify-between"><h3 className="card-title">Daily totals: Distance distribution & Avg Speed</h3>
+              <span className="text-[10px] text-gray-500">bins (daily summed distance) · days · km/h</span>
+            </div>
+            <div className="card-content">
+              <DistanceHistogramByDay activities={walkingActivities} sport="walking" binWidth={5} maxBins={12} height={220} />
+            </div>
+          </div>
         </div>
         {busy && walkingActivities.length === 0 && <LoadingSpinner message="Loading walking activities..." />}
         {error && walkingActivities.length === 0 && <ErrorMessage message={error} />}
@@ -549,7 +557,7 @@ const Walking = () => {
             <div className="card-content flex items-center justify-between">
               <div className="text-sm text-gray-600">No walking activities found in the selected period.</div>
               <div className="flex items-center gap-3">
-                <button className="btn btn-sm" onClick={handleIncreasePeriod}>Show last 90 days</button>
+                <Button size="sm" variant="ghost" onClick={handleIncreasePeriod}>Show last 90 days</Button>
                 <div className="text-xs text-gray-500">Or add walking activities / check data source</div>
               </div>
             </div>

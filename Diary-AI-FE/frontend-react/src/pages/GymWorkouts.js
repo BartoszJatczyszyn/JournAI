@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import Button from '../components/ui/Button';
 import useGymWorkouts from '../hooks/useGymWorkouts';
 import MetricCard from '../components/MetricCard';
 import Sparkline from '../components/Sparkline';
@@ -31,7 +32,7 @@ const ManualOneRMSection = ({ exerciseId, addManualOneRepMax, deleteManualOneRep
       <div className="flex items-center gap-2 flex-wrap text-[10px]">
         <input type="number" step={0.5} value={manualValue} onChange={e=>setManualValue(e.target.value)} placeholder="Manual 1RM" className="input input-xxs w-20" />
         <input type="date" value={manualDate} onChange={e=>setManualDate(e.target.value)} className="input input-xxs" />
-        <button className="btn btn-xxs btn-secondary" onClick={onAdd} disabled={!manualValue}>Add 1RM</button>
+        <Button size="xxs" variant="secondary" onClick={onAdd} disabled={!manualValue}>Add 1RM</Button>
       </div>
       {manualEntries.length>0 && (
         <div className="space-y-1 max-h-24 overflow-auto pr-1">
@@ -172,8 +173,8 @@ const GymWorkouts = () => {
                 <label className="block text-xs text-gray-500 mb-1">Template Name</label>
                 <input value={newTplName} onChange={e=>setNewTplName(e.target.value)} className="input input-sm" placeholder="Push A" />
               </div>
-              <button className="btn btn-secondary" onClick={addDraftExercise}>Add Exercise</button>
-              <button className="btn btn-primary" onClick={handleCreateTemplate} disabled={!newTplName || tplDraftExercises.length===0}>Create</button>
+              <Button variant="secondary" onClick={addDraftExercise}>Add Exercise</Button>
+              <Button variant="primary" onClick={handleCreateTemplate} disabled={!newTplName || tplDraftExercises.length===0}>Create</Button>
             </div>
             {tplDraftExercises.length>0 && (
               <div className="overflow-x-auto">
@@ -241,8 +242,8 @@ const GymWorkouts = () => {
             <div className="card-header flex justify-between items-center">
               <h3 className="card-title">Log Session: {loggingTemplate.name}</h3>
               <div className="flex gap-2">
-                <button className="btn btn-secondary btn-sm" onClick={()=>setLoggingTemplateId(null)}>Cancel</button>
-                <button className="btn btn-primary btn-sm" onClick={commitSessionLog}>Create Session</button>
+                <Button size="sm" variant="secondary" onClick={()=>setLoggingTemplateId(null)}>Cancel</Button>
+                <Button size="sm" variant="primary" onClick={commitSessionLog}>Create Session</Button>
               </div>
             </div>
             <div className="card-content text-xs text-gray-500">The session will be created with default sets – edit after saving.</div>
@@ -313,8 +314,8 @@ const GymWorkouts = () => {
                                   </tbody>
                                 </table>
                                 <div className="flex gap-2 mt-2">
-                                  <button className="btn btn-xxs btn-secondary" onClick={()=>addSet(s.id, ex.exerciseId, ex.sets[ex.sets.length-1])}>+ Set</button>
-                                  <button className="btn btn-xxs btn-outline" onClick={()=>addSet(s.id, ex.exerciseId, ex.sets[ex.sets.length-1], { drop:true, dropPercent:15 })}>+ Drop (15%)</button>
+                                  <Button size="xxs" variant="secondary" onClick={()=>addSet(s.id, ex.exerciseId, ex.sets[ex.sets.length-1])}>+ Set</Button>
+                                  <Button size="xxs" variant="outline" onClick={()=>addSet(s.id, ex.exerciseId, ex.sets[ex.sets.length-1], { drop:true, dropPercent:15 })}>+ Drop (15%)</Button>
                                 </div>
                               </div>
                             );

@@ -185,6 +185,18 @@
   animation: spin 1s linear infinite;
 }
 
+/* Recharts default tooltip styling to match glass theme */
+.recharts-default-tooltip {
+  background: var(--glass-bg) !important;
+  border: 1px solid var(--glass-border) !important;
+  color: var(--text-primary) !important;
+  border-radius: 10px !important;
+  padding: 10px 12px !important;
+  backdrop-filter: blur(12px) saturate(120%) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(120%) !important;
+  box-shadow: var(--glass-shadow) !important;
+}
+
 /* Chart responsive styles */
 .recharts-responsive-container {
   width: 100% !important;

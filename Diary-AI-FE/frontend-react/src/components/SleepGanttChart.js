@@ -249,35 +249,14 @@ const SleepGanttChart = ({
       </ResponsiveContainer>
 
       <style jsx>{`
-        :global(.sleep-gantt-chart .custom-tooltip) {
-          /* glassmorphism */
-          background: var(--glass-bg);
-          backdrop-filter: blur(10px);
-          -webkit-backdrop-filter: blur(10px);
-          border: 1px solid var(--glass-border);
-          box-shadow: var(--glass-shadow);
-          
-          
-          
-          
-          
-          
+        /* Tooltip visuals unified in src/index.css — component keeps only small layout/color overrides below */
+        :global(.sleep-gantt-chart .tooltip-number) { font-weight: 600; color: ${barColor}; }
+        :global(.sleep-gantt-chart .tooltip-extra) { color: #ffffff; margin-top: 6px; font-size: 0.85rem; }
+        /* Recharts may render the tooltip outside this component; ensure extra text is readable */
+        :global(.recharts-tooltip-wrapper .custom-tooltip .tooltip-extra),
+        :global(.recharts-default-tooltip .custom-tooltip .tooltip-extra) {
+          color: #ffffff !important;
         }
-        
-        :global(.sleep-gantt-chart .tooltip-label) {
-          color: var(--text-primary);
-           font-weight: 600; margin: 0 0 8px 0; }
-        :global(.sleep-gantt-chart .tooltip-metric) {
-          color: var(--text-muted);
-           color: #64748b; }
-        :global(.dark .sleep-gantt-chart .tooltip-metric) { color: #94a3b8; }
-  :global(.sleep-gantt-chart .tooltip-number) { font-weight: 600; color: ${barColor}; }
-  :global(.sleep-gantt-chart .tooltip-extra) { color: #ffffff; margin-top: 6px; font-size: 0.85rem; }
-  /* Recharts may render the tooltip outside this component; target common wrapper and force color */
-  :global(.recharts-tooltip-wrapper .custom-tooltip .tooltip-extra),
-  :global(.recharts-default-tooltip .custom-tooltip .tooltip-extra) {
-    color: #ffffff !important;
-  }
       `}</style>
     </div>
   );

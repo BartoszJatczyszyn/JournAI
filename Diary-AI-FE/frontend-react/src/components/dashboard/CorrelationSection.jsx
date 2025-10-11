@@ -1,5 +1,6 @@
 import React from 'react';
 import CorrelationMatrix from '../CorrelationMatrix';
+import { Button } from '../ui';
 
 const CorrelationSection = ({ correlationsCount, showFullMatrix, onToggleFull, topCorrelations, preparedCorrelations }) => {
   if (!correlationsCount || correlationsCount <= 0) return null;
@@ -12,7 +13,7 @@ const CorrelationSection = ({ correlationsCount, showFullMatrix, onToggleFull, t
             <p className="card-subtitle">Top relationships in the selected window ({correlationsCount})</p>
           </div>
           <div style={{display: 'flex', gap: 8, alignItems: 'center'}}>
-            <button className="btn-small" onClick={onToggleFull}>{showFullMatrix ? 'Show compact' : 'Show full matrix'}</button>
+            <Button size="sm" variant="ghost" onClick={onToggleFull}>{showFullMatrix ? 'Show compact' : 'Show full matrix'}</Button>
           </div>
         </div>
         <div style={{padding: 12}}>

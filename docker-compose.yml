@@ -1,6 +1,7 @@
 services:
   db:
-    image: postgres:16-alpine
+    # track the latest stable Postgres image; change to a pinned version if you want reproducible builds
+    image: postgres:latest
     container_name: journal_ai_db
     restart: unless-stopped
     environment:

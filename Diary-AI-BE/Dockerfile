@@ -11,9 +11,20 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# System deps (psycopg binary should work without libpq, but add basics)
+# System deps (add compilers/libs needed to build numpy/scipy and psycopg when wheels are not available)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential curl ca-certificates git && \
+    build-essential \
+    curl \
+    ca-certificates \
+    git \
+    gfortran \
+    pkg-config \
+    libopenblas-dev \
+    liblapack-dev \
+    libblas-dev \
+    libpq-dev \
+    python3-dev \
+    ninja-build && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy requirements & install early for caching

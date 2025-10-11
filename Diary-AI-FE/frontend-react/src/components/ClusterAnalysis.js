@@ -613,32 +613,7 @@ const ClusterAnalysis = ({ data }) => {
           color: #d1d5db;
         }
 
-        :global(.custom-tooltip) {
-          background: var(--glass-bg);
-          border: 1px solid var(--glass-border);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
-          box-shadow: var(--glass-shadow);
-          border-radius: 12px;
-          padding: 12px 14px;
-        }
-
-        
-
-        :global(.tooltip-label) {
-          font-weight: 600;
-          margin: 0 0 4px 0;
-        }
-
-        :global(.tooltip-desc) {
-          font-size: 0.875rem;
-          color: #64748b;
-          margin: 0;
-        }
-
-        :global(.dark .tooltip-desc) {
-          color: #94a3b8;
-        }
+        /* tooltip styles unified in src/index.css */
 
         @media (max-width: 768px) {
           .cluster-distribution {

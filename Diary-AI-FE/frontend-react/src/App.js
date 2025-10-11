@@ -27,6 +27,7 @@ import Settings from './pages/Settings';
 import Assistant from './pages/Assistant';
 import { HealthDataProvider } from './context/HealthDataContext';
 import './App.css';
+import TooltipStyles from './components/TooltipStyles';
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -62,6 +63,7 @@ function App() {
   return (
     <HealthDataProvider>
       <Router>
+          <TooltipStyles />
         <div className={`app ${darkMode ? 'dark' : ''}`}>
           <Navbar 
             onToggleSidebar={toggleSidebar}

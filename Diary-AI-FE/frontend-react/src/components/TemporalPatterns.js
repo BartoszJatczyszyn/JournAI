@@ -1112,32 +1112,7 @@ const TemporalPatterns = ({ data }) => {
           background: #334155;
         }
 
-        :global(.custom-tooltip) {
-          background: var(--glass-bg);
-          border: 1px solid var(--glass-border);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
-          box-shadow: var(--glass-shadow);
-          border-radius: 12px;
-          padding: 12px 14px;
-        }
-
-        
-
-        :global(.tooltip-label) {
-          font-weight: 600;
-          margin: 0 0 8px 0;
-          color: #1e293b;
-        }
-
-        :global(.dark .tooltip-label) {
-          color: #f1f5f9;
-        }
-
-        :global(.tooltip-value) {
-          margin: 0 0 4px 0;
-          font-size: 0.875rem;
-        }
+        /* tooltip styling unified in src/index.css */
 
         /* Unified tooltip (new) */
         .custom-tooltip.unified {

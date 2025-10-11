@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import ChartTooltip from '../components/ui/ChartTooltip';
+import { Button } from '../components/ui';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
 import MetricCard from '../components/MetricCard';
@@ -146,7 +148,7 @@ const ActivityDetail = () => {
           <p className="page-subtitle">{activity.start_time ? new Date(activity.start_time).toLocaleString() : ''}</p>
         </div>
         <div className="header-controls flex gap-3 items-center flex-wrap">
-          <Link to="/activity" className="btn btn-secondary">← Back</Link>
+          <Button as={Link} to="/activity" variant="secondary">← Back</Button>
         </div>
       </div>
 
@@ -288,17 +290,7 @@ const ActivityDetail = () => {
                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                     <XAxis type="number" hide domain={[0, (dataMax) => Math.max(dataMax * 1.05, 1)]} />
                     <YAxis dataKey="label" type="category" width={150} tick={{ fontSize: 11 }} />
-                    <Tooltip content={({ active, payload }) => {
-                      if (!active || !payload || !payload.length) return null;
-                      const p = payload[0].payload;
-                      return (
-                        <div className="custom-tooltip">
-                          <p className="tooltip-label">{p.label}</p>
-                          <p className="tooltip-value"><span className="tooltip-metric">Value:</span><span className="tooltip-number">{p.raw}</span></p>
-                          {p.pct != null && <p className="tooltip-value"><span className="tooltip-metric">% Ref:</span><span className="tooltip-number">{p.pct}%</span></p>}
-                        </div>
-                      );
-                    }} />
+                    <Tooltip content={<ChartTooltip mapPayload={({ payload, label }) => ({ title: label, items: (payload || []).map(p => ({ label: p.name, value: p.value ?? '—', color: p.color })) })} />} />
                     <Bar dataKey="raw" name="Value" radius={[4,4,4,4]}>
                       {chartData.bars.map((b,i) => {
                         const hue = 210 - (b.pct != null ? Math.min(100, b.pct) : 0) * 1.4; // dynamic color
@@ -332,11 +324,7 @@ const ActivityDetail = () => {
         .page-subtitle { margin: 0; color: #64748b; font-size: 0.9rem; }
         .header-controls { }
         @media (max-width: 768px) { .overview-metrics { grid-template-columns: repeat(auto-fit,minmax(140px,1fr)); } .page-title { font-size: 1.35rem; } }
-        :global(.custom-tooltip) { background: var(--glass-bg, rgba(255,255,255,0.95)); border: 1px solid rgba(0,0,0,0.1); padding: 8px 10px; border-radius: 8px; box-shadow: 0 4px 14px -4px rgba(15,23,42,0.2); }
-        :global(.tooltip-label) { margin: 0 0 6px 0; font-weight: 600; font-size: 12px; }
-        :global(.tooltip-value) { margin: 0 0 3px 0; display: flex; justify-content: space-between; gap: 8px; font-size: 11px; }
-        :global(.tooltip-metric) { color: #64748b; }
-        :global(.tooltip-number) { font-weight: 600; color: #0ea5e9; }
+    /* tooltip styling unified in src/index.css */
       `}</style>
     </div>
   );

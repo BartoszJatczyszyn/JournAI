@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { Button } from '../components/ui';
 import Tooltip from '../components/Tooltip';
 import { useHealthData } from '../context/HealthDataContext';
 // LoadingSpinner and ErrorMessage are not used in this file
@@ -410,14 +411,14 @@ const Analytics = () => {
                 <option value={90}>Last 90 days</option>
               </select>
             </label>
-            <button className="btn" onClick={handleRefresh}>Refresh</button>
+            <Button variant="ghost" onClick={handleRefresh}>Refresh</Button>
           </div>
           {/* Removed duplicate period select to avoid confusion; unified control above */}
         
-          <button 
+          <Button 
             onClick={handleRefresh}
             disabled={loading}
-            className="btn btn-primary"
+            variant="primary"
           >
             {loading ? (
               <>
@@ -432,7 +433,7 @@ const Analytics = () => {
                 Refresh Analysis
               </>
             )}
-          </button>
+          </Button>
         </div>
       </div>
 

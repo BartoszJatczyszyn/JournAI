@@ -9,7 +9,8 @@ import { activitiesAPI } from '../services';
 import api from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
-import TooltipStyles from '../components/TooltipStyles';
+import { Button } from '../components/ui';
+// TooltipStyles injected globally in App
 
 const Swimming = () => {
   const sportKey = 'swimming';
@@ -82,7 +83,7 @@ const Swimming = () => {
 
   return (
     <div className="page-container">
-      <TooltipStyles />
+      
       <div className="page-header">
         <h1 className="page-title">Swimming Analytics</h1>
   <p className="page-subtitle">Specialized swimming metrics: distance, pace (min/100m) trends and goal simulations.</p>
@@ -99,7 +100,7 @@ const Swimming = () => {
                 <option value={365}>Last 1 year</option>
               </select>
             )}
-            <button aria-label="Refresh data" className="btn btn-secondary" disabled={busy} onClick={() => { setLimit(l=>l); }}>Refresh</button>
+            <Button aria-label="Refresh data" variant="secondary" disabled={busy} onClick={() => { setLimit(l=>l); }}>Refresh</Button>
             <div className="flex items-center gap-2 ml-4 text-xs">
               <select value={dateRangeMode} onChange={e=>setDateRangeMode(e.target.value)} className="select select-sm">
                 <option value="rolling">Rolling</option>

@@ -136,18 +136,28 @@ export const formatPaceMinPerKm = (minFloat) => {
   if (minFloat == null) return null;
   // allow strings like "5:15" passthrough
   if (typeof minFloat === 'string' && minFloat.includes(':')) {
-    // Accept formats: MM:SS or HH:MM:SS (possibly fractional seconds). Normalize to mm:ss
+    // Accept formats: MM:SS or HH:MM:SS (possibly fractional seconds).
+    // For MM:SS return as-is. For HH:MM:SS normalize to H:MM:SS (preserve hours).
     const parts = minFloat.split(':').map(p => p.trim());
-    if (parts.length === 2) return minFloat;
+    if (parts.length === 2) {
+      // If minutes part >= 60, convert to H:MM:SS
+      const mm = Number(parts[0]) || 0;
+      const ss = Math.round(Number(parts[1].split('.')[0]) || 0);
+      if (Math.abs(mm) >= 60) {
+        const sign = mm < 0 ? '-' : '';
+        const absMm = Math.abs(mm);
+        const hours = Math.floor(absMm / 60);
+        const mins = absMm % 60;
+        return `${sign}${String(hours)}:${String(mins).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+      }
+      return minFloat;
+    }
     if (parts.length === 3) {
       const h = Number(parts[0]) || 0;
       const m = Number(parts[1]) || 0;
-      const s = Number(parts[2].split('.')[0]) || 0;
-      const totalMinutes = h * 60 + m + s / 60;
-      const whole = Math.floor(Math.abs(totalMinutes));
-      const sec = Math.round((Math.abs(totalMinutes) - whole) * 60);
-      const minutes = totalMinutes < 0 ? -whole : whole;
-      return `${String(minutes)}:${String(sec).padStart(2, '0')}`;
+      const s = Math.round(Number(parts[2].split('.')[0]) || 0);
+      // Format as H:MM:SS (no leading zero for hours)
+      return `${String(h)}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
     }
     // fallback
     return minFloat;
@@ -155,12 +165,30 @@ export const formatPaceMinPerKm = (minFloat) => {
   const num = Number(minFloat);
   if (Number.isNaN(num) || !Number.isFinite(num)) return null;
 
-  // If the value is large (likely seconds), treat as total seconds and convert to mm:ss.
-  // E.g. 93 -> 1:33, 287 -> 4:47
-  // NOTE: previous heuristic used >=10 which caused integer minutes like 12 to be
-  // interpreted as 12 seconds (0:12). Use >=60 to detect seconds instead.
-  if (Math.abs(num) >= 60) {
+  // Distinguish numeric inputs that represent seconds vs minutes.
+  // Common inputs:
+  // - decimal minutes (e.g. 5.25) -> should be treated as minutes
+  // - integer seconds (e.g. 93) -> should be treated as seconds
+  // - values coming from mistaken HH:MM:SS -> parsePaceToMinutes may produce large minute values (e.g. 71.83)
+  //   which must NOT be treated as seconds (that caused 71.83 -> 1:12 bug).
+  // Heuristic used here:
+  // - If the numeric value is an integer and between 60 and 600 (1s..10min) it's likely raw seconds -> format as seconds
+  // - Or if the value is extremely large (>=3600) treat as seconds
+  // Otherwise treat the number as minutes (possibly decimal) and format accordingly.
+  const absNum = Math.abs(num);
+  const looksLikeSeconds = (Number.isInteger(num) && absNum >= 60 && absNum <= 600) || absNum >= 3600;
+  if (looksLikeSeconds) {
     const totalSeconds = Math.round(num);
+    const absTotalSeconds = Math.abs(totalSeconds);
+    if (absTotalSeconds >= 3600) {
+      // Format as H:MM:SS
+      const hours = Math.floor(absTotalSeconds / 3600);
+      const rem = absTotalSeconds % 3600;
+      const mins = Math.floor(rem / 60);
+      const secs = rem % 60;
+      const sign = num < 0 ? '-' : '';
+      return `${sign}${String(hours)}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = String(Math.abs(totalSeconds % 60)).padStart(2, '0');
     return `${String(num < 0 ? -minutes : minutes)}:${seconds}`;
@@ -169,24 +197,26 @@ export const formatPaceMinPerKm = (minFloat) => {
   const whole = Math.floor(Math.abs(num));
   const frac = Math.abs(num) - whole;
 
-  // Heuristic: if fractional part * 100 is very close to an integer between 0..59,
-  // treat input as mm.ss (minutes.seconds) representation. Otherwise treat as decimal minutes.
-  const fracTimes100 = frac * 100;
-  const frac100Rounded = Math.round(fracTimes100);
-  let seconds = 0;
-  if (Math.abs(fracTimes100 - frac100Rounded) < 0.001 && frac100Rounded >= 0 && frac100Rounded <= 59) {
-    seconds = frac100Rounded;
-  } else {
-    seconds = Math.round(frac * 60);
-  }
-
-  // Normalize (carry) if seconds === 60
+  // Treat numeric input as decimal minutes: fractional part is fraction of a minute.
+  // Example: 4.05 -> 4 minutes + 0.05*60 = 3 seconds
+  let seconds = Math.round(frac * 60);
   let minutes = whole;
+  // Normalize (carry) if seconds === 60
   if (seconds >= 60) {
     minutes += Math.floor(seconds / 60);
     seconds = seconds % 60;
   }
-  const m = num < 0 ? -minutes : minutes; // preserve sign on minutes if negative
+  // If minutes >= 60 treat as a real duration and format as H:MM:SS
+  const totalMinutes = num < 0 ? -minutes : minutes;
+  const sign = num < 0 ? '-' : '';
+  if (Math.abs(totalMinutes) >= 60) {
+    const absMinutes = Math.abs(totalMinutes);
+    const hours = Math.floor(absMinutes / 60);
+    const mins = absMinutes % 60;
+    const secs = seconds;
+    return `${sign}${String(hours)}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+  const m = totalMinutes;
   const s = String(seconds).padStart(2, '0');
   return `${String(m)}:${s}`;
 };

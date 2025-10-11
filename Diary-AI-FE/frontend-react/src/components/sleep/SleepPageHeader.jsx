@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '../ui';
 
 const SleepPageHeader = ({ params, onParamsChange, onRefresh, loading }) => {
   const handleDaysChange = (e) => {
@@ -20,9 +21,9 @@ const SleepPageHeader = ({ params, onParamsChange, onRefresh, loading }) => {
             ))}
           </select>
         </label>
-        <button className="btn" onClick={onRefresh} disabled={loading}>
+        <Button variant="ghost" onClick={onRefresh} disabled={loading}>
           {loading ? 'Refreshing...' : 'Refresh'}
-        </button>
+        </Button>
       </div>
     </div>
   );

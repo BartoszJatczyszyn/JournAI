@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import Button from './ui/Button';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as ReTooltip, Legend, BarChart, Bar, ReferenceLine } from 'recharts';
 import ChartTooltip from './ui/ChartTooltip';
 import { parsePaceToMinutes, paceMinPerKm, durationToMinutes, formatPaceMinPerKm } from '../utils/timeUtils';
@@ -236,7 +237,7 @@ export default function DistanceBucketComparison({
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap gap-4 text-[11px] items-center">
-        <button type="button" className="btn btn-xs" onClick={()=>setShowBucketManager(s=>!s)}>{showBucketManager ? 'Hide buckets' : 'Manage buckets'}</button>
+        <Button type="button" size="xs" variant="ghost" onClick={()=>setShowBucketManager(s=>!s)}>{showBucketManager ? 'Hide buckets' : 'Manage buckets'}</Button>
         <div className="flex items-center gap-1">
           <label className="text-gray-400">Assignment:</label>
           <select className="select select-xs" value={assignMode} onChange={e=>setAssignMode(e.target.value)}>
@@ -274,9 +275,9 @@ export default function DistanceBucketComparison({
               <input type="text" value={newLabel} onChange={e=>setNewLabel(e.target.value)} className="input input-sm w-full" placeholder="e.g. ~12k" />
             </div>
             <div className="md:col-span-6 flex gap-2">
-              <button
+              <Button
                 type="button"
-                className="btn btn-xs btn-primary"
+                size="xs" variant="primary"
                 onClick={() => {
                     setBucketError('');
                     const c = Number(newCenter);
@@ -291,7 +292,7 @@ export default function DistanceBucketComparison({
                     setCustomBuckets(arr => [...arr, { label, center: c, tol: t }]);
                     setNewCenter(''); setNewTol('1'); setNewLabel('');
                   }}
-                >Add</button>
+                >Add</Button>
                 {bucketError && <div className="text-rose-400 text-[11px]">{bucketError}</div>}
             </div>
           </div>
@@ -307,7 +308,7 @@ export default function DistanceBucketComparison({
                   </div>
                 ))}
               </div>
-              <button type="button" className="btn btn-xs btn-outline" onClick={()=>setCustomBuckets([])}>Clear custom</button>
+              <Button type="button" size="xs" variant="outline" onClick={()=>setCustomBuckets([])}>Clear custom</Button>
             </div>
           ) : <div className="text-gray-500">No custom buckets.</div>}
           <div className="text-[10px] text-gray-500">Custom buckets will not duplicate existing ones (conflict detection uses distance ≤ max tolerance).</div>

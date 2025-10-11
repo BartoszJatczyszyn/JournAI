@@ -620,55 +620,11 @@ const Stress = () => {
       </div>
 
       <style jsx>{`
-        :global(.custom-tooltip) {
-+          /* glassmorphism */
-+          background: var(--glass-bg);
-+          backdrop-filter: blur(10px);
-+          -webkit-backdrop-filter: blur(10px);
-+          border: 1px solid var(--glass-border);
-+          box-shadow: var(--glass-shadow);
-+          padding: 10px 12px;
-+          border-radius: 10px;
-+          min-width: 140px;
-+        }
-+
-+        :global(.tooltip-label) {
-+          margin: 0 0 8px 0;
-+          font-weight: 600;
-+          color: #0f172a;
-+        }
-+        :global(.dark .tooltip-label) {
-+          color: #f1f5f9;
-+        }
-+
-+        :global(.tooltip-value) {
-+          margin: 0 0 4px 0;
-+          display: flex;
-+          justify-content: space-between;
-+          gap: 12px;
-+        }
-+
-+        :global(.tooltip-metric) {
-+          color: #64748b;
-+        }
-+        :global(.dark .tooltip-metric) {
-+          color: #94a3b8;
-+        }
-
-+        :global(.tooltip-number) {
-+          font-weight: 600;
-+          color: #ef4444;
-+        }
-+
-+        :global(.tooltip-extra) {
-+          margin-top: 6px;
-+          font-size: 0.85rem;
-+          color: #64748b;
-+        }
-
-+        :global(.dark .tooltip-extra) {
-+          color: #94a3b8;
-+        }
+        /* Tooltip visuals are centralized in src/index.css.
+           Local :global(.custom-tooltip) rules removed to avoid duplication.
+           Keep only minimal per-page overrides here when necessary. */
+        :global(.tooltip-number) { font-weight: 600; color: #ef4444; }
+        :global(.dark .tooltip-number) { color: #fecaca; }
 
         .stress-page {
           max-width: 1200px;

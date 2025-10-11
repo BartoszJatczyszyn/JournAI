@@ -511,23 +511,7 @@ const HealthChart = ({
           font-weight: 500;
         }
 
-        :global(.custom-tooltip) {
-          background: rgba(255,255,255,0.85);
-          backdrop-filter: blur(12px) saturate(1.2);
-          -webkit-backdrop-filter: blur(12px) saturate(1.2);
-          border: 1px solid rgba(148,163,184,0.25);
-          box-shadow: 0 4px 16px -4px rgba(15,23,42,0.25), 0 2px 6px -2px rgba(15,23,42,0.15);
-          border-radius: 10px;
-          padding: 10px 12px 8px;
-          min-width: 160px;
-          animation: tooltipFade 120ms ease-out;
-        }
-
-        :global(.dark .custom-tooltip) {
-          background: rgba(30,41,59,0.78);
-          border-color: rgba(71,85,105,0.55);
-          box-shadow: 0 4px 16px -4px rgba(0,0,0,0.5), 0 2px 6px -2px rgba(0,0,0,0.35);
-        }
+        /* Tooltip styles unified in src/index.css */
 
         :global(.refined-tooltip-title) {
           letter-spacing: .5px;
@@ -572,51 +556,7 @@ const HealthChart = ({
 
         
 
-        :global(.tooltip-label) {
-          color: var(--text-primary);
-          
-          font-weight: 600;
-          margin: 0 0 8px 0;
-          color: #1e293b;
-        }
-
-        :global(.dark .tooltip-label) {
-          color: #f1f5f9;
-        }
-
-        :global(.tooltip-value) {
-          margin: 0 0 4px 0;
-          display: flex;
-          justify-content: space-between;
-          gap: 12px;
-        }
-
-        :global(.tooltip-metric) {
-          color: var(--text-muted);
-          
-          color: #64748b;
-        }
-
-        :global(.dark .tooltip-metric) {
-          color: #94a3b8;
-        }
-
-        :global(.tooltip-number) {
-          color: var(--text-primary);
-          
-          font-weight: 600;
-          color: ${config.color};
-        }
-
-        :global(.tooltip-extra) {
-          margin: 4px 0 0 0;
-          font-size: 0.875rem;
-          color: #64748b;
-        }
-
-        :global(.dark .tooltip-extra) {
-          color: #94a3b8;
-        }
+        /* Tooltip text helpers moved to global css (src/index.css) */
 
         @media (max-width: 768px) {
           .health-chart :global(.recharts-cartesian-axis-tick-value) {

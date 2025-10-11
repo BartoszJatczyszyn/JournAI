@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { Button, Section } from '../components/ui';
+import ChartTooltip from '../components/ui/ChartTooltip';
 import ErrorMessage from '../components/ErrorMessage';
 import MetricCard from '../components/MetricCard';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Bar, Cell, Legend, AreaChart, Area, ComposedChart } from 'recharts';
@@ -786,30 +788,27 @@ const PhaseTooltip = ({ active, payload, label }) => {
   if (!hasAnyData) {
     return (
       <div className="sleep-page fade-in">
-        <div className="page-header">
-          <div className="header-content">
-            <h1 className="page-title">
-              <span className="title-icon">😴</span>
-              Sleep Analysis
-            </h1>
-            <p className="page-subtitle">We couldn't find sleep data for the selected period.</p>
-          </div>
-          <div className="header-controls">
-            <select
-              value={analysisParams.days}
-              onChange={(e) => handleParamsChange({ days: parseInt(e.target.value, 10) })}
-              className="period-select"
-            >
-              <option value={7}>Last 7 days</option>
-              <option value={14}>Last 2 weeks</option>
-              <option value={30}>Last 30 days</option>
-              <option value={60}>Last 2 months</option>
-            </select>
-            <button onClick={handleRefresh} disabled={loading} className="btn btn-primary">
-              {loading ? 'Analyzing...' : 'Refresh Analysis'}
-            </button>
-          </div>
-        </div>
+        <Section
+          title={<><span className="title-icon">😴</span> Sleep Analysis</>}
+          subtitle={"We couldn't find sleep data for the selected period."}
+          actions={
+            <>
+              <select
+                value={analysisParams.days}
+                onChange={(e) => handleParamsChange({ days: parseInt(e.target.value, 10) })}
+                className="period-select"
+              >
+                <option value={7}>Last 7 days</option>
+                <option value={14}>Last 2 weeks</option>
+                <option value={30}>Last 30 days</option>
+                <option value={60}>Last 2 months</option>
+              </select>
+              <Button onClick={handleRefresh} disabled={loading} variant="primary">
+                {loading ? 'Analyzing...' : 'Refresh Analysis'}
+              </Button>
+            </>
+          }
+        />
 
         <div className="card">
           <div className="card-header">
@@ -818,9 +817,9 @@ const PhaseTooltip = ({ active, payload, label }) => {
           </div>
           <div className="card-content" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             {[7,14,30,60].map(d => (
-              <button key={d} className="btn" onClick={() => { handleParamsChange({ days: d }); handleRefresh(); }}>
+              <Button key={d} variant="ghost" onClick={() => { handleParamsChange({ days: d }); handleRefresh(); }}>
                 Use {d} days
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -831,42 +830,39 @@ const PhaseTooltip = ({ active, payload, label }) => {
   return (
     <div className="sleep-page fade-in">
       {/* Header */}
-      <div className="page-header">
-        <div className="header-content">
-          <h1 className="page-title">
-            <span className="title-icon">😴</span>
-            Sleep Analysis
-          </h1>
-          <p className="page-subtitle">Comprehensive analysis of your sleep quality, timing, and correlations</p>
-        </div>
-        <div className="header-controls">
-          <select
-            value={analysisParams.days}
-            onChange={(e) => handleParamsChange({ days: parseInt(e.target.value, 10) })}
-            className="period-select"
-          >
-            <option value={7}>Last 7 days</option>
-            <option value={14}>Last 2 weeks</option>
-            <option value={30}>Last 30 days</option>
-            <option value={60}>Last 2 months</option>
-          </select>
-          <button onClick={handleRefresh} disabled={loading} className="btn btn-primary">
-            {loading ? (
-              <>
-                <div className="loading-spinner"></div>
-                Analyzing...
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Refresh Analysis
-              </>
-            )}
-          </button>
-        </div>
-      </div>
+      <Section
+        title={<><span className="title-icon">😴</span> Sleep Analysis</>}
+        subtitle={"Comprehensive analysis of your sleep quality, timing, and correlations"}
+        actions={
+          <>
+            <select
+              value={analysisParams.days}
+              onChange={(e) => handleParamsChange({ days: parseInt(e.target.value, 10) })}
+              className="period-select"
+            >
+              <option value={7}>Last 7 days</option>
+              <option value={14}>Last 2 weeks</option>
+              <option value={30}>Last 30 days</option>
+              <option value={60}>Last 2 months</option>
+            </select>
+            <Button onClick={handleRefresh} disabled={loading} variant="primary">
+              {loading ? (
+                <>
+                  <div className="loading-spinner"></div>
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Refresh Analysis
+                </>
+              )}
+            </Button>
+          </>
+        }
+      />
 
       {/* Overview */}
       <div className="sleep-overview">
@@ -1124,7 +1120,7 @@ const PhaseTooltip = ({ active, payload, label }) => {
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                       <XAxis dataKey="x" fontSize={12} tickFormatter={weekdayTick} />
                       <YAxis fontSize={12} domain={rhrDomain != null ? rhrDomain : undefined} />
-                      <Tooltip content={<CustomTooltip />} />
+                      <Tooltip content={<ChartTooltip mapPayload={({ payload, label }) => ({ title: label, items: (payload || []).map(p => ({ label: p.name, value: p.value ?? '—', color: p.color })) })} />} />
                       <Legend />
                       <Line type="monotone" dataKey="y" name="RHR (bpm)" stroke="#ef4444" strokeWidth={2} dot={false} />
                       <Line type="monotone" data={rhrTrend14} dataKey="y" name="14d trend" stroke="#3b82f6" strokeDasharray="5 4" strokeWidth={2} dot={false} />
@@ -1136,8 +1132,8 @@ const PhaseTooltip = ({ active, payload, label }) => {
                 <div style={{ padding: 24, color: 'var(--muted)' }}>
                   <div>No heart rate samples found for the selected period.</div>
                   <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-                    <button className="btn" onClick={() => handleParamsChange({ days: Math.min(90, (analysisParams.days || 14) * 2) })}>Expand range</button>
-                    <button className="btn" onClick={() => handleRefresh()}>Refresh</button>
+                    <Button variant="ghost" onClick={() => handleParamsChange({ days: Math.min(90, (analysisParams.days || 14) * 2) })}>Expand range</Button>
+                    <Button variant="ghost" onClick={() => handleRefresh()}>Refresh</Button>
                   </div>
                 </div>
               )}
@@ -1156,7 +1152,7 @@ const PhaseTooltip = ({ active, payload, label }) => {
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                       <XAxis dataKey="x" fontSize={12} tickFormatter={weekdayTick} />
                         <YAxis fontSize={12} domain={respDomain != null ? respDomain : undefined} />
-                      <Tooltip content={<CustomTooltip />} />
+                      <Tooltip content={<ChartTooltip mapPayload={({ payload, label }) => ({ title: label, items: (payload || []).map(p => ({ label: p.name, value: p.value ?? '—', color: p.color })) })} />} />
                       <Legend />
                       <Line type="monotone" dataKey="y" name="Respiratory rate (brpm)" stroke="#06b6d4" strokeWidth={2} dot={false} />
                       <Line type="monotone" data={respTrend14} dataKey="y" name="14d trend" stroke="#3b82f6" strokeDasharray="5 4" strokeWidth={2} dot={false} />
@@ -1168,8 +1164,8 @@ const PhaseTooltip = ({ active, payload, label }) => {
                 <div style={{ padding: 24, color: 'var(--muted)' }}>
                   <div>No respiratory rate samples found for the selected period.</div>
                   <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-                    <button className="btn" onClick={() => handleParamsChange({ days: Math.min(90, (analysisParams.days || 14) * 2) })}>Expand range</button>
-                    <button className="btn" onClick={() => handleRefresh()}>Refresh</button>
+                    <Button variant="ghost" onClick={() => handleParamsChange({ days: Math.min(90, (analysisParams.days || 14) * 2) })}>Expand range</Button>
+                    <Button variant="ghost" onClick={() => handleRefresh()}>Refresh</Button>
                   </div>
                 </div>
               )}
@@ -1188,7 +1184,7 @@ const PhaseTooltip = ({ active, payload, label }) => {
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                       <XAxis dataKey="x" fontSize={12} tickFormatter={weekdayTick} />
                         <YAxis fontSize={12} domain={stressDomain != null ? stressDomain : undefined} />
-                      <Tooltip content={<CustomTooltip />} />
+                      <Tooltip content={<ChartTooltip mapPayload={({ payload, label }) => ({ title: label, items: (payload || []).map(p => ({ label: p.name, value: p.value ?? '—', color: p.color })) })} />} />
                       <Legend />
                       <Line type="monotone" dataKey="y" name="Stress (avg)" stroke="#f59e0b" strokeWidth={2} dot={false} />
                       <Line type="monotone" data={stressTrend14} dataKey="y" name="14d trend" stroke="#3b82f6" strokeDasharray="5 4" strokeWidth={2} dot={false} />
@@ -1200,8 +1196,8 @@ const PhaseTooltip = ({ active, payload, label }) => {
                 <div style={{ padding: 24, color: 'var(--muted)' }}>
                   <div>No stress samples found for the selected period.</div>
                   <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-                    <button className="btn" onClick={() => handleParamsChange({ days: Math.min(90, (analysisParams.days || 14) * 2) })}>Expand range</button>
-                    <button className="btn" onClick={() => handleRefresh()}>Refresh</button>
+                    <Button variant="ghost" onClick={() => handleParamsChange({ days: Math.min(90, (analysisParams.days || 14) * 2) })}>Expand range</Button>
+                    <Button variant="ghost" onClick={() => handleRefresh()}>Refresh</Button>
                   </div>
                 </div>
               )}
@@ -1252,21 +1248,7 @@ const PhaseTooltip = ({ active, payload, label }) => {
       <SleepQualityZones />
 
       <style jsx>{`
-        :global(.custom-tooltip) {
-          background: var(--glass-bg);
-          backdrop-filter: blur(10px);
-          -webkit-backdrop-filter: blur(10px);
-          border: 1px solid var(--glass-border);
-          box-shadow: var(--glass-shadow);
-          padding: 10px 12px;
-          border-radius: 10px;
-          min-width: 140px;
-        }
-        :global(.tooltip-label) { margin: 0 0 8px 0; font-weight: 600; color: #0f172a; }
-        :global(.dark .tooltip-label) { color: #f1f5f9; }
-        :global(.tooltip-value) { margin: 0 0 4px 0; display: flex; justify-content: space-between; gap: 12px; }
-        :global(.tooltip-metric) { color: #64748b; }
-        :global(.dark .tooltip-metric) { color: #94a3b8; }
+        /* Tooltip visuals centralized in src/index.css. Keep only small overrides here if necessary. */
         :global(.tooltip-number) { font-weight: 600; color: #0ea5e9; }
 
         .sleep-page { max-width: 1200px; margin: 0 auto; }

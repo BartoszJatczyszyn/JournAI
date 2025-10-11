@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Button } from '../components/ui';
 import { useHealthData } from '../context/HealthDataContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
@@ -258,7 +259,7 @@ const Dashboard = () => {
                   <p className="card-subtitle">Top relationships in the selected window ({correlationsCount})</p>
                 </div>
                 <div style={{display: 'flex', gap: 8, alignItems: 'center'}}>
-                  <button className="btn-small" onClick={() => setShowFullMatrix(s => !s)}>{showFullMatrix ? 'Show compact' : 'Show full matrix'}</button>
+                  <Button size="sm" variant="ghost" onClick={() => setShowFullMatrix(s => !s)}>{showFullMatrix ? 'Show compact' : 'Show full matrix'}</Button>
                 </div>
               </div>
               <div style={{padding: 12}}>

@@ -21,8 +21,9 @@ import ErrorMessage from '../components/ErrorMessage';
 import RunningVO2MaxTrend from '../components/RunningVO2MaxTrend';
 import RunningDuoScatter from '../components/RunningDuoScatter';
 import RunningEconomyPanel from '../components/RunningEconomyPanel';
-import TooltipStyles from '../components/TooltipStyles';
+// TooltipStyles injected globally in App
 import DistanceBucketComparison from '../components/DistanceBucketComparison';
+import { Button } from '../components/ui';
 import PaceHrChart from '../components/PaceHrChart';
 
 // Focused running analytics view: filters activities to sport 'running' / 'Running'
@@ -441,7 +442,7 @@ const Running = () => {
 
   return (
     <div className="page-container">
-      <TooltipStyles />
+      
       <div className="page-header">
         <h1 className="page-title">Running Analytics</h1>
   <p className="page-subtitle">Specialized running metrics: distance, avg_pace, trend forecasts and goal simulations.</p>
@@ -465,7 +466,7 @@ const Running = () => {
                 <input type="date" value={rangeEnd} onChange={e=>setRangeEnd(e.target.value)} className="input input-sm" />
               </div>
             )}
-            <button aria-label="Refresh data" className="btn btn-secondary" disabled={busy} onClick={() => { setLimit(l=>l); }}>Refresh</button>
+            <Button aria-label="Refresh data" variant="secondary" disabled={busy} onClick={() => { setLimit(l=>l); }}>Refresh</Button>
             <div className="flex items-center gap-2 ml-4 text-xs">
               <select value={dateRangeMode} onChange={e=>setDateRangeMode(e.target.value)} className="select select-sm">
                 <option value="rolling">Rolling</option>
@@ -620,7 +621,7 @@ const Running = () => {
             <div className="card-content flex items-center justify-between">
               <div className="text-sm text-gray-600">No running activities found in the selected period.</div>
               <div className="flex items-center gap-3">
-                <button className="btn btn-sm" onClick={handleIncreasePeriod}>Show last 90 days</button>
+                <Button size="sm" variant="ghost" onClick={handleIncreasePeriod}>Show last 90 days</Button>
                 <div className="text-xs text-gray-500">Or add running activities / check data source</div>
               </div>
             </div>
