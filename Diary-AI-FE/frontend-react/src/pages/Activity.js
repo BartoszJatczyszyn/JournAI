@@ -9,8 +9,9 @@ import Sparkline from '../components/Sparkline';
 import useActivityAggregates from '../hooks/useActivityAggregates';
 import MetricCard from '../components/MetricCard';
 import SegmentedControl from '../components/SegmentedControl';
-import { formatPaceMinPerKm, parsePaceToMinutes, paceMinPerKm, durationToMinutes } from '../utils/timeUtils';
+import { formatPaceMinPerKm } from '../utils/timeUtils';
 import DistanceHistogramByDay from '../components/DistanceHistogramByDay';
+import TopBestMetricsBySport from '../components/TopBestMetricsBySport';
 // Advanced running-specific analytics (trend comparison, predictions, simulations)
 // have been moved to the dedicated Running page.
 
@@ -744,6 +745,18 @@ const Activity = () => {
           {/* Activity Goals moved to bottom */}
   </div>
 
+          {/* Top N best metrics per sport */}
+          <div className="card mt-6">
+            <div className="card-header flex items-center justify-between">
+              <h3 className="card-title">Best Performances by Sport (Top N)</h3>
+              <div className="text-[11px] text-gray-500">Running, Walking, Swimming, Cycling, Hiking, Fitness Equipment</div>
+            </div>
+            <div className="card-content">
+              {/* Fetch a larger set once to get good historical ranking */}
+              <TopBestMetricsBySport limit={3000} defaultTopN={5} />
+            </div>
+          </div>
+
           {/* Daily totals histogram for all activities */}
           <div className="card mt-6">
             <div className="card-header flex items-center justify-between">
@@ -763,315 +776,6 @@ const Activity = () => {
                       })()}
             </div>
           </div>
-
-            {/* Top-5 days per sport (distance / activity count / fastest pace / steps / active minutes) */}
-            <div className="card mt-6">
-              <div className="card-header flex items-center justify-between">
-                <h3 className="card-title">Top 5 days by metric (Cycling · running · walking · hiking · gym · swimming)</h3>
-                <div className="text-[11px] text-gray-500">Per-day aggregates within selected period</div>
-              </div>
-              <div className="card-content">
-                {periodActivities.length === 0 ? (
-                  <div className="text-sm text-gray-500">No activities in the selected period.</div>
-                ) : (
-                  (() => {
-
-                    // use top-level normalizeSport helper
-
-                    // ...existing code...
-
-                    // Build map: sport -> date -> aggregates
-                    const sports = ['cycling','running','walking','hiking','swimming','gym'];
-                    const map = { cycling: new Map(), running: new Map(), walking: new Map(), hiking: new Map(), swimming: new Map(), gym: new Map() };
-
-                    // Build a multi-field hint string from common activity fields so
-                    // classification works even when `sport` is empty.
-                    const buildSportHint = (act) => {
-                      if (!act || typeof act !== 'object') return '';
-                      const parts = [];
-                      const tryPush = (v) => { if (v != null) parts.push(String(v)); };
-                      tryPush(act.sport);
-                      tryPush(act.sub_sport);
-                      tryPush(act.name);
-                      tryPush(act.type);
-                      tryPush(act.activity_type);
-                      tryPush(act.workout_type);
-                      tryPush(act.workout_name);
-                      tryPush(act.description);
-                      if (Array.isArray(act.tags)) parts.push(...act.tags.map(t => String(t)));
-                      if (act.metadata && typeof act.metadata === 'object') tryPush(JSON.stringify(act.metadata));
-                      return parts.filter(Boolean).join(' | ');
-                    };
-
-                    periodActivities.forEach(a => {
-                      // prefer explicit sport from the source table (e.g. garmin_activities.sport) when present
-                      // fall back to multi-field hint when sport is missing or empty
-                      const rawSportHint = buildSportHint(a) || '';
-                      const sportField = (a.sport != null) ? String(a.sport).toLowerCase().trim() : '';
-                      // prefer explicit sport, but only if it maps to a known sport;
-                      // otherwise fall back to the richer multi-field hint so we don't lose classification
-                      let sportKey = sportField ? normalizeSport(sportField) : null;
-                      if (!sportKey) sportKey = normalizeSport(rawSportHint);
-                      if (!sportKey || !sports.includes(sportKey)) return;
-                      if (!a.start_time) return;
-                      const d = new Date(a.start_time);
-                      if (isNaN(d.getTime())) return;
-                      const iso = d.toISOString().slice(0,10);
-                      const dayMap = map[sportKey];
-                      const entry = dayMap.get(iso) || { distance: 0, count: 0, paceSum: 0, paceCount: 0, minPace: null, minPaceActivityId: null, minPaceRaw: null, minPaceDistance: null, steps: 0, durationMin: 0 };
-
-                      const dist = a.distance_km != null ? Number(a.distance_km) : (a.distance != null ? Number(a.distance) : 0);
-                      const dur = (a.duration_min != null && Number.isFinite(Number(a.duration_min))) ? Number(a.duration_min) : (durationToMinutes(a) || 0);
-
-                      // activity-level pace (min/km)
-                      let activityPace = null;
-                      const rawPace = a.avg_pace ?? a.avgPace ?? a.avg_pace_min ?? null;
-                      if (rawPace != null) {
-                        const p = parsePaceToMinutes(rawPace);
-                        if (p != null && Number.isFinite(p) && p > 0) activityPace = p;
-                      }
-                      if (activityPace == null && dist > 0 && dur > 0) {
-                        const p2 = paceMinPerKm(dist, dur);
-                        if (p2 != null && Number.isFinite(p2) && p2 > 0) activityPace = p2;
-                      }
-
-                      entry.distance += dist && Number.isFinite(dist) ? dist : 0;
-                      entry.count += 1;
-                      entry.durationMin += dur;
-                      if (activityPace != null) {
-                        entry.paceSum += activityPace; entry.paceCount += 1;
-                        if (entry.minPace == null || activityPace < entry.minPace) {
-                          entry.minPace = activityPace;
-                          entry.minPaceActivityId = a.activity_id || a.id || null;
-                          entry.minPaceRaw = rawPace;
-                          entry.minPaceDistance = dist != null && Number.isFinite(Number(dist)) ? Number(dist) : null;
-                        }
-                      }
-                      const sVal = findStepsInObj(a);
-                      if (sVal != null && Number.isFinite(Number(sVal))) entry.steps += Number(sVal);
-
-                      dayMap.set(iso, entry);
-                    });
-
-                    // helper to convert maps to arrays and compute averages
-                    // helper to convert maps to arrays and compute averages
-                    // If activities lack steps, try to supplement from dashboardData rows
-                    const pickDashboardStepsForDate = (isoDate) => {
-                      try {
-                        const rows = (dashboardData?.healthData?.all) || (dashboardData?.windowData) || [];
-                        if (!Array.isArray(rows) || rows.length === 0) return null;
-                        let best = null;
-                        for (const r of rows) {
-                          const rawDate = r.day || r.date || r.timestamp || r.day_date;
-                          const d = r._dayObj ? r._dayObj : (rawDate ? new Date(rawDate) : null);
-                          if (!d || isNaN(d.getTime())) continue;
-                          const key = d.toISOString().slice(0,10);
-                          if (key !== isoDate) continue;
-                          const val = Number(r.steps ?? r.total_steps ?? r.step_count ?? r.daily_steps ?? r.totalSteps ?? r.stepCount ?? 0) || 0;
-                          if (val > 0 && (best == null || val > best)) best = val;
-                        }
-                        return best;
-                      } catch (e) {
-                        return null;
-                      }
-                    };
-
-                    const buildArrays = (dayMap) => {
-                      // supplement dayMap steps with dashboard data when missing/zero
-                      // but only for running/walking/hiking sport buckets
-                      for (const [iso, entry] of dayMap.entries()) {
-                        if ((!entry.steps || entry.steps === 0)) {
-                          const fromDash = pickDashboardStepsForDate(iso);
-                          if (fromDash != null && fromDash > 0) entry.steps = fromDash;
-                        }
-                      }
-                      return Array.from(dayMap.entries()).map(([date, v]) => ({
-                        date,
-                        distance: Number(Number(v.distance).toFixed(3)),
-                        count: v.count,
-                        // prefer fastest activity pace for the day (minPace) if available
-                        avgPace: v.minPace != null ? v.minPace : (v.paceCount ? (v.paceSum / v.paceCount) : null),
-                        steps: v.steps,
-                        durationMin: v.durationMin,
-                        minPaceActivityId: v.minPaceActivityId,
-                        minPaceRaw: v.minPaceRaw,
-                        minPaceDistance: v.minPaceDistance
-                      }));
-                    };
-
-                    const buildArraysNoSupplement = (dayMap) => {
-                      return Array.from(dayMap.entries()).map(([date, v]) => ({
-                        date,
-                        distance: Number(Number(v.distance).toFixed(3)),
-                        count: v.count,
-                        avgPace: v.paceCount ? (v.paceSum / v.paceCount) : null,
-                        steps: v.steps,
-                        durationMin: v.durationMin,
-                        minPaceDistance: v.minPaceDistance
-                      }));
-                    };
-
-                    const cyclingArr = buildArraysNoSupplement(map.cycling);
-                    const runningArr = buildArrays(map.running);
-                    const walkingArr = buildArrays(map.walking);
-                    const hikingArr = buildArrays(map.hiking);
-                    const swimmingArr = buildArraysNoSupplement(map.swimming);
-                    const gymArr = buildArraysNoSupplement(map.gym);
-
-                    // Debug: log counts per sport and distinct raw sport names + samples of unclassified hints
-                    try {
-                      const counts = {};
-                      for (const k of Object.keys(map)) counts[k] = map[k].size || 0;
-                      console.debug('Top5 per-sport day buckets:', counts);
-
-                      const rawSports = Array.from(new Set((periodActivities || []).map(a => (a.sport || '').toString()).filter(s => s.length > 0)));
-                      console.debug('Distinct raw sport names in periodActivities:', rawSports.slice(0,200));
-
-                      // build multi-field hints for activities and show some unclassified examples
-                      const getSportHint = (act) => {
-                        if (!act || typeof act !== 'object') return '';
-                        const parts = [];
-                        const tryPush = (v) => { if (v != null) parts.push(String(v)); };
-                        tryPush(act.sport);
-                        tryPush(act.sub_sport);
-                        tryPush(act.name);
-                        tryPush(act.type);
-                        tryPush(act.activity_type);
-                        tryPush(act.workout_type);
-                        tryPush(act.workout_name);
-                        tryPush(act.description);
-                        if (Array.isArray(act.tags)) parts.push(...act.tags.map(t => String(t)));
-                        if (act.metadata && typeof act.metadata === 'object') tryPush(JSON.stringify(act.metadata));
-                        return parts.filter(Boolean).join(' | ');
-                      };
-
-                      const unclassified = [];
-                      for (const act of (periodActivities || [])) {
-                        const hint = getSportHint(act);
-                        if (!hint) continue;
-                        const key = normalizeSport(hint);
-                        if (!key) {
-                          unclassified.push({ id: act.activity_id || act.id || '(no-id)', hint, name: act.name || '', sport: act.sport || '' });
-                          if (unclassified.length >= 20) break;
-                        }
-                      }
-                      if (unclassified.length) console.debug('Sample unclassified activity hints (first 20):', unclassified);
-                    } catch (e) {
-                      // ignore
-                    }
-
-                    // Pace debug: show running day buckets and source activity ids when requested
-                    try {
-                      if (typeof window !== 'undefined' && localStorage.getItem('debugShowPace') === '1') {
-                        console.debug('DEBUG: runningArr (date, avgPace, minPaceActivityId, minPaceRaw):', runningArr.map(r => ({ date: r.date, avgPace: r.avgPace, activityId: r.minPaceActivityId, raw: r.minPaceRaw }))); 
-                      }
-                    } catch (e) { /* ignore */ }
-
-                    const topK = (arr, key, asc=false, n=5) => {
-                      const filtered = arr.filter(x => x[key] != null && (typeof x[key] === 'number' ? Number.isFinite(x[key]) : true));
-                      filtered.sort((a,b) => asc ? a[key] - b[key] : b[key] - a[key]);
-                      return filtered.slice(0,n);
-                    };
-
-                    const metrics = [
-                      { id: 'distance', title: 'Total distance (km)', fmt: v => v.toFixed(2) },
-                      { id: 'count', title: 'Activity count', fmt: v => String(v) },
-                      { id: 'avgPace', title: 'Avg pace (min/km) — fastest', fmt: v => formatPaceMinPerKm(v) , asc: true },
-                      { id: 'steps', title: 'Steps', fmt: v => String(Math.round(v)) },
-                      { id: 'durationMin', title: 'Active minutes', fmt: v => String(Math.round(v)) }
-                    ];
-
-                    const topFor = (arr, metric) => topK(arr, metric.id, !!metric.asc);
-
-                    return (
-                      <div className="space-y-4">
-                        {metrics.map(metric => {
-                          const tCycling = topFor(cyclingArr, metric);
-                          const tRunning = topFor(runningArr, metric);
-                          const tWalking = topFor(walkingArr, metric);
-                          const tHiking = topFor(hikingArr, metric);
-                          const tSwimming = topFor(swimmingArr, metric);
-                          const tGym = topFor(gymArr, metric);
-                          // use component-level date helpers: formatDateOnly, formatDateTime
-
-                          const cellText = (obj) => {
-                            if (!obj) return '—';
-                            const v = obj[metric.id];
-                            // treat null/undefined or explicit zero as empty
-                            if (v == null) return '—';
-                            if (typeof v === 'number' && v === 0) return '—';
-                            if (metric.id === 'avgPace') {
-                              const paceStr = formatPaceMinPerKm(v);
-                              const dist = obj.minPaceDistance != null ? ` (${obj.minPaceDistance.toFixed(2)} km)` : '';
-                              return `${paceStr}${dist}`;
-                            }
-                            return metric.fmt(v);
-                          };
-
-                          return (
-                            <div key={metric.id} className="border rounded p-3">
-                              <div className="flex items-center justify-between mb-2">
-                                <div className="font-semibold">{metric.title}</div>
-                                {metric.id === 'avgPace' ? <div className="text-xs text-gray-500">lower is better</div> : null}
-                              </div>
-                              <div className="overflow-auto">
-                                <table className="min-w-full text-sm table-fixed">
-                                          <thead>
-                                            <tr className="text-left text-xs text-gray-500 uppercase">
-                                              <th className="w-12 pr-4">#</th>
-                                              <th className="pr-4">Cycling</th>
-                                              <th className="pr-4">Running</th>
-                                              <th className="pr-4">Walking</th>
-                                              <th className="pr-4">Hiking</th>
-                                              <th className="pr-4">Swimming</th>
-                                              <th>Gym</th>
-                                            </tr>
-                                          </thead>
-                                  <tbody>
-                                    {[0,1,2,3,4].map(i => {
-                                      const c = tCycling[i];
-                                      const r = tRunning[i];
-                                      const w = tWalking[i];
-                                      const h = tHiking[i];
-                                      const s = tSwimming[i];
-                                      const g = tGym[i];
-                                      const cellFor = (sport) => (obj) => {
-                                        if (!obj) return '—';
-                                        const txt = cellText(obj);
-                                        if (txt === '—') return '—';
-                                        // For steps metric, append distance for running/walking/hiking
-                                        if (metric.id === 'steps' && ['running','walking','hiking'].includes(sport)) {
-                                          const dist = obj.distance != null && Number.isFinite(Number(obj.distance)) ? ` (${Number(obj.distance).toFixed(2)} km)` : '';
-                                          return `${safeFormatDate(obj.date)}: ${txt}${dist}`;
-                                        }
-                                        return `${safeFormatDate(obj.date)}: ${txt}`;
-                                      };
-                                      return (
-                                        <tr key={i} className="border-t">
-                                          <td className="py-2 pr-4 font-medium">{i+1}</td>
-                                          <td className="py-2 pr-4">{cellFor('cycling')(c)}</td>
-                                          <td className="py-2 pr-4">{cellFor('running')(r)}</td>
-                                          <td className="py-2 pr-4">{cellFor('walking')(w)}</td>
-                                          <td className="py-2 pr-4">{cellFor('hiking')(h)}</td>
-                                          <td className="py-2 pr-4">{cellFor('swimming')(s)}</td>
-                                          <td className="py-2">{cellFor('gym')(g)}</td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()
-                )}
-              </div>
-            </div>
-  {/* Advanced charts & simulations removed. See Running Analytics page for forecasts and goal simulations. */}
-
         {/* Weekly Trends */}
         <div className="card mt-6">
           <div className="card-header flex flex-wrap gap-4 justify-between items-start">

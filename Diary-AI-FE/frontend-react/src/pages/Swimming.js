@@ -11,7 +11,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
 import { Button } from '../components/ui';
 // TooltipStyles injected globally in App
-import Top5ByMetric from '../components/Top5ByMetric';
+// Top5ByMetric removed
 
 const Swimming = () => {
   const sportKey = 'swimming';
@@ -134,8 +134,7 @@ const Swimming = () => {
           </div>
         </div>
 
-        {/* Top-5 for Swimming */}
-        <Top5ByMetric activities={(analysis && Array.isArray(analysis.runs) && analysis.runs.length>0) ? analysis.runs : sportActivities} sportLabel="Swimming" />
+  {/* Top5ByMetric removed */}
         {busy && sportActivities.length === 0 && <LoadingSpinner message="Loading swimming activities..." />}
         {error && sportActivities.length === 0 && <ErrorMessage message={error} />}
       </div>

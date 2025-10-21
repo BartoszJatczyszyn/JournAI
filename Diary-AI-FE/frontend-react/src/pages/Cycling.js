@@ -14,7 +14,6 @@ import api from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
 import { Button } from '../components/ui';
-import Top5ByMetric from '../components/Top5ByMetric';
 
 // Cycling-specific analytics (sport key: 'cycling' or 'Cycling')
 const Cycling = () => {
@@ -260,8 +259,7 @@ const Cycling = () => {
           <div className="card-content"><TrendComparison height={220} data={displayedWeeks.map(w => ({ label: w.week, distance: (w.distance != null ? w.distance : (w.total_distance_km ?? 0)), rollingPace: (w.rollingAvgPace4 != null ? w.rollingAvgPace4 : (w.avg_pace ?? null)) }))} forecast={{ distance: predictions.predictedDistance, rollingPace: predictions.predictedRollingPace }} /></div>
         </div>
 
-        {/* Top-5 for Cycling (sport-specific) */}
-        <Top5ByMetric activities={(analysis && Array.isArray(analysis.runs) && analysis.runs.length>0) ? analysis.runs : sportActivities} sportLabel="Cycling" />
+  {/* Top5ByMetric removed */}
 
         {/* If server returned no rides, show an action banner */}
         {analysis && analysis.runs === 0 && (

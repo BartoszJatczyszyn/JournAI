@@ -25,7 +25,6 @@ import RunningEconomyPanel from '../components/RunningEconomyPanel';
 import DistanceBucketComparison from '../components/DistanceBucketComparison';
 import { Button } from '../components/ui';
 import PaceHrChart from '../components/PaceHrChart';
-import Top5ByMetric from '../components/Top5ByMetric';
 
 // Focused running analytics view: filters activities to sport 'running' / 'Running'
 const Running = () => {
@@ -658,8 +657,7 @@ const Running = () => {
           </div>
         </div>
 
-        {/* Top-5 for Running (sport-specific) */}
-        <Top5ByMetric activities={(runningAnalysis && Array.isArray(runningAnalysis.runs) && runningAnalysis.runs.length>0) ? runningAnalysis.runs : runningActivities} sportLabel="Running" />
+  {/* Top5ByMetric removed */}
 
         {/* If server returned no runs, show an action banner */}
         {runningAnalysis && runningAnalysis.runs === 0 && (

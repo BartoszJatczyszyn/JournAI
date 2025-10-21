@@ -19,7 +19,7 @@ import { Button } from '../components/ui';
 import PaceHrChart from '../components/PaceHrChart';
 import DistanceHistogram from '../components/DistanceHistogram';
 import DistanceHistogramByDay from '../components/DistanceHistogramByDay';
-import Top5ByMetric from '../components/Top5ByMetric';
+// Top5ByMetric removed
 
 // Focused walking analytics view: filters activities to sport 'walking'
 const Walking = () => {
@@ -495,7 +495,7 @@ const Walking = () => {
           </div>
         </div>
   {/* Top-5 for Walking (use only client-side walkingActivities to ensure sport='walking' strictly) */}
-  <Top5ByMetric activities={walkingActivities} sportLabel="Walking" disableDashboardSupplement={false} debugLogSteps={true} />
+  {/* Top5ByMetric removed */}
         {busy && walkingActivities.length === 0 && <LoadingSpinner message="Loading walking activities..." />}
         {error && walkingActivities.length === 0 && <ErrorMessage message={error} />}
 
