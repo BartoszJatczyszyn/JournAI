@@ -223,24 +223,28 @@ const Dashboard = () => {
 
   return (
     <div className="dashboard fade-in">
+      <div className="section">
       <DashboardHeader
         dateRange={dateRange}
         onSelectDays={fetchDashboardForDays}
         availableDays={availableDays}
       />
+      </div>
 
       {/* Key Metrics */}
-      <MetricsGrid
-        avgEnergy={avgEnergy}
-        avgSleep={avgSleep}
-        avgSteps={avgSteps}
-        avgRHR={avgRHR}
-        computeTrend={computeTrend}
-        recentData={recentData}
-      />
+      <div className="section">
+        <MetricsGrid
+          avgEnergy={avgEnergy}
+          avgSleep={avgSleep}
+          avgSteps={avgSteps}
+          avgRHR={avgRHR}
+          computeTrend={computeTrend}
+          recentData={recentData}
+        />
+      </div>
 
       {/* Charts Section */}
-      <div className="charts-section">
+  <div className="charts-section section">
         <div className="chart-container-wrapper">
           <HealthTrendsCard
             selectedMetric={selectedMetric}
@@ -284,12 +288,12 @@ const Dashboard = () => {
       </div>
 
       {/* Quick Stats */}
-      <div className="quick-stats">
+      <div className="quick-stats section">
         <DataOverviewCard stats={stats} />
       </div>
 
       {/* Insights & Highlights */}
-      <div className="insights-section">
+      <div className="insights-section section">
         <div className="card">
           <div className="card-header">
             <h3 className="card-title">Insights & Highlights</h3>
@@ -363,7 +367,7 @@ const Dashboard = () => {
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
-          margin-bottom: 32px;
+          margin-bottom: var(--space-8);
         }
 
         .page-title {
@@ -386,10 +390,7 @@ const Dashboard = () => {
           color: #94a3b8;
         }
 
-        .dashboard-controls {
-          display: flex;
-          gap: 12px;
-        }
+        .dashboard-controls { display: flex; gap: var(--space-3); }
 
         .date-range-select,
         .metric-select {
@@ -412,30 +413,22 @@ const Dashboard = () => {
         .metrics-grid {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-          gap: 24px;
-          margin-bottom: 32px;
+          gap: var(--space-6);
+          margin-bottom: var(--space-8);
         }
 
-        .charts-section {
-          margin-bottom: 32px;
-        }
+        .charts-section { margin-bottom: var(--space-8); }
 
-        .chart-container-wrapper {
-          margin-bottom: 24px;
-        }
+        .chart-container-wrapper { margin-bottom: var(--space-6); }
 
-        .correlation-section {
-          margin-top: 24px;
-        }
+        .correlation-section { margin-top: var(--space-6); }
 
-        .quick-stats {
-          margin-bottom: 32px;
-        }
+        .quick-stats { margin-bottom: var(--space-8); }
 
         .stats-grid {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-          gap: 24px;
+          gap: var(--space-6);
         }
 
         .stat-item {
@@ -470,24 +463,15 @@ const Dashboard = () => {
         }
 
         @media (max-width: 768px) {
-          .dashboard-header {
-            flex-direction: column;
-            gap: 16px;
-          }
+          .dashboard-header { flex-direction: column; gap: var(--space-4); }
 
           .page-title {
             font-size: 1.5rem;
           }
 
-          .metrics-grid {
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-          }
+          .metrics-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-4); }
 
-          .stats-grid {
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 16px;
-          }
+          .stats-grid { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-4); }
         }
       `}</style>
     </div>

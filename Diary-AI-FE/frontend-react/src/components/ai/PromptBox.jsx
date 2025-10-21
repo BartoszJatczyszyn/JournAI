@@ -38,12 +38,13 @@ export default function PromptBox({ llmAvailable = true }) {
       </div>
       <div className="card-body">
         <textarea
+          className="textarea-glass mb-3"
           value={prompt}
           onChange={e => setPrompt(e.target.value)}
           rows={4}
-          style={{ width: '100%', marginBottom: 12 }}
+          style={{ width: '100%' }}
         />
-        <button onClick={send} disabled={loading || !llmAvailable}>
+        <button className="btn btn-primary" onClick={send} disabled={loading || !llmAvailable}>
           {loading ? 'Sending…' : 'Send'}
         </button>
   {!llmAvailable && <div className="error" style={{ color: 'salmon', marginTop: 8 }}>LLM offline — send your query after starting the LLM service.</div>}

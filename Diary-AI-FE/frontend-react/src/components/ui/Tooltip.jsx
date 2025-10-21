@@ -31,7 +31,7 @@ const Tooltip = ({ children, content, placement = 'top', delay = 250, maxWidth =
     const isRight = placement === 'right';
     const base = {
       position: 'absolute', zIndex: 1000, maxWidth,
-      background: 'var(--glass-bg)',
+      background: 'linear-gradient(180deg, rgba(255,255,255,0.65), rgba(255,255,255,0.30))',
       border: '1px solid var(--glass-border)',
       backdropFilter: 'blur(12px) saturate(120%)',
       WebkitBackdropFilter: 'blur(12px) saturate(120%)',

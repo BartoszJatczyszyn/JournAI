@@ -1,4 +1,5 @@
 import React from 'react';
+import { RangeControls } from '../ui';
 
 const DashboardHeader = ({ title = 'Health Dashboard', subtitle = 'Your comprehensive health overview with AI-powered insights', dateRange, onSelectDays, availableDays: _availableDays }) => {
   return (
@@ -8,19 +9,7 @@ const DashboardHeader = ({ title = 'Health Dashboard', subtitle = 'Your comprehe
         <p className="page-subtitle">{subtitle}</p>
       </div>
       <div className="dashboard-controls">
-        <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
-          <select
-            value={dateRange}
-            onChange={(e) => onSelectDays(Number(e.target.value))}
-            className="date-range-select"
-          >
-            <option value={7}>Last 7 days</option>
-            <option value={14}>Last 2 weeks</option>
-            <option value={30}>Last 30 days</option>
-            <option value={60}>Last 2 months</option>
-            <option value={90}>Last 3 months</option>
-          </select>
-        </div>
+        <RangeControls days={dateRange} onChangeDays={onSelectDays} />
       </div>
     </div>
   );

@@ -23,7 +23,7 @@ const HealthTrendsCard = ({ selectedMetric, onChangeMetric, windowData }) => {
           <select
             value={selectedMetric}
             onChange={(e) => onChangeMetric(e.target.value)}
-            className="metric-select"
+            className="select-glass metric-select"
           >
             <option value="energy_level">Energy Level</option>
             <option value="sleep_score">Sleep Score</option>

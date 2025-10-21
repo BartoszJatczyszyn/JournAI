@@ -91,8 +91,8 @@ export default function HealthReport({ llmAvailable = true }) {
         <h3>AI Health Report</h3>
       </div>
       <div className="card-body">
-        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-          <button onClick={() => {
+        <div className="form-row mb-3">
+          <button className="btn btn-outline" onClick={() => {
             const md = `# Health Report (Preview)\n\n- Days: ${days}\n- Language: ${language}\n\n---\n\n${report}`;
             navigator.clipboard.writeText(md)
               .then(() => toast.success('Preview copied as Markdown'))
@@ -111,22 +111,22 @@ export default function HealthReport({ llmAvailable = true }) {
             URL.revokeObjectURL(url);
           }}>Download preview (MD)</button>
         </div>
-        <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+        <div className="form-row flex flex-wrap gap-3 mb-3">
           <label>
             Days:
-            <input type="number" min={7} max={180} value={days} onChange={e => setDays(parseInt(e.target.value || 30))} style={{ marginLeft: 8, width: 80 }} />
+            <input className="input-glass ml-2 w-80" type="number" min={7} max={180} value={days} onChange={e => setDays(parseInt(e.target.value || 30))} />
           </label>
           <label>
             Language:
-            <select value={language} onChange={e => setLanguage(e.target.value)} style={{ marginLeft: 8 }}>
+            <select className="select-glass ml-2" value={language} onChange={e => setLanguage(e.target.value)}>
               <option value="pl">Polski</option>
               <option value="en">English</option>
             </select>
           </label>
-          <button onClick={fetchReport} disabled={loading || !llmAvailable}>
+          <button className="btn btn-primary" onClick={fetchReport} disabled={loading || !llmAvailable}>
             {loading ? 'Generating…' : 'Generate'}
           </button>
-          <button onClick={generateNow} disabled={genLoading || !llmAvailable}>
+          <button className="btn btn-secondary" onClick={generateNow} disabled={genLoading || !llmAvailable}>
             {genLoading ? 'Saving…' : 'Generate now (store)'}
           </button>
         </div>
@@ -138,10 +138,10 @@ export default function HealthReport({ llmAvailable = true }) {
             {report}
           </pre>
         )}
-        <div style={{ marginTop: 16 }}>
-          <h4 style={{ marginBottom: 8 }}>Latest stored report</h4>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-            <button onClick={fetchLatest}>Refresh</button>
+        <div className="mt-4">
+          <h4 className="mb-2">Latest stored report</h4>
+          <div className="form-row" style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+            <button className="btn btn-outline" onClick={fetchLatest}>Refresh</button>
             {latest && (
               <span style={{ opacity: 0.8, fontSize: 12 }}>
                 day: {latest.day} | language: {latest.language} | window: {latest.days_window} | created_at: {latest.created_at}

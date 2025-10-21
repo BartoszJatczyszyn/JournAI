@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from '../components/ui';
 
 const Settings = () => {
@@ -29,6 +29,27 @@ const Settings = () => {
       },
     };
   });
+
+  // Glass intensity state (0-100), persisted and applied to CSS vars
+  const [glassIntensity, setGlassIntensity] = useState(() => {
+    const saved = Number(localStorage.getItem('glassIntensity'));
+    return Number.isFinite(saved) ? Math.min(100, Math.max(0, saved)) : 60;
+  });
+
+  // Map intensity -> CSS variable values
+  useEffect(() => {
+    const root = document.documentElement;
+    // blur: 6px .. 26px
+    const blur = 6 + (glassIntensity / 100) * 20;
+    // surface opacity (dark): 0.04 .. 0.16
+    const surf = 0.04 + (glassIntensity / 100) * 0.12;
+    // noise opacity: 0 .. 0.08
+    const noise = (glassIntensity / 100) * 0.08;
+    root.style.setProperty('--glass-blur', `${blur.toFixed(1)}px`);
+    root.style.setProperty('--glass-surface-opacity', surf.toFixed(3));
+    root.style.setProperty('--noise-opacity', noise.toFixed(3));
+    try { localStorage.setItem('glassIntensity', String(glassIntensity)); } catch { /* ignore */ }
+  }, [glassIntensity]);
 
   const handleNotificationChange = (type) => {
     setSettings(prev => ({
@@ -92,6 +113,30 @@ const Settings = () => {
       
       <div className="page-content">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Appearance / Glass settings */}
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">Appearance</h3>
+              <p className="card-subtitle">Tune macOS-like glass intensity</p>
+            </div>
+            <div className="card-content">
+              <label className="block font-medium mb-2">Glass intensity</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={glassIntensity}
+                  onChange={(e) => setGlassIntensity(parseInt(e.target.value, 10))}
+                  style={{ width: '100%' }}
+                />
+                <div style={{ minWidth: 42, textAlign: 'right' }}>{glassIntensity}%</div>
+              </div>
+              <p className="text-sm text-gray-600 dark:text-gray-400" style={{ marginTop: 8 }}>
+                Controls blur, surface opacity and subtle grain. 0% is minimal, 100% is high glass.
+              </p>
+            </div>
+          </div>
           {/* Notifications Settings */}
           <div className="card">
             <div className="card-header">

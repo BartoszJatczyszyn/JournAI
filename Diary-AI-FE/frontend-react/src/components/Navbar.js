@@ -8,7 +8,7 @@ const Navbar = ({ onToggleSidebar, onToggleDarkMode, darkMode }) => {
   const isToday = location.pathname === '/today';
 
   return (
-    <nav className="navbar">
+    <nav className="navbar glass-navbar">
       <div className="navbar-content">
         <div className="navbar-left">
           <button
@@ -130,8 +130,10 @@ const Navbar = ({ onToggleSidebar, onToggleDarkMode, darkMode }) => {
         }
 
         .dark .navbar {
-          background: #1e293b;
-          border-bottom-color: #334155;
+          background:
+            linear-gradient(180deg, rgba(15,23,42,0.55), rgba(2,6,23,0.38));
+          border-bottom-color: rgba(148,163,184,0.20);
+          box-shadow: 0 10px 28px rgba(0,0,0,0.30);
         }
 
         .navbar-content {

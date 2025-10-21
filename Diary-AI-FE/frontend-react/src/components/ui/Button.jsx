@@ -11,11 +11,11 @@ const VARIANTS = {
 };
 
 const SIZES = {
-  xxs: { padding: '2px 6px', fontSize: '0.7rem', borderRadius: 6 },
-  xs: { padding: '4px 8px', fontSize: '0.78rem', borderRadius: 6 },
-  sm: { padding: '6px 10px', fontSize: '0.8rem', borderRadius: 6 },
-  md: { padding: '8px 14px', fontSize: '0.875rem', borderRadius: 8 },
-  lg: { padding: '10px 16px', fontSize: '0.95rem', borderRadius: 10 },
+  xxs: { padding: '4px 8px', fontSize: '0.72rem', borderRadius: 10 },
+  xs: { padding: '6px 10px', fontSize: '0.78rem', borderRadius: 11 },
+  sm: { padding: '8px 12px', fontSize: '0.82rem', borderRadius: 12 },
+  md: { padding: '10px 14px', fontSize: '0.90rem', borderRadius: 12 },
+  lg: { padding: '12px 16px', fontSize: '0.98rem', borderRadius: 14 },
 };
 
 const Button = ({

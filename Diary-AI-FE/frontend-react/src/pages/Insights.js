@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { RangeControls } from '../components/ui';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
 import { insightsAPI, healthAPI2 } from '../services';
@@ -199,13 +200,11 @@ const Insights = () => {
           <div>
             <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ margin: 0 }}>Trends</h2>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <label style={{ fontSize: 13, color: '#64748b' }}>Range:
-                  <select value={daysRange} onChange={e=> setDaysRange(Number(e.target.value))} style={{ marginLeft:8 }}>
-                    {[30,60,90,180].map(n=> <option key={n} value={n}>{n}d</option>)}
-                  </select>
-                </label>
-              </div>
+              <RangeControls
+                days={daysRange}
+                onChangeDays={setDaysRange}
+                options={[30,60,90,180]}
+              />
             </div>
 
             <div style={{ marginBottom: 16 }}>

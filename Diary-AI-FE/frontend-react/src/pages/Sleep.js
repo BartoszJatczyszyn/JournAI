@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { Button, Section } from '../components/ui';
+import { Button, Section, RangeControls } from '../components/ui';
 import ChartTooltip from '../components/ui/ChartTooltip';
 import ErrorMessage from '../components/ErrorMessage';
 import MetricCard from '../components/MetricCard';
@@ -830,42 +830,22 @@ const PhaseTooltip = ({ active, payload, label }) => {
   return (
     <div className="sleep-page fade-in">
       {/* Header */}
+      <div className="section">
       <Section
         title={<><span className="title-icon">😴</span> Sleep Analysis</>}
         subtitle={"Comprehensive analysis of your sleep quality, timing, and correlations"}
         actions={
-          <>
-            <select
-              value={analysisParams.days}
-              onChange={(e) => handleParamsChange({ days: parseInt(e.target.value, 10) })}
-              className="period-select"
-            >
-              <option value={7}>Last 7 days</option>
-              <option value={14}>Last 2 weeks</option>
-              <option value={30}>Last 30 days</option>
-              <option value={60}>Last 2 months</option>
-            </select>
-            <Button onClick={handleRefresh} disabled={loading} variant="primary">
-              {loading ? (
-                <>
-                  <div className="loading-spinner"></div>
-                  Analyzing...
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Refresh Analysis
-                </>
-              )}
-            </Button>
-          </>
+          <RangeControls
+            days={analysisParams.days}
+            onChangeDays={(d) => handleParamsChange({ days: d })}
+            onRefresh={handleRefresh}
+          />
         }
       />
+      </div>
 
       {/* Overview */}
-      <div className="sleep-overview">
+      <div className="sleep-overview section">
         <h3>Sleep Overview</h3>
         <div className="overview-metrics">
           {/* Avg Sleep Score: ensure numeric */}
@@ -909,15 +889,17 @@ const PhaseTooltip = ({ active, payload, label }) => {
       </div>
 
       {/* Timing and Gantt */}
+      <div className="section">
       <SleepTimingAnalysis 
         timing={analysis?.sleep_timing || analysis?.sleep_timing_analysis || {}}
         derivedTiming={derivedTiming}
         timeseries={timeseries}
         analysisParams={analysisParams}
       />
+      </div>
 
       {/* Distributions */}
-      <div className="sleep-distributions">
+      <div className="sleep-distributions section">
         <div className="card">
           <div className="card-header">
             <h3 className="card-title">Bedtime Distribution</h3>
@@ -943,7 +925,7 @@ const PhaseTooltip = ({ active, payload, label }) => {
           </div>
           <div className="card-content">
             {/* distribution computed from lastPreWakeSeries */}
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-around' }}>
+            <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center', justifyContent: 'space-around' }}>
               {(()=>{
                 const counts = { Deep:0, Light:0, REM:0, Awake:0, Unknown:0 };
                 for (const p of lastPreWakeSeries) {
@@ -955,7 +937,7 @@ const PhaseTooltip = ({ active, payload, label }) => {
                 const entries = [ ['Deep','#8b5cf6'], ['Light','#22c55e'], ['REM','#06b6d4'], ['Awake','#ef4444'] ];
                 return (
                   <div style={{ width: '100%' }}>
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                    <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-2)' }}>
                       {entries.map(([label, color]) => (
                         <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <div style={{ width: 12, height: 12, background: color, borderRadius: 3 }} />
@@ -963,14 +945,14 @@ const PhaseTooltip = ({ active, payload, label }) => {
                         </div>
                       ))}
                     </div>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                    <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'flex-end' }}>
                       {entries.map(([label, color]) => {
                         const cnt = counts[label] || 0;
                         const pct = Math.round((cnt / total) * 100);
                         return (
                           <div key={label} style={{ flex: 1, textAlign: 'center' }}>
                             <div style={{ height: `${Math.max(8, pct)}px`, background: color, margin: '0 auto', width: '60%', borderRadius: 4 }} />
-                            <div style={{ marginTop: 8 }}>{cnt} ({pct}%)</div>
+                            <div style={{ marginTop: 'var(--space-2)' }}>{cnt} ({pct}%)</div>
                           </div>
                         );
                       })}
@@ -984,11 +966,11 @@ const PhaseTooltip = ({ active, payload, label }) => {
       </div>
 
       {/* Trends */}
-      <div className="sleep-trends">
+      <div className="sleep-trends section">
         <div className="card">
           <div className="card-header">
             <h3 className="card-title">Sleep Phases Trend</h3>
-              <div className="chart-controls" style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+              <div className="chart-controls" style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--space-2)' }}>
                 <button className={`btn ${phasesMode === 'time' ? 'btn-primary' : ''}`} onClick={() => setPhasesMode('time')}>
                   Hours
                 </button>
@@ -1015,7 +997,7 @@ const PhaseTooltip = ({ active, payload, label }) => {
                 <Line type="monotone" data={awakeTrend14} dataKey="y" name="Awake 14d (h)" stroke="#dc2626" strokeWidth={2} dot={false} />
               </AreaChart>
             </ResponsiveContainer>
-            <div className="chart-subtitle" style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: -15 }}>
+            <div className="chart-subtitle" style={{ display: 'flex', gap: 'var(--space-4)', flexWrap: 'wrap', marginTop: -15 }}>
               {deepMean14 != null && (
                 <span style={{ color: '#8b5cf6' }}>Deep avg: <strong>{phasesMode === 'percent' ? `${Math.round((deepMean14||0)*100)}%` : formatHoursHhMm(deepMean14)}</strong></span>
               )}
@@ -1129,9 +1111,9 @@ const PhaseTooltip = ({ active, payload, label }) => {
                   {rhrMean14 != null && (<div className="chart-subtitle">14-day average: <strong>{rhrMean14} bpm</strong></div>)}
                 </>
               ) : (
-                <div style={{ padding: 24, color: 'var(--muted)' }}>
+                <div style={{ padding: 'var(--space-6)', color: 'var(--muted)' }}>
                   <div>No heart rate samples found for the selected period.</div>
-                  <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                  <div style={{ marginTop: 'var(--space-2)', display: 'flex', gap: 'var(--space-2)' }}>
                     <Button variant="ghost" onClick={() => handleParamsChange({ days: Math.min(90, (analysisParams.days || 14) * 2) })}>Expand range</Button>
                     <Button variant="ghost" onClick={() => handleRefresh()}>Refresh</Button>
                   </div>
@@ -1161,9 +1143,9 @@ const PhaseTooltip = ({ active, payload, label }) => {
                   {respMean14 != null && (<div className="chart-subtitle">14-day average: <strong>{respMean14} brpm</strong></div>)}
                 </>
               ) : (
-                <div style={{ padding: 24, color: 'var(--muted)' }}>
+                <div style={{ padding: 'var(--space-6)', color: 'var(--muted)' }}>
                   <div>No respiratory rate samples found for the selected period.</div>
-                  <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                  <div style={{ marginTop: 'var(--space-2)', display: 'flex', gap: 'var(--space-2)' }}>
                     <Button variant="ghost" onClick={() => handleParamsChange({ days: Math.min(90, (analysisParams.days || 14) * 2) })}>Expand range</Button>
                     <Button variant="ghost" onClick={() => handleRefresh()}>Refresh</Button>
                   </div>
@@ -1193,9 +1175,9 @@ const PhaseTooltip = ({ active, payload, label }) => {
                   {stressMean14 != null && (<div className="chart-subtitle">14-day average: <strong>{stressMean14}</strong></div>)}
                 </>
               ) : (
-                <div style={{ padding: 24, color: 'var(--muted)' }}>
+                <div style={{ padding: 'var(--space-6)', color: 'var(--muted)' }}>
                   <div>No stress samples found for the selected period.</div>
-                  <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                  <div style={{ marginTop: 'var(--space-2)', display: 'flex', gap: 'var(--space-2)' }}>
                     <Button variant="ghost" onClick={() => handleParamsChange({ days: Math.min(90, (analysisParams.days || 14) * 2) })}>Expand range</Button>
                     <Button variant="ghost" onClick={() => handleRefresh()}>Refresh</Button>
                   </div>
@@ -1206,7 +1188,7 @@ const PhaseTooltip = ({ active, payload, label }) => {
       </div>
 
       {/* Correlations */}
-      <div className="sleep-correlations">
+      <div className="sleep-correlations section">
         <div className="card">
           <div className="card-header">
             <h3 className="card-title">Correlation Heatmap</h3>
@@ -1229,7 +1211,7 @@ const PhaseTooltip = ({ active, payload, label }) => {
 
       {/* Recommendations & Guide */}
       {recommendations && recommendations.length > 0 && (
-        <div className="sleep-recommendations">
+        <div className="sleep-recommendations section">
           <div className="card">
             <div className="card-header">
               <h3 className="card-title">Recommendations</h3>
@@ -1245,7 +1227,7 @@ const PhaseTooltip = ({ active, payload, label }) => {
         </div>
       )}
 
-      <SleepQualityZones />
+      <div className="section"><SleepQualityZones /></div>
 
       <style jsx>{`
         /* Tooltip visuals centralized in src/index.css. Keep only small overrides here if necessary. */
@@ -1264,16 +1246,16 @@ const PhaseTooltip = ({ active, payload, label }) => {
         .period-select { padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: white; color: #1e293b; font-size: 0.875rem; }
         .dark .period-select { background: #334155; border-color: #475569; color: #f1f5f9; }
 
-        .sleep-overview { margin-bottom: 32px; }
+  .sleep-overview { margin-bottom: var(--space-8); }
         .sleep-overview h3 { font-size: 1.25rem; font-weight: 600; color: #1e293b; margin: 0 0 16px 0; }
         .dark .sleep-overview h3 { color: #f1f5f9; }
-        .overview-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+  .overview-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-4); }
 
-        .sleep-distributions, .sleep-trends, .sleep-correlations, .sleep-recommendations { margin-bottom: 32px; }
-        .chart-container { padding: 24px; }
+  .sleep-distributions, .sleep-trends, .sleep-correlations, .sleep-recommendations { margin-bottom: var(--space-8); }
+  .chart-container { padding: var(--space-6); }
 
-        .recommendations-list { display: flex; flex-direction: column; gap: 8px; }
-        .recommendation-item { padding: 12px; background: #f0f9ff; border-left: 4px solid #38bdf8; border-radius: 0 8px 8px 0; }
+  .recommendations-list { display: flex; flex-direction: column; gap: var(--space-2); }
+  .recommendation-item { padding: var(--space-3); background: #f0f9ff; border-left: 4px solid #38bdf8; border-radius: 0 8px 8px 0; }
         .dark .recommendation-item { background: #1e3a8a; border-left-color: #60a5fa; color: #f1f5f9; }
 
         .loading-spinner { width: 16px; height: 16px; border: 2px solid transparent; border-top: 2px solid currentColor; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 8px; }

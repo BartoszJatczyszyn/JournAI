@@ -6,6 +6,7 @@ import { healthAPI2, journalAPI, sleepsAPI } from '../services';
 import DayCard from '../components/DayCard';
 import CorrelationHeatmap from '../components/CorrelationHeatmap';
 import TopCorrelationPairs from '../components/TopCorrelationPairs';
+import { RangeControls } from '../components/ui';
 
 const formatDate = (d) => {
   try {
@@ -306,12 +307,7 @@ const Days = () => {
           <p className="page-subtitle">Daily summaries (from garmin_daily_summaries)</p>
         </div>
         <div className="header-controls items-center">
-          <div className="liquid-control flex items-center gap-2" title="Change range">
-            <label className="text-sm" style={{ color: 'inherit' }}>Range</label>
-            <select value={daysRange} onChange={(e) => setDaysRange(Number(e.target.value))} className="page-size-select">
-              {[7,14,30,90].map(n => <option key={n} value={n}>{n}</option>)}
-            </select>
-          </div>
+          <RangeControls days={daysRange} onChangeDays={setDaysRange} />
         </div>
       </div>
 
@@ -454,8 +450,7 @@ const Days = () => {
         .card { border-radius: 12px; }
         .sleep-section-title { color: #1e293b; }
         .dark .sleep-section-title { color: #ffffff !important; }
-        .liquid-control { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 9999px; background: rgba(255,255,255,0.06); color: #f8fafc; backdrop-filter: blur(6px) saturate(120%); -webkit-backdrop-filter: blur(6px) saturate(120%); border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 6px 18px rgba(2,6,23,0.5); }
-        .page-size-select { appearance: none; -webkit-appearance: none; padding: 6px 8px; border-radius: 8px; background: rgba(255,255,255,0.06); color: #f8fafc; border: 1px solid rgba(255,255,255,0.08); }
+        /* control pill moved to shared RangeControls */
       `}</style>
     </div>
   );

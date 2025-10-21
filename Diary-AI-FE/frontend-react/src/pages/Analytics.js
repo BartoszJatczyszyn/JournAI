@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Button } from '../components/ui';
+import { RangeControls } from '../components/ui';
 import Tooltip from '../components/Tooltip';
 import { useHealthData } from '../context/HealthDataContext';
 // LoadingSpinner and ErrorMessage are not used in this file
@@ -397,43 +397,12 @@ const Analytics = () => {
         </div>
         
         <div className="header-controls">
-          <div className="analysis-controls" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            <label className="text-sm">
-              Period:
-              <select
-                className="input"
-                value={analysisParams.days}
-                onChange={(e) => handleParamsChange({ days: parseInt(e.target.value) })}
-                style={{ marginLeft: 8 }}
-              >
-                <option value={30}>Last 30 days</option>
-                <option value={60}>Last 60 days</option>
-                <option value={90}>Last 90 days</option>
-              </select>
-            </label>
-            <Button variant="ghost" onClick={handleRefresh}>Refresh</Button>
-          </div>
-          {/* Removed duplicate period select to avoid confusion; unified control above */}
-        
-          <Button 
-            onClick={handleRefresh}
-            disabled={loading}
-            variant="primary"
-          >
-            {loading ? (
-              <>
-                <div className="loading-spinner"></div>
-                Analyzing...
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Refresh Analysis
-              </>
-            )}
-          </Button>
+          <RangeControls
+            days={analysisParams.days}
+            onChangeDays={(n) => handleParamsChange({ days: n })}
+            options={[30,60,90]}
+            onRefresh={handleRefresh}
+          />
         </div>
       </div>
 

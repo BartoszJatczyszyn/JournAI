@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { RangeControls } from '../components/ui';
 import { useHealthData } from '../context/HealthDataContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
@@ -231,36 +232,12 @@ const Stress = () => {
         </div>
         
         <div className="header-controls">
-          <select
-            value={analysisParams.days}
-            onChange={(e) => handleParamsChange({ days: parseInt(e.target.value) })}
-            className="period-select"
-          >
-            <option value={7}>Last 7 days</option>
-            <option value={14}>Last 2 weeks</option>
-            <option value={30}>Last 30 days</option>
-            <option value={60}>Last 2 months</option>
-          </select>
-          
-          <button 
-            onClick={handleRefresh}
-            disabled={loading}
-            className="btn btn-primary"
-          >
-            {loading ? (
-              <>
-                <div className="loading-spinner"></div>
-                Analyzing...
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Refresh Analysis
-              </>
-            )}
-          </button>
+          <RangeControls
+            days={analysisParams.days}
+            onChangeDays={(n) => handleParamsChange({ days: n })}
+            options={[7,14,30,60]}
+            onRefresh={handleRefresh}
+          />
         </div>
       </div>
 

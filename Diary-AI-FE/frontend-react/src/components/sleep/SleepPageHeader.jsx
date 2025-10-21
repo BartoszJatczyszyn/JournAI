@@ -12,10 +12,10 @@ const SleepPageHeader = ({ params, onParamsChange, onRefresh, loading }) => {
       <div className="card-header">
         <h2 className="card-title">Sleep Analysis</h2>
       </div>
-      <div className="card-content" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+      <div className="card-content form-row">
         <label>
           Period (days):
-          <select value={params.days} onChange={handleDaysChange} disabled={loading} style={{ marginLeft: '0.5rem' }}>
+          <select className="select-glass ml-2" value={params.days} onChange={handleDaysChange} disabled={loading}>
             {[7, 14, 21, 30, 60, 90].map(d => (
               <option key={d} value={d}>{d}</option>
             ))}
