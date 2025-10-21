@@ -132,9 +132,33 @@ const Activity = () => {
     }
   }, [activities, periodDays, dateRangeMode, rangeStart, rangeEnd]);
 
+  // normalize sport/hint text into one of the canonical sport keys used across the UI
+  const normalizeSport = (s) => {
+    if (!s) return null;
+    const x = String(s).toLowerCase().trim();
+    // cycling variants
+    if (x.includes('cycle') || x.includes('bike') || x.includes('ride') || x.includes('biking') || x.includes('road') || x.includes('gravel') || x.includes('spin') || x.includes('trainer') || x.includes('indoor') || x.includes('ebike') || x.includes('e-bike') || x.includes('commute') || x.includes('virtual')) return 'cycling';
+    // running
+    if (x.includes('run') || x.includes('jog') || x.includes('tempo') || x.includes('fartlek')) return 'running';
+    // hiking / trekking / trail variants
+    if (x.includes('hike') || x.includes('trek') || x.includes('trail') || x.includes('hill') || x.includes('backpack') || x.includes('trekking') || x.includes('ramble') || x.includes('mountain')) return 'hiking';
+    // walking (strolls, casual walks)
+    if (x.includes('walk') || x.includes('stroll')) return 'walking';
+    // swimming
+    if (x.includes('swim') || x.includes('pool') || x.includes('openwater') || x.includes('open water')) return 'swimming';
+    // gym / strength / crossfit / lifting / workout / fitness equipment
+    if (x.includes('gym') || x.includes('strength') || x.includes('weight') || x.includes('lift') || x.includes('crossfit') || x.includes('workout') || x.includes('resistance') || x.includes('fitness') || x.includes('fitness_equipment') || x.includes('fitness-equipment') || x.includes('fitness equipment')) return 'gym';
+    return null;
+  };
+
   const uniqueSports = useMemo(() => {
     const set = new Set();
-    periodActivities.forEach(a => { if (a.sport) set.add(a.sport); });
+    periodActivities.forEach(a => {
+      // prefer normalized canonical sport keys when possible, fall back to raw sport text
+      const norm = normalizeSport(a.sport || a.name || a.description || '');
+      if (norm) set.add(norm);
+      else if (a.sport) set.add(String(a.sport).toLowerCase());
+    });
     return Array.from(set).sort();
   }, [periodActivities]);
 
@@ -198,7 +222,7 @@ const Activity = () => {
     return null;
   }, [pickSteps]);
 
-  // quick check whether an activity should contribute steps (only running/walking)
+  // quick check whether an activity should contribute steps (only running/walking,hiking)
   const isStepSport = (act) => {
     if (!act) return false;
     const hintParts = [];
@@ -215,9 +239,11 @@ const Activity = () => {
     const hint = hintParts.join(' | ').toLowerCase();
     if (!hint) return false;
     if (hint.includes('run') || hint.includes('jog') || hint.includes('tempo') || hint.includes('fartlek')) return true;
-    if (hint.includes('hike') || hint.includes('walk') || hint.includes('trek') || hint.includes('stroll')) return true;
+    if (hint.includes('walk') || hint.includes('stroll')) return true;
+    if (hint.includes('hike') || hint.includes('trek')) return true;
     return false;
   };
+
 
   // If weeklyGroups lack steps (aggregated from activities), try to fill steps
   // from the health dashboard window data (dashboardData.windowData) as a fallback.
@@ -306,6 +332,53 @@ const Activity = () => {
 
   // Display label now always shows the count of days (e.g. "44d") even for explicit ranges.
   const displayLabel = useMemo(() => `${displayDays}d`, [displayDays]);
+
+  // Date helpers (component-wide): parse and format dates as DD/MM/YYYY and DD/MM/YYYY HH:MM
+  const toDate = (val) => {
+    if (!val) return null;
+    if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+      const [y,m,day] = val.split('-').map(Number);
+      return new Date(y, m-1, day);
+    }
+    const dt = new Date(val);
+    return isNaN(dt.getTime()) ? null : dt;
+  };
+  const formatDateOnly = (d) => {
+    if (!d) return '';
+    const dt = toDate(d) || new Date(d);
+    if (!dt || isNaN(dt.getTime())) return String(d);
+    const day = String(dt.getDate()).padStart(2,'0');
+    const month = String(dt.getMonth() + 1).padStart(2,'0');
+    const year = dt.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+  // Safe formatter used for UI: always return DD/MM/YYYY or '-' when invalid
+  const safeFormatDate = (d) => {
+    try {
+      const out = formatDateOnly(d);
+      if (!out || out === 'Invalid Date') return '-';
+      // formatDateOnly may return the raw input on parse failure; guard that
+      if (/^\d{4}-\d{2}-\d{2}$/.test(String(d))) {
+        // parsed OK above -> keep formatted
+      }
+      // if output looks like an ISO string (fallback), replace with '-'
+      if (/^\d{4}-\d{2}-\d{2}/.test(String(out))) return '-';
+      return out || '-';
+    } catch (e) {
+      return '-';
+    }
+  };
+  const formatDateTime = (d) => {
+    if (!d) return '';
+    const dt = toDate(d) || new Date(d);
+    if (!dt || isNaN(dt.getTime())) return String(d);
+    const day = String(dt.getDate()).padStart(2,'0');
+    const month = String(dt.getMonth() + 1).padStart(2,'0');
+    const year = dt.getFullYear();
+    const hh = String(dt.getHours()).padStart(2,'0');
+    const mm = String(dt.getMinutes()).padStart(2,'0');
+    return `${day}/${month}/${year} ${hh}:${mm}`;
+  };
 
   // Ensure dashboard window data covers the explicit selected range so
   // periodStepsFallback can derive steps from the health rows when needed.
@@ -432,7 +505,10 @@ const Activity = () => {
 
   const filtered = useMemo(() => {
     return periodActivities.filter(a => {
-      if (filterSport && a.sport !== filterSport) return false;
+      if (filterSport) {
+        const actKey = normalizeSport(a.sport || a.name || a.description || '') || (a.sport || '').toLowerCase();
+        if (actKey !== filterSport) return false;
+      }
       if (search) {
         const s = search.toLowerCase();
         if (!((a.name || '').toLowerCase().includes(s) || (a.sport || '').toLowerCase().includes(s))) return false;
@@ -452,7 +528,7 @@ const Activity = () => {
         totals.distance += Number(a.distance_km) || 0;
         totals.durationMin += Number(a.duration_min) || 0;
         totals.calories += Number(a.calories) || 0;
-        // only count steps for running/walking activities
+        // only count steps for running/walking/hiking activities
         if (isStepSport(a)) {
           const s = findStepsInObj(a);
           totals.steps += (s != null ? s : 0);
@@ -563,7 +639,7 @@ const Activity = () => {
   const quickLinks = [
     { to: '/running', label: 'Running', icon: '🏃‍♂️', gradientIcon: 'linear-gradient(135deg,#fb7185,#ef4444)', cardBg: 'linear-gradient(90deg, rgba(239,68,68,0.06), rgba(251,113,133,0.03))', accent: '#ef4444' },
     { to: '/walking', label: 'Walking', icon: '🚶‍♀️', gradientIcon: 'linear-gradient(135deg,#34d399,#10b981)', cardBg: 'linear-gradient(90deg, rgba(16,185,129,0.06), rgba(52,211,153,0.03))', accent: '#10b981' },
-  { to: '/cycling', label: 'Rower', icon: '🚴‍♂️', gradientIcon: 'linear-gradient(135deg,#a78bfa,#6366f1)', cardBg: 'linear-gradient(90deg, rgba(99,102,241,0.06), rgba(167,139,250,0.03))', accent: '#6366f1' },
+  { to: '/cycling', label: 'Cycling', icon: '🚴‍♂️', gradientIcon: 'linear-gradient(135deg,#a78bfa,#6366f1)', cardBg: 'linear-gradient(90deg, rgba(99,102,241,0.06), rgba(167,139,250,0.03))', accent: '#6366f1' },
     { to: '/hiking', label: 'Hiking', icon: '🥾', gradientIcon: 'linear-gradient(135deg,#fbbf24,#f59e0b)', cardBg: 'linear-gradient(90deg, rgba(245,158,11,0.06), rgba(251,191,36,0.03))', accent: '#f59e0b' },
     { to: '/swimming', label: 'Swimming', icon: '🏊‍♀️', gradientIcon: 'linear-gradient(135deg,#38bdf8,#0ea5e9)', cardBg: 'linear-gradient(90deg, rgba(14,165,233,0.06), rgba(56,189,248,0.03))', accent: '#0ea5e9' },
     { to: '/gym', label: 'Gym', icon: '🏋️‍♀️', gradientIcon: 'linear-gradient(135deg,#a78bfa,#7c3aed)', cardBg: 'linear-gradient(90deg, rgba(124,58,237,0.06), rgba(167,139,250,0.03))', accent: '#7c3aed' }
@@ -680,7 +756,7 @@ const Activity = () => {
                         const includeSports = new Set(['running','walking','hiking','cycling']);
                         const histActs = periodActivities.filter(a => {
                           if (a.distance_km == null) return false;
-                          const sp = (a.sport || '').toLowerCase();
+                          const sp = normalizeSport(a.sport || a.name || a.description || '') || (a.sport || '').toLowerCase();
                           return includeSports.has(sp);
                         });
                         return <DistanceHistogramByDay activities={histActs} sport="all" binWidth={5} maxBins={12} height={240} />;
@@ -691,7 +767,7 @@ const Activity = () => {
             {/* Top-5 days per sport (distance / activity count / fastest pace / steps / active minutes) */}
             <div className="card mt-6">
               <div className="card-header flex items-center justify-between">
-                <h3 className="card-title">Top 5 days by metric (Cycling · running · walking/hiking)</h3>
+                <h3 className="card-title">Top 5 days by metric (Cycling · running · walking · hiking · gym · swimming)</h3>
                 <div className="text-[11px] text-gray-500">Per-day aggregates within selected period</div>
               </div>
               <div className="card-content">
@@ -700,28 +776,13 @@ const Activity = () => {
                 ) : (
                   (() => {
 
-                    // Helper: normalize sport into one of 'cycling','running','walking','swimming','gym'
-                    const normalizeSport = (s) => {
-                      if (!s) return null;
-                      const x = String(s).toLowerCase().trim();
-                      // cycling variants (road, gravel, indoor, spin, ebike, commute, ride)
-                      if (x.includes('cycle') || x.includes('bike') || x.includes('ride') || x.includes('biking') || x.includes('road') || x.includes('gravel') || x.includes('spin') || x.includes('trainer') || x.includes('indoor') || x.includes('ebike') || x.includes('e-bike') || x.includes('commute') || x.includes('virtual')) return 'cycling';
-                      // running
-                      if (x.includes('run') || x.includes('jog') || x.includes('tempo') || x.includes('fartlek')) return 'running';
-                      // walking / hiking
-                      if (x.includes('hike') || x.includes('walk') || x.includes('trek') || x.includes('stroll')) return 'walking';
-                      // swimming
-                      if (x.includes('swim') || x.includes('pool') || x.includes('openwater')) return 'swimming';
-                      // gym / strength / crossfit / lifting / workout / fitness equipment
-                      if (x.includes('gym') || x.includes('strength') || x.includes('weight') || x.includes('lift') || x.includes('crossfit') || x.includes('workout') || x.includes('resistance') || x.includes('fitness') || x.includes('fitness_equipment') || x.includes('fitness-equipment') || x.includes('fitness equipment')) return 'gym';
-                      return null;
-                    };
+                    // use top-level normalizeSport helper
 
                     // ...existing code...
 
                     // Build map: sport -> date -> aggregates
-                    const sports = ['cycling','running','walking','swimming','gym'];
-                    const map = { cycling: new Map(), running: new Map(), walking: new Map(), swimming: new Map(), gym: new Map() };
+                    const sports = ['cycling','running','walking','hiking','swimming','gym'];
+                    const map = { cycling: new Map(), running: new Map(), walking: new Map(), hiking: new Map(), swimming: new Map(), gym: new Map() };
 
                     // Build a multi-field hint string from common activity fields so
                     // classification works even when `sport` is empty.
@@ -743,10 +804,14 @@ const Activity = () => {
                     };
 
                     periodActivities.forEach(a => {
-                      // try many fields (sport, name, tags, type, metadata) to classify
-                      // activities where sport may be empty or ambiguous
+                      // prefer explicit sport from the source table (e.g. garmin_activities.sport) when present
+                      // fall back to multi-field hint when sport is missing or empty
                       const rawSportHint = buildSportHint(a) || '';
-                      const sportKey = normalizeSport(rawSportHint);
+                      const sportField = (a.sport != null) ? String(a.sport).toLowerCase().trim() : '';
+                      // prefer explicit sport, but only if it maps to a known sport;
+                      // otherwise fall back to the richer multi-field hint so we don't lose classification
+                      let sportKey = sportField ? normalizeSport(sportField) : null;
+                      if (!sportKey) sportKey = normalizeSport(rawSportHint);
                       if (!sportKey || !sports.includes(sportKey)) return;
                       if (!a.start_time) return;
                       const d = new Date(a.start_time);
@@ -813,7 +878,7 @@ const Activity = () => {
 
                     const buildArrays = (dayMap) => {
                       // supplement dayMap steps with dashboard data when missing/zero
-                      // but only for running/walking sport buckets
+                      // but only for running/walking/hiking sport buckets
                       for (const [iso, entry] of dayMap.entries()) {
                         if ((!entry.steps || entry.steps === 0)) {
                           const fromDash = pickDashboardStepsForDate(iso);
@@ -849,6 +914,7 @@ const Activity = () => {
                     const cyclingArr = buildArraysNoSupplement(map.cycling);
                     const runningArr = buildArrays(map.running);
                     const walkingArr = buildArrays(map.walking);
+                    const hikingArr = buildArrays(map.hiking);
                     const swimmingArr = buildArraysNoSupplement(map.swimming);
                     const gymArr = buildArraysNoSupplement(map.gym);
 
@@ -923,23 +989,10 @@ const Activity = () => {
                           const tCycling = topFor(cyclingArr, metric);
                           const tRunning = topFor(runningArr, metric);
                           const tWalking = topFor(walkingArr, metric);
+                          const tHiking = topFor(hikingArr, metric);
                           const tSwimming = topFor(swimmingArr, metric);
                           const tGym = topFor(gymArr, metric);
-                          const formatDateShort = (d) => {
-                            if (!d) return '';
-                            try {
-                              // Accept ISO date strings (YYYY-MM-DD) or Date-like values
-                              const dt = (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) ? new Date(d) : new Date(d);
-                              if (isNaN(dt.getTime())) return String(d);
-                              const day = String(dt.getDate()).padStart(2,'0');
-                              const month = String(dt.getMonth() + 1).padStart(2,'0');
-                              const year = dt.getFullYear();
-                              // Return in MM/DD/YYYY format
-                              return `${month}/${day}/${year}`;
-                            } catch (e) {
-                              return String(d);
-                            }
-                          };
+                          // use component-level date helpers: formatDateOnly, formatDateTime
 
                           const cellText = (obj) => {
                             if (!obj) return '—';
@@ -963,21 +1016,23 @@ const Activity = () => {
                               </div>
                               <div className="overflow-auto">
                                 <table className="min-w-full text-sm table-fixed">
-                                  <thead>
-                                    <tr className="text-left text-xs text-gray-500 uppercase">
-                                      <th className="w-12 pr-4">#</th>
-                                      <th className="pr-4">Cycling</th>
-                                      <th className="pr-4">Running</th>
-                                      <th className="pr-4">Walking &amp; Hiking</th>
-                                      <th className="pr-4">Swimming</th>
-                                      <th>Gym</th>
-                                    </tr>
-                                  </thead>
+                                          <thead>
+                                            <tr className="text-left text-xs text-gray-500 uppercase">
+                                              <th className="w-12 pr-4">#</th>
+                                              <th className="pr-4">Cycling</th>
+                                              <th className="pr-4">Running</th>
+                                              <th className="pr-4">Walking</th>
+                                              <th className="pr-4">Hiking</th>
+                                              <th className="pr-4">Swimming</th>
+                                              <th>Gym</th>
+                                            </tr>
+                                          </thead>
                                   <tbody>
                                     {[0,1,2,3,4].map(i => {
                                       const c = tCycling[i];
                                       const r = tRunning[i];
                                       const w = tWalking[i];
+                                      const h = tHiking[i];
                                       const s = tSwimming[i];
                                       const g = tGym[i];
                                       const cellFor = (sport) => (obj) => {
@@ -987,9 +1042,9 @@ const Activity = () => {
                                         // For steps metric, append distance for running/walking/hiking
                                         if (metric.id === 'steps' && ['running','walking','hiking'].includes(sport)) {
                                           const dist = obj.distance != null && Number.isFinite(Number(obj.distance)) ? ` (${Number(obj.distance).toFixed(2)} km)` : '';
-                                          return `${formatDateShort(obj.date)}: ${txt}${dist}`;
+                                          return `${safeFormatDate(obj.date)}: ${txt}${dist}`;
                                         }
-                                        return `${formatDateShort(obj.date)}: ${txt}`;
+                                        return `${safeFormatDate(obj.date)}: ${txt}`;
                                       };
                                       return (
                                         <tr key={i} className="border-t">
@@ -997,6 +1052,7 @@ const Activity = () => {
                                           <td className="py-2 pr-4">{cellFor('cycling')(c)}</td>
                                           <td className="py-2 pr-4">{cellFor('running')(r)}</td>
                                           <td className="py-2 pr-4">{cellFor('walking')(w)}</td>
+                                          <td className="py-2 pr-4">{cellFor('hiking')(h)}</td>
                                           <td className="py-2 pr-4">{cellFor('swimming')(s)}</td>
                                           <td className="py-2">{cellFor('gym')(g)}</td>
                                         </tr>
@@ -1222,7 +1278,7 @@ const Activity = () => {
                   <tbody>
                     {sorted.map((a) => (
                       <tr key={a.activity_id} className="border-b hover:bg-gray-50 dark:hover:bg-gray-800">
-                        <td className="py-2 pr-4">{a.start_time ? new Date(a.start_time).toLocaleString() : '-'}</td>
+                        <td className="py-2 pr-4">{a.start_time ? formatDateTime(a.start_time) : '-'}</td>
                         <td className="py-2 pr-4">
                           <Link className="text-blue-600" to={`/activity/${a.activity_id}`}>{a.name || 'Activity'}</Link>
                         </td>
@@ -1304,7 +1360,7 @@ const Activity = () => {
                   fill={sparkMetric==='calories' ? 'rgba(245,158,11,0.18)' : sparkMetric==='steps' ? 'rgba(99,102,241,0.15)' : 'rgba(16,185,129,0.15)'}
                   tooltipFormatter={(pt,i)=>{
                     const series = [...lastNDaysSeries].sort((a,b) => new Date(a.date) - new Date(b.date));
-                    return `${series[i]?.date || ''}: ${sparkMetric==='distance'? pt.value.toFixed(2)+' km' : sparkMetric==='steps'? pt.value.toLocaleString()+' steps' : pt.value.toLocaleString()+' kcal'}`;
+                    return `${safeFormatDate(series[i]?.date)}: ${sparkMetric==='distance'? pt.value.toFixed(2)+' km' : sparkMetric==='steps'? pt.value.toLocaleString()+' steps' : pt.value.toLocaleString()+' kcal'}`;
                   }}
                 />
               </div>

@@ -25,6 +25,7 @@ import RunningEconomyPanel from '../components/RunningEconomyPanel';
 import DistanceBucketComparison from '../components/DistanceBucketComparison';
 import { Button } from '../components/ui';
 import PaceHrChart from '../components/PaceHrChart';
+import Top5ByMetric from '../components/Top5ByMetric';
 
 // Focused running analytics view: filters activities to sport 'running' / 'Running'
 const Running = () => {
@@ -147,17 +148,59 @@ const Running = () => {
   }, [periodDays, limit]);
   // compute lastRunning (timestamp of the most recent running activity) early so other hooks can use it
   const lastRunning = React.useMemo(() => {
+    // helper: normalize sport/hint text into canonical sport keys (cycling, running, walking, etc.)
+    const normalizeSport = (s) => {
+      if (!s) return null;
+      const x = String(s).toLowerCase().trim();
+      if (x.includes('run') || x.includes('jog') || x.includes('tempo') || x.includes('fartlek')) return 'running';
+      if (x.includes('cycle') || x.includes('bike') || x.includes('ride') || x.includes('biking')) return 'cycling';
+      if (x.includes('hike') || x.includes('trek') || x.includes('trail')) return 'hiking';
+      if (x.includes('walk') || x.includes('stroll')) return 'walking';
+      if (x.includes('swim') || x.includes('pool') || x.includes('openwater')) return 'swimming';
+      if (x.includes('gym') || x.includes('strength') || x.includes('lift') || x.includes('crossfit')) return 'gym';
+      return null;
+    };
+
+    const isRunningActivity = (a) => {
+      if (!a || typeof a !== 'object') return false;
+      const sportField = (a.sport != null) ? String(a.sport).toLowerCase().trim() : '';
+      if (sportField === 'running') return true;
+      const subSportField = (a.sub_sport != null) ? String(a.sub_sport).toLowerCase().trim() : '';
+      if (subSportField === 'trail' || subSportField === 'trail running') return true;
+      const norm = normalizeSport(sportField) || normalizeSport(subSportField) || normalizeSport(a.name || '') || normalizeSport(a.description || '') || (Array.isArray(a.tags) ? normalizeSport(a.tags.join(' ')) : null);
+      return norm === 'running';
+    };
+
     const runningTimestamps = allActivities.map(a => {
-      try { if ((a.sport || '').toLowerCase() !== 'running') return null; const t = new Date(a.start_time).getTime(); return Number.isNaN(t) ? null : t; } catch (e) { return null; }
+      try { if (!isRunningActivity(a)) return null; const t = new Date(a.start_time).getTime(); return Number.isNaN(t) ? null : t; } catch (e) { return null; }
     }).filter(Boolean);
     return runningTimestamps.length ? Math.max(...runningTimestamps) : Date.now();
   }, [allActivities]);
 
   const runningActivities = useMemo(() => {
     const cutoff = lastRunning - (periodDays * 24 * 60 * 60 * 1000);
+    const normalizeSport = (s) => {
+      if (!s) return null;
+      const x = String(s).toLowerCase().trim();
+      if (x.includes('run') || x.includes('jog') || x.includes('tempo') || x.includes('fartlek')) return 'running';
+      if (x.includes('cycle') || x.includes('bike') || x.includes('ride') || x.includes('biking')) return 'cycling';
+      if (x.includes('hike') || x.includes('trek') || x.includes('trail')) return 'hiking';
+      if (x.includes('walk') || x.includes('stroll')) return 'walking';
+      if (x.includes('swim') || x.includes('pool') || x.includes('openwater')) return 'swimming';
+      if (x.includes('gym') || x.includes('strength') || x.includes('lift') || x.includes('crossfit')) return 'gym';
+      return null;
+    };
+    const isRunningActivity = (a) => {
+      if (!a || typeof a !== 'object') return false;
+      const sportField = (a.sport != null) ? String(a.sport).toLowerCase().trim() : '';
+      if (sportField === 'running') return true;
+      const norm = normalizeSport(sportField) || normalizeSport(a.name || '') || normalizeSport(a.description || '') || (Array.isArray(a.tags) ? normalizeSport(a.tags.join(' ')) : null);
+      return norm === 'running';
+    };
+
     return allActivities.filter(a => {
       if (!a.start_time) return false;
-      if ((a.sport || '').toLowerCase() !== 'running') return false;
+      if (!isRunningActivity(a)) return false;
       const t = new Date(a.start_time).getTime();
       return !Number.isNaN(t) && t >= cutoff && t <= lastRunning;
     });
@@ -614,6 +657,9 @@ const Running = () => {
             </div>
           </div>
         </div>
+
+        {/* Top-5 for Running (sport-specific) */}
+        <Top5ByMetric activities={(runningAnalysis && Array.isArray(runningAnalysis.runs) && runningAnalysis.runs.length>0) ? runningAnalysis.runs : runningActivities} sportLabel="Running" />
 
         {/* If server returned no runs, show an action banner */}
         {runningAnalysis && runningAnalysis.runs === 0 && (

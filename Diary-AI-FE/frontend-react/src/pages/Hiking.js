@@ -11,6 +11,7 @@ import api from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { Button } from '../components/ui';
 import ErrorMessage from '../components/ErrorMessage';
+import Top5ByMetric from '../components/Top5ByMetric';
 // TooltipStyles injected globally in App
 
 const Hiking = () => {
@@ -214,6 +215,13 @@ const Hiking = () => {
             </div>
           </div>
         </div>
+
+        {/* Top-5 for Hiking - ensure only hiking activities are passed */}
+        <Top5ByMetric activities={
+          (analysis && Array.isArray(analysis.runs) && analysis.runs.length>0)
+            ? analysis.runs.filter(a => (a?.sport || '').toLowerCase() === 'hiking')
+            : sportActivities
+        } sportLabel="Hiking" />
       </div>
     </div>
   );

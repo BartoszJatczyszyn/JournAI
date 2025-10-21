@@ -3,7 +3,7 @@ set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Preferred major.minor
-PY_SERIES="3.14"
+PY_SERIES="3.13"
 VENV_DIR="$PROJECT_DIR/.venv"
 REQ_FILE="$PROJECT_DIR/requirements.txt"
 
@@ -21,7 +21,7 @@ pick_pyenv_version() {
   if [ -z "$versions" ]; then
     return 1
   fi
-  # Prefer lines like 3.14.Z where Z is digits only
+  # Prefer lines like 3.13.Z where Z is digits only
   local stable
   stable=$(echo "$versions" | grep -E "^${series}\\.[0-9]+$" | tail -n1 || true)
   if [ -n "$stable" ]; then
@@ -35,7 +35,7 @@ pick_pyenv_version() {
 PY_BIN=""
 SELECTED_PY=""
 
-# 1) Ensure Python 3.14 is available (prefer pyenv if present)
+# 1) Ensure Python 3.13 is available (prefer pyenv if present)
 if has_cmd pyenv; then
   info "Using pyenv to manage Python ${PY_SERIES}.x"
   SELECTED_PY=$(pick_pyenv_version "$PY_SERIES" || true)
@@ -55,11 +55,11 @@ if has_cmd pyenv; then
   (cd "$PROJECT_DIR" && pyenv local "$SELECTED_PY")
   # Resolve pyenv python within the project directory context
   PY_BIN="$(cd "$PROJECT_DIR" && pyenv which python)"
-elif has_cmd python3.14; then
-  info "Found system python3.14 ($(python3.14 -V))"
-  PY_BIN="python3.14"
+elif has_cmd python3.13; then
+  info "Found system python3.13 ($(python3.13 -V))"
+  PY_BIN="python3.13"
 else
-  err "python3.14 not found and pyenv is not installed.\nPlease install Python ${PY_SERIES}.x or install pyenv and re-run.\n- macOS (brew): brew install pyenv && echo 'eval \"$(pyenv init -)\"' >> ~/.zshrc\n- Linux: https://github.com/pyenv/pyenv#installation"
+  err "python3.13 not found and pyenv is not installed.\nPlease install Python ${PY_SERIES}.x or install pyenv and re-run.\n- macOS (brew): brew install pyenv && echo 'eval \"$(pyenv init -)\"' >> ~/.zshrc\n- Linux: https://github.com/pyenv/pyenv#installation"
   exit 1
 fi
 
@@ -71,7 +71,7 @@ if [ -d "$VENV_DIR" ]; then
   CURRENT_SERIES=$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
   CURRENT_FULL=$(python -c 'import sys; import platform; print(platform.python_version())')
   deactivate || true
-  # If SELECTED_PY is empty (system python3.14 path used), only check series
+  # If SELECTED_PY is empty (system python3.13 path used), only check series
   if [ -n "${SELECTED_PY:-}" ]; then
     if [ "$CURRENT_FULL" != "$SELECTED_PY" ]; then
       warn "Existing venv uses Python $CURRENT_FULL; recreating for $SELECTED_PY"

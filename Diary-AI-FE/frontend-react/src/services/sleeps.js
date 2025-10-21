@@ -12,6 +12,10 @@ export const sleepsAPI = {
   },
   getSleepById: (id) => api.get(`/api/sleeps/${id}`),
   getSleepEvents: (date) => api.get(`/api/sleep/events/${date}`),
+  // Create a sleep session (best-effort: backend may not expose this endpoint yet)
+  createSleep: (payload) => api.post(`/api/sleeps`, payload),
+  updateSleep: (id, payload) => api.put(`/api/sleeps/${id}`, payload),
+  deleteSleep: (id) => api.delete(`/api/sleeps/${id}`),
 };
 
 export default sleepsAPI;

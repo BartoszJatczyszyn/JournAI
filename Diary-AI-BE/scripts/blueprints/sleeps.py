@@ -2,6 +2,24 @@ from __future__ import annotations
 from fastapi import APIRouter, Query, HTTPException
 from db import async_execute_query
 from schemas import SleepListResponse, SleepDetailResponse, SleepSession
+from pydantic import BaseModel
+from datetime import datetime, date
+
+
+class SleepCreate(BaseModel):
+    day: date | None = None
+    sleep_start: datetime | None = None
+    sleep_end: datetime | None = None
+    sleep_duration_seconds: int | None = None
+    deep_sleep_seconds: int | None = None
+    light_sleep_seconds: int | None = None
+    rem_sleep_seconds: int | None = None
+    awake_seconds: int | None = None
+    sleep_score: int | None = None
+    avg_sleep_hr: float | None = None
+    avg_sleep_rr: float | None = None
+    avg_sleep_stress: float | None = None
+
 
 router = APIRouter(tags=["sleeps"], prefix="")
 
@@ -179,6 +197,224 @@ async def get_sleep_events_for_day(day: str):
                     item['duration'] = dur
             out.append(item)
         return { 'events': out }
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post('/sleeps', response_model=SleepDetailResponse)
+async def create_sleep(payload: SleepCreate):
+    """Create a manual sleep session in garmin_sleep_sessions.
+
+    This will INSERT a new row and return the created SleepSession representation.
+    """
+    try:
+        # Normalize day: if not provided, use date part of sleep_start or today's date
+        day_val = payload.day
+        if not day_val and payload.sleep_start:
+            day_val = payload.sleep_start.date()
+        if not day_val and payload.sleep_end:
+            day_val = payload.sleep_end.date()
+        if not day_val:
+            day_val = date.today()
+
+        # Simple validation and auto-compute duration when possible
+        if payload.sleep_score is not None:
+            try:
+                sc = int(payload.sleep_score)
+            except Exception:
+                raise HTTPException(status_code=400, detail='sleep_score must be an integer')
+            if sc < 0 or sc > 100:
+                raise HTTPException(status_code=400, detail='sleep_score must be between 0 and 100')
+
+        # compute duration if not provided and start/end provided
+        derived_duration = payload.sleep_duration_seconds
+        if (derived_duration is None) and payload.sleep_start and payload.sleep_end:
+            try:
+                delta = (payload.sleep_end - payload.sleep_start).total_seconds()
+                # allow overnight sleeps: if end <= start, treat as next day
+                if delta <= 0:
+                    delta += 24 * 60 * 60
+                derived_duration = int(max(0, round(delta)))
+            except Exception:
+                derived_duration = None
+
+        # Check which columns exist in the table to avoid inserting into non-existent columns
+        cols_check = await async_execute_query(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'garmin_sleep_sessions'",
+            None,
+            fetch_all=True,
+        ) or []
+        present = set([c.get('column_name') for c in cols_check if isinstance(c, dict)])
+
+        cols = []
+        vals = []
+        params = []
+        def add(col, val):
+            cols.append(col)
+            vals.append('%s')
+            params.append(val)
+
+        if 'day' not in present:
+            raise HTTPException(status_code=500, detail="garmin_sleep_sessions.table missing 'day' column")
+        add('day', day_val)
+        if 'sleep_start' in present and payload.sleep_start is not None:
+            add('sleep_start', payload.sleep_start)
+        if 'sleep_end' in present and payload.sleep_end is not None:
+            add('sleep_end', payload.sleep_end)
+        if 'sleep_duration_seconds' in present and derived_duration is not None:
+            add('sleep_duration_seconds', derived_duration)
+        if 'deep_sleep_seconds' in present and payload.deep_sleep_seconds is not None:
+            add('deep_sleep_seconds', payload.deep_sleep_seconds)
+        if 'light_sleep_seconds' in present and payload.light_sleep_seconds is not None:
+            add('light_sleep_seconds', payload.light_sleep_seconds)
+        if 'rem_sleep_seconds' in present and payload.rem_sleep_seconds is not None:
+            add('rem_sleep_seconds', payload.rem_sleep_seconds)
+        if 'awake_seconds' in present and payload.awake_seconds is not None:
+            add('awake_seconds', payload.awake_seconds)
+        if 'sleep_score' in present and payload.sleep_score is not None:
+            add('sleep_score', payload.sleep_score)
+        if 'avg_sleep_hr' in present and payload.avg_sleep_hr is not None:
+            add('avg_sleep_hr', payload.avg_sleep_hr)
+        if 'avg_sleep_rr' in present and payload.avg_sleep_rr is not None:
+            add('avg_sleep_rr', payload.avg_sleep_rr)
+        if 'avg_sleep_stress' in present and payload.avg_sleep_stress is not None:
+            add('avg_sleep_stress', payload.avg_sleep_stress)
+
+        query = f"INSERT INTO garmin_sleep_sessions ({', '.join(cols)}) VALUES ({', '.join(vals)}) RETURNING *"
+        row = await async_execute_query(query, tuple(params), fetch_one=True)
+        if not row:
+            raise HTTPException(status_code=500, detail='Insert failed')
+        item = dict(row)
+        for k in ['day','sleep_start','sleep_end']:
+            if item.get(k) and hasattr(item[k], 'isoformat'):
+                item[k] = item[k].isoformat()
+        if item.get('sleep_duration_seconds') is not None:
+            item['duration_min'] = round((item['sleep_duration_seconds'] or 0) / 60.0)
+        # ensure required attrs for SleepSession
+        if 'sleep_id' not in item:
+            # attempt to fetch last inserted by day/start
+            lookup = await async_execute_query(
+                "SELECT * FROM garmin_sleep_sessions WHERE day = %s ORDER BY sleep_start DESC LIMIT 1",
+                (day_val,),
+                fetch_one=True,
+            ) or {}
+            item = dict(lookup)
+            for k in ['day','sleep_start','sleep_end']:
+                if item.get(k) and hasattr(item[k], 'isoformat'):
+                    item[k] = item[k].isoformat()
+        return { 'sleep': SleepSession(**item) }
+    except HTTPException:
+        raise
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put('/sleeps/{sleep_id}', response_model=SleepDetailResponse)
+async def update_sleep(sleep_id: int, payload: SleepCreate):
+    """Update an existing sleep session. Only provided fields will be updated."""
+    try:
+        # validation for score
+        if payload.sleep_score is not None:
+            try:
+                sc = int(payload.sleep_score)
+            except Exception:
+                raise HTTPException(status_code=400, detail='sleep_score must be an integer')
+            if sc < 0 or sc > 100:
+                raise HTTPException(status_code=400, detail='sleep_score must be between 0 and 100')
+
+        # derive duration if needed
+        derived_duration = payload.sleep_duration_seconds
+        if derived_duration is None and payload.sleep_start and payload.sleep_end:
+            try:
+                delta = (payload.sleep_end - payload.sleep_start).total_seconds()
+                if delta <= 0:
+                    delta += 24 * 60 * 60
+                derived_duration = int(max(0, round(delta)))
+            except Exception:
+                derived_duration = None
+
+        # check columns
+        cols_check = await async_execute_query(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'garmin_sleep_sessions'",
+            None,
+            fetch_all=True,
+        ) or []
+        present = set([c.get('column_name') for c in cols_check if isinstance(c, dict)])
+
+        updates = []
+        params = []
+        def upd(col, val):
+            updates.append(f"{col} = %s")
+            params.append(val)
+
+        if payload.day is not None and 'day' in present:
+            upd('day', payload.day)
+        if payload.sleep_start is not None and 'sleep_start' in present:
+            upd('sleep_start', payload.sleep_start)
+        if payload.sleep_end is not None and 'sleep_end' in present:
+            upd('sleep_end', payload.sleep_end)
+        if derived_duration is not None and 'sleep_duration_seconds' in present:
+            upd('sleep_duration_seconds', derived_duration)
+        if payload.deep_sleep_seconds is not None and 'deep_sleep_seconds' in present:
+            upd('deep_sleep_seconds', payload.deep_sleep_seconds)
+        if payload.light_sleep_seconds is not None and 'light_sleep_seconds' in present:
+            upd('light_sleep_seconds', payload.light_sleep_seconds)
+        if payload.rem_sleep_seconds is not None and 'rem_sleep_seconds' in present:
+            upd('rem_sleep_seconds', payload.rem_sleep_seconds)
+        if payload.awake_seconds is not None and 'awake_seconds' in present:
+            upd('awake_seconds', payload.awake_seconds)
+        if payload.sleep_score is not None and 'sleep_score' in present:
+            upd('sleep_score', payload.sleep_score)
+        if payload.avg_sleep_hr is not None and 'avg_sleep_hr' in present:
+            upd('avg_sleep_hr', payload.avg_sleep_hr)
+        if payload.avg_sleep_rr is not None and 'avg_sleep_rr' in present:
+            upd('avg_sleep_rr', payload.avg_sleep_rr)
+        if payload.avg_sleep_stress is not None and 'avg_sleep_stress' in present:
+            upd('avg_sleep_stress', payload.avg_sleep_stress)
+
+        if not updates:
+            # nothing to do: return existing
+            row = await async_execute_query("SELECT * FROM garmin_sleep_sessions WHERE sleep_id = %s", (sleep_id,), fetch_one=True)
+            if not row:
+                raise HTTPException(status_code=404, detail='Sleep session not found')
+            item = dict(row)
+            for k in ['day','sleep_start','sleep_end']:
+                if item.get(k) and hasattr(item[k], 'isoformat'):
+                    item[k] = item[k].isoformat()
+            if item.get('sleep_duration_seconds') is not None:
+                item['duration_min'] = round((item['sleep_duration_seconds'] or 0) / 60.0)
+            return {'sleep': SleepSession(**item)}
+
+        params.append(sleep_id)
+        query = f"UPDATE garmin_sleep_sessions SET {', '.join(updates)} WHERE sleep_id = %s RETURNING *"
+        row = await async_execute_query(query, tuple(params), fetch_one=True)
+        if not row:
+            raise HTTPException(status_code=404, detail='Sleep session not found or update failed')
+        item = dict(row)
+        for k in ['day','sleep_start','sleep_end']:
+            if item.get(k) and hasattr(item[k], 'isoformat'):
+                item[k] = item[k].isoformat()
+        if item.get('sleep_duration_seconds') is not None:
+            item['duration_min'] = round((item['sleep_duration_seconds'] or 0) / 60.0)
+        return {'sleep': SleepSession(**item)}
+    except HTTPException:
+        raise
+    except Exception as e:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete('/sleeps/{sleep_id}')
+async def delete_sleep(sleep_id: int):
+    """Delete a sleep session by id."""
+    try:
+        # check exists
+        row = await async_execute_query("SELECT sleep_id FROM garmin_sleep_sessions WHERE sleep_id = %s", (sleep_id,), fetch_one=True)
+        if not row:
+            raise HTTPException(status_code=404, detail='Sleep session not found')
+        await async_execute_query("DELETE FROM garmin_sleep_sessions WHERE sleep_id = %s", (sleep_id,))
+        return { 'deleted': True }
+    except HTTPException:
+        raise
     except Exception as e:  # pragma: no cover
         raise HTTPException(status_code=500, detail=str(e))
 

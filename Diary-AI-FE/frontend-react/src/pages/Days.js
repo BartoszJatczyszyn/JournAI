@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
-import { healthAPI2, journalAPI } from '../services';
+import { healthAPI2, journalAPI, sleepsAPI } from '../services';
 import DayCard from '../components/DayCard';
 import CorrelationHeatmap from '../components/CorrelationHeatmap';
 import TopCorrelationPairs from '../components/TopCorrelationPairs';
@@ -11,8 +11,68 @@ const formatDate = (d) => {
   try {
     const dt = new Date(d);
     if (Number.isNaN(dt.getTime())) return String(d);
-    return dt.toLocaleDateString();
+    const day = String(dt.getDate()).padStart(2, '0');
+    const month = String(dt.getMonth() + 1).padStart(2, '0');
+    const year = dt.getFullYear();
+    return `${day}/${month}/${year}`;
   } catch { return String(d); }
+};
+
+// (date normalization helpers)
+
+// Return start-of-day ms (local) for stable membership comparison
+const dayStartMs = (input) => {
+  if (!input && input !== 0) return null;
+  try {
+    if (input instanceof Date) {
+      if (Number.isNaN(input.getTime())) return null;
+      const dt = new Date(input);
+      dt.setHours(0,0,0,0);
+      return dt.getTime();
+    }
+    const s = String(input).trim();
+    // YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      const dt = new Date(`${s}T00:00:00`);
+      if (!Number.isNaN(dt.getTime())) { dt.setHours(0,0,0,0); return dt.getTime(); }
+    }
+    // DD/MM/YYYY
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) {
+      const [dd, mm, yyyy] = s.split('/');
+      const dt = new Date(`${yyyy}-${mm}-${dd}T00:00:00`);
+      if (!Number.isNaN(dt.getTime())) { dt.setHours(0,0,0,0); return dt.getTime(); }
+    }
+    // fallback to Date.parse
+    const parsed = Date.parse(s);
+    if (!Number.isNaN(parsed)) {
+      const dt = new Date(parsed);
+      dt.setHours(0,0,0,0);
+      return dt.getTime();
+    }
+  } catch (e) {
+    // ignore
+  }
+  return null;
+};
+
+// Return start-of-day ms in UTC for stable comparisons against UTC timestamps
+const dayStartMsUTC = (input) => {
+  if (!input && input !== 0) return null;
+  try {
+    const s = (input instanceof Date) ? input.toISOString() : String(input).trim();
+    // try to parse into a Date object
+    const parsed = Date.parse(s);
+    if (!Number.isNaN(parsed)) {
+      const dt = new Date(parsed);
+      const y = dt.getUTCFullYear();
+      const m = dt.getUTCMonth();
+      const d = dt.getUTCDate();
+      return Date.UTC(y, m, d);
+    }
+  } catch (e) {
+    // ignore
+  }
+  return null;
 };
 
 const formatMinutesToHhMm = (mins) => {
@@ -36,6 +96,7 @@ const Days = () => {
   const [error, setError] = useState(null);
   const [rows, setRows] = useState([]);
   const [recovery, setRecovery] = useState([]);
+  const [daysWithSleep, setDaysWithSleep] = useState(new Set());
   const [showCorr, setShowCorr] = useState(false);
   const [corr, setCorr] = useState(null);
   const [corrLoading, setCorrLoading] = useState(false);
@@ -91,6 +152,37 @@ const Days = () => {
       }
     };
     fetchRecovery();
+  }, [daysRange]);
+
+  // fetch sleeps within the same range so we can mark days that have/no sleep sessions
+  useEffect(() => {
+    const fetchSleeps = async () => {
+      try {
+        const end = new Date();
+        const start = new Date();
+        start.setDate(end.getDate() - daysRange + 1);
+        const toISO = d => d.toISOString().slice(0,10);
+        const res = await sleepsAPI.getLatestSleeps({ limit: Math.max(1, daysRange), startDate: toISO(start), endDate: toISO(end) }).catch(() => null);
+        let sleepsArr = [];
+        if (!res) sleepsArr = [];
+        else if (Array.isArray(res.sleeps)) sleepsArr = res.sleeps;
+        else if (Array.isArray(res)) sleepsArr = res;
+        else if (res.data && Array.isArray(res.data)) sleepsArr = res.data;
+        const set = new Set();
+        for (const s of (sleepsArr || [])) {
+          const raw = s.day ?? s.date ?? (s.sleep_start ? s.sleep_start : null);
+          const localKey = dayStartMs(raw);
+          const utcKey = dayStartMsUTC(raw);
+          if (localKey) set.add(String(localKey));
+          if (utcKey) set.add(String(utcKey));
+        }
+        setDaysWithSleep(set);
+      } catch (e) {
+        console.warn('Failed to fetch sleeps for marking', e);
+        setDaysWithSleep(new Set());
+      }
+    };
+    fetchSleeps();
   }, [daysRange]);
 
   useEffect(() => {
@@ -287,6 +379,18 @@ const Days = () => {
                       <div><span style={{ color:'#94a3b8' }}>TIB</span><div>{r.tib_minutes != null ? formatMinutesToHhMm(r.tib_minutes) : '-'}</div></div>
                       <div><span style={{ color:'#94a3b8' }}>Steps</span><div>{r.steps != null ? fmtNumber(r.steps) : '-'}</div></div>
                     </div>
+                    {/* badge for missing sleep */}
+                    {(() => {
+                      const localKey = dayStartMs(r.day);
+                      const utcKey = dayStartMsUTC(r.day);
+                      if (!daysWithSleep || !daysWithSleep.size) return null;
+                      const hasLocal = localKey && daysWithSleep.has(String(localKey));
+                      const hasUtc = utcKey && daysWithSleep.has(String(utcKey));
+                      if (!hasLocal && !hasUtc) {
+                        return <div style={{ marginTop:8, color:'#f97316', fontSize:12, fontWeight:700 }}>No sleep data</div>;
+                      }
+                      return null;
+                    })()}
                   </DayCard>
                 </Link>
               );

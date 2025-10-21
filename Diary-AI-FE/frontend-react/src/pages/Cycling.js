@@ -14,6 +14,7 @@ import api from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
 import { Button } from '../components/ui';
+import Top5ByMetric from '../components/Top5ByMetric';
 
 // Cycling-specific analytics (sport key: 'cycling' or 'Cycling')
 const Cycling = () => {
@@ -35,8 +36,8 @@ const Cycling = () => {
 
   const [analysis, setAnalysis] = useState(null);
   const [dateRangeMode, setDateRangeMode] = useState('rolling');
-  const [rangeStart] = useState('');
-  const [rangeEnd] = useState('');
+  const [rangeStart, setRangeStart] = useState('');
+  const [rangeEnd, setRangeEnd] = useState('');
   const [primaryMetric] = useState(() => { try { const raw = localStorage.getItem('cyclingPrimaryMetric'); return raw === 'avg_steps_per_min' ? 'avg_steps_per_min' : 'avg_pace'; } catch (e) { return 'avg_pace'; } });
   React.useEffect(() => { try { localStorage.setItem('cyclingPrimaryMetric', primaryMetric); } catch (e) { /* ignore */ } }, [primaryMetric]);
 
@@ -63,6 +64,11 @@ const Cycling = () => {
     };
     load();
   }, [limit, periodDays, dateRangeMode, rangeStart, rangeEnd]);
+
+  // Helper: increase period to 90 days when no cycling activities are present
+  const handleIncreasePeriod = () => {
+    setPeriodDays(90);
+  };
 
   React.useEffect(() => { try { localStorage.setItem('cyclingPeriodDays', String(periodDays)); } catch (e) { /* ignore */ } }, [periodDays]);
   React.useEffect(() => { try { localStorage.setItem('cyclingPredWindow', String(predWindow)); } catch (e) { /* ignore */ } }, [predWindow]);
@@ -213,6 +219,13 @@ const Cycling = () => {
                 <option value="explicit">Range</option>
               </select>
             </div>
+            {dateRangeMode === 'explicit' && (
+              <div className="flex gap-2 items-center text-xs ml-4">
+                <input type="date" value={rangeStart} onChange={e=>setRangeStart(e.target.value)} className="input input-sm" />
+                <span>→</span>
+                <input type="date" value={rangeEnd} onChange={e=>setRangeEnd(e.target.value)} className="input input-sm" />
+              </div>
+            )}
           </div>
           <div className="ml-auto flex gap-2 order-3 md:order-2">
             {/* Gym link removed - navigate via Activity quick-links */}
@@ -246,6 +259,22 @@ const Cycling = () => {
           <div className="card-header flex flex-wrap gap-3 items-center justify-between"><h3 className="card-title">Distance vs Rolling Pace Trend</h3><div className="text-[11px] text-gray-500">Lower pace = better · Rolling pace = 4w avg</div></div>
           <div className="card-content"><TrendComparison height={220} data={displayedWeeks.map(w => ({ label: w.week, distance: (w.distance != null ? w.distance : (w.total_distance_km ?? 0)), rollingPace: (w.rollingAvgPace4 != null ? w.rollingAvgPace4 : (w.avg_pace ?? null)) }))} forecast={{ distance: predictions.predictedDistance, rollingPace: predictions.predictedRollingPace }} /></div>
         </div>
+
+        {/* Top-5 for Cycling (sport-specific) */}
+        <Top5ByMetric activities={(analysis && Array.isArray(analysis.runs) && analysis.runs.length>0) ? analysis.runs : sportActivities} sportLabel="Cycling" />
+
+        {/* If server returned no rides, show an action banner */}
+        {analysis && analysis.runs === 0 && (
+          <div className="card mt-4">
+            <div className="card-content flex items-center justify-between">
+              <div className="text-sm text-gray-600">No cycling activities found in the selected period.</div>
+              <div className="flex items-center gap-3">
+                <Button size="sm" variant="ghost" onClick={handleIncreasePeriod}>Show last 90 days</Button>
+                <div className="text-xs text-gray-500">Or add cycling activities / check data source</div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="card">
           <div className="card-header flex items-center justify-between flex-wrap gap-3"><h3 className="card-title">Forecast Controls</h3><div className="text-[11px] text-gray-500">Blend = regression vs EWMA weight · α = smoothing factor</div></div>

@@ -135,12 +135,8 @@ main() {
   if [[ -n "$REQUESTED_PYTHON" ]]; then
     version="$REQUESTED_PYTHON"
   else
-    say "Detecting latest stable Python from pyenv..."
-    version="$(latest_stable_python)"
-    if [[ -z "$version" ]]; then
-      err "Could not determine latest Python version from pyenv. Provide one via --python X.Y.Z"
-      exit 1
-    fi
+    # Default to the requested project version
+    version="3.13.5"
   fi
   say "Target Python version: $version"
 

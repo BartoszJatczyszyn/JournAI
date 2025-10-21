@@ -51,34 +51,32 @@ NC='\033[0m'
 #   - Can be skipped via --skip-garmindb
 
 if [ $RUN_GARMINDb -eq 1 ]; then
-  echo -e "${BLUE}📥 Running initial garmindb step (download/import/analyze/latest) – skipping local-file search and using global commands...${NC}"
+  echo -e "${BLUE}📥 Running initial garmindb step (download/import/analyze/latest) using project venv if available...${NC}"
 
-  # Helper: find a python executable that can import garmindb
-  find_python_with_garmindb() {
-    local candidates
-    candidates=("${SCRIPT_DIR}/.venv/bin/python" "python3" "python")
-    for py in "${candidates[@]}"; do
-      if command -v "$py" >/dev/null 2>&1; then
-        if "$py" -c 'import garmindb' >/dev/null 2>&1; then
-          echo "$py"; return 0
-        fi
-      fi
-    done
+  # Prefer project venv Python regardless of installed packages
+  get_project_python() {
+    if [ -x "${SCRIPT_DIR}/.venv/bin/python" ]; then echo "${SCRIPT_DIR}/.venv/bin/python"; return 0; fi
+    if [ -x "${SCRIPT_DIR}/../AI/.venv/bin/python" ]; then echo "${SCRIPT_DIR}/../AI/.venv/bin/python"; return 0; fi
     return 1
   }
 
   GCLI_STATUS=0
-  if command -v garmindb_cli.py >/dev/null 2>&1; then
-    echo -e "${BLUE}▶️  garmindb_cli.py --all --download --import --analyze --latest${NC}"
-    set +e; garmindb_cli.py --all --download --import --analyze --latest; GCLI_STATUS=$?; set -e
-  elif command -v garmindb >/dev/null 2>&1; then
-    echo -e "${BLUE}▶️  garmindb --all --download --import --analyze --latest${NC}"
-    set +e; garmindb --all --download --import --analyze --latest; GCLI_STATUS=$?; set -e
+  PROJ_PY="$(get_project_python || echo '')"
+  if [ -n "$PROJ_PY" ]; then
+    echo -e "${BLUE}▶️  Using project Python: $PROJ_PY${NC}"
+    set +e
+    "$PROJ_PY" -m pip install -q --disable-pip-version-check garmindb fitparse fitfile fitdecode idbutils >/dev/null 2>&1
+    set -e
+    echo -e "${BLUE}▶️  $PROJ_PY -m garmindb --all --download --import --analyze --latest${NC}"
+    set +e; "$PROJ_PY" -m garmindb --all --download --import --analyze --latest; GCLI_STATUS=$?; set -e
   else
-    PY_CMD="$(find_python_with_garmindb || echo '')"
-    if [ -n "$PY_CMD" ]; then
-      echo -e "${BLUE}▶️  $PY_CMD -m garmindb --all --download --import --analyze --latest${NC}"
-      set +e; "$PY_CMD" -m garmindb --all --download --import --analyze --latest; GCLI_STATUS=$?; set -e
+    # Fallback: try whatever is globally available
+    if command -v garmindb_cli.py >/dev/null 2>&1; then
+      echo -e "${BLUE}▶️  garmindb_cli.py --all --download --import --analyze --latest${NC}"
+      set +e; garmindb_cli.py --all --download --import --analyze --latest; GCLI_STATUS=$?; set -e
+    elif command -v garmindb >/dev/null 2>&1; then
+      echo -e "${BLUE}▶️  garmindb --all --download --import --analyze --latest${NC}"
+      set +e; garmindb --all --download --import --analyze --latest; GCLI_STATUS=$?; set -e
     else
       echo -e "${YELLOW}⚠️  garmindb command not found (skipping step). Install: pip install garmindb or use --skip-garmindb.${NC}"
       GCLI_STATUS=0

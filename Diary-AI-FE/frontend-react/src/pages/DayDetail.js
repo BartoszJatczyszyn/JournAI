@@ -31,6 +31,10 @@ const DayDetail = () => {
   const [stress, setStress] = useState(null);
   const [rr, setRr] = useState(null);
   const [sleepEvents, setSleepEvents] = useState([]);
+  // local fallback for user-created sleep sessions when backend insert is not available
+  const [localSleepSaved, setLocalSleepSaved] = useState(null);
+  const [editingSleepId, setEditingSleepId] = useState(null);
+  const [editForm, setEditForm] = useState({});
   const [sleepTooltip, setSleepTooltip] = useState(null);
   const [dailySummary, setDailySummary] = useState(null);
   const [journal, setJournal] = useState(null);
@@ -41,7 +45,7 @@ const DayDetail = () => {
       setLoading(true);
       setError(null);
       try {
-  const [hrRes, stressRes, rrRes, sleepEvRes, journalRes, healthDataRes, currentWeight] = await Promise.all([
+        const [hrRes, stressRes, rrRes, sleepEvRes, journalRes, healthDataRes, currentWeight] = await Promise.all([
           monitoringAPI.getHeartRateDaily(day).catch(() => null),
           monitoringAPI.getStressDaily(day).catch(() => null),
           monitoringAPI.getRespiratoryRateDaily(day).catch(() => null),
@@ -51,55 +55,42 @@ const DayDetail = () => {
           healthAPI2.getHealthData(365).catch(() => null),
           healthAPI.getCurrentWeight ? healthAPI.getCurrentWeight().catch(() => null) : null,
         ]);
-    if (!mounted) return;
-  // keep raw response for debugging
-  setHrRaw(hrRes || null);
-  setStressRaw(stressRes || null);
-  // Normalize hr response shapes
+        if (!mounted) return;
+        // keep raw response for debugging
+        setHrRaw(hrRes || null);
+        setStressRaw(stressRes || null);
+        // Normalize hr response shapes
         let hrNormalized = null;
         if (hrRes) {
-          // If API already returns { samples: [...] }
-          if (Array.isArray(hrRes.samples)) {
-            hrNormalized = hrRes;
-          } else if (Array.isArray(hrRes)) {
-            // If API returns an array of samples directly
-            hrNormalized = { samples: hrRes };
-          } else if (hrRes.data && Array.isArray(hrRes.data.samples)) {
-            hrNormalized = hrRes.data;
-          } else if (hrRes.data && Array.isArray(hrRes.data)) {
-            hrNormalized = { samples: hrRes.data };
-          } else {
-            // Unknown shape: keep as object under 'summary' so user can inspect
-            hrNormalized = { summary: hrRes };
-          }
+          if (Array.isArray(hrRes.samples)) hrNormalized = hrRes;
+          else if (Array.isArray(hrRes)) hrNormalized = { samples: hrRes };
+          else if (hrRes.data && Array.isArray(hrRes.data.samples)) hrNormalized = hrRes.data;
+          else if (hrRes.data && Array.isArray(hrRes.data)) hrNormalized = { samples: hrRes.data };
+          else hrNormalized = { summary: hrRes };
         }
         setHr(hrNormalized || null);
         setHrAttempts(prev => [...prev, { endpoint: 'getHeartRateDaily', attempted: String(day) }]);
 
-        // If we didn't get samples, try getHeartRateSummary and alternative date formats
         const hasSamples = hrNormalized && Array.isArray(hrNormalized.samples) && hrNormalized.samples.length;
         if (!hasSamples) {
           try {
-            // Try summary endpoint
             const summaryRes = await monitoringAPI.getHeartRateSummary(day).catch(() => null);
-              if (summaryRes && (Array.isArray(summaryRes.samples) && summaryRes.samples.length)) {
-                setHr({ samples: summaryRes.samples });
-              }
+            if (summaryRes && (Array.isArray(summaryRes.samples) && summaryRes.samples.length)) {
+              setHr({ samples: summaryRes.samples });
+            }
             setHrAttempts(prev => [...prev, { endpoint: 'getHeartRateSummary', attempted: String(day), found: !!summaryRes }]);
             if (summaryRes && (Array.isArray(summaryRes.samples) && summaryRes.samples.length)) {
               setHr({ samples: summaryRes.samples });
-              } else if (summaryRes && (summaryRes.data && Array.isArray(summaryRes.data))) {
-                setHr({ samples: summaryRes.data });
-              } else if (summaryRes && typeof summaryRes === 'object' && Object.keys(summaryRes).length) {
-                setHr({ summary: summaryRes });
+            } else if (summaryRes && (summaryRes.data && Array.isArray(summaryRes.data))) {
+              setHr({ samples: summaryRes.data });
+            } else if (summaryRes && typeof summaryRes === 'object' && Object.keys(summaryRes).length) {
+              setHr({ summary: summaryRes });
             } else {
-              // Try alternative date formats: YYYY-MM-DD extracted from provided param
               let altDay = day;
               try {
                 const iso = new Date(day);
                 if (!Number.isNaN(iso.getTime())) altDay = iso.toISOString().slice(0,10);
               } catch (e) {
-                // ignore invalid date formats when probing alternative day formats
                 console.warn('Alt day parse failed', e);
               }
               if (altDay !== String(day)) {
@@ -110,39 +101,30 @@ const DayDetail = () => {
                 else if (altRes && altRes.data && Array.isArray(altRes.data)) setHr({ samples: altRes.data });
               }
             }
-              } catch (e) {
-                console.warn('Extra HR attempts failed', e);
-              }
+          } catch (e) {
+            console.warn('Extra HR attempts failed', e);
+          }
         }
         setStress(stressRes || null);
         setRr(rrRes || null);
-        // If respiratory samples are missing, try raw minute-level rr rows
         const hasRrSamples = rrRes && (Array.isArray(rrRes.samples) && rrRes.samples.length);
         if (!hasRrSamples) {
           try {
             const rawRr = await monitoringAPI.getRespiratoryRateRaw(day).catch(() => null);
-            if (Array.isArray(rawRr) && rawRr.length) {
-              setRr({ samples: rawRr });
-            }
+            if (Array.isArray(rawRr) && rawRr.length) setRr({ samples: rawRr });
           } catch (e) {
             console.warn('getRespiratoryRateRaw failed', e);
           }
         }
-        // If stress samples are missing, try raw minute-level stress rows
         const hasStressSamples = stressRes && (Array.isArray(stressRes.samples) && stressRes.samples.length);
         if (!hasStressSamples) {
           try {
             const rawStress = await monitoringAPI.getStressRaw(day).catch(() => null);
-            if (Array.isArray(rawStress) && rawStress.length) {
-              // set stress as object with samples to be normalized by stressChartData
-              setStress({ samples: rawStress });
-            }
+            if (Array.isArray(rawStress) && rawStress.length) setStress({ samples: rawStress });
           } catch (e) {
             console.warn('getStressRaw failed', e);
           }
         }
-        // Normalize sleep events response into an array. Different endpoints may return
-        // { events: [...] } or { rows: [...] } or { data: [...] } or an array directly.
         let sleepArr = [];
         if (sleepEvRes) {
           if (Array.isArray(sleepEvRes)) sleepArr = sleepEvRes;
@@ -150,18 +132,12 @@ const DayDetail = () => {
           else if (Array.isArray(sleepEvRes.rows)) sleepArr = sleepEvRes.rows;
           else if (Array.isArray(sleepEvRes.data)) sleepArr = sleepEvRes.data;
           else if (Array.isArray(sleepEvRes.items)) sleepArr = sleepEvRes.items;
-          else if (sleepEvRes.events && typeof sleepEvRes.events === 'object') {
-            // single-event object -> wrap into array
-            sleepArr = [sleepEvRes.events];
-          } else {
-            // Unknown shape: keep as single item for inspection
-            sleepArr = [];
-          }
+          else if (sleepEvRes.events && typeof sleepEvRes.events === 'object') sleepArr = [sleepEvRes.events];
+          else sleepArr = [];
         }
         setSleepEvents(sleepArr);
         setJournal(journalRes || null);
 
-        // Try to locate the matching daily summary from healthData
         let match = null;
         if (Array.isArray(healthDataRes)) {
           match = healthDataRes.find(d => {
@@ -171,28 +147,22 @@ const DayDetail = () => {
         } else if (healthDataRes && healthDataRes.data && Array.isArray(healthDataRes.data)) {
           match = healthDataRes.data.find(d => String(d.day ?? d.date ?? d.label ?? d.x) === String(day));
         }
-        // Merge in current weight (if for same day) or attach separately when viewing that exact date
-          // If still no samples, try retrieving raw minute-level rows from garmin_heart_rate_data
-          if (!hrNormalized || !(hrNormalized.samples && hrNormalized.samples.length)) {
-            try {
-              const rawRows = await monitoringAPI.getHeartRateRaw(day).catch(() => null);
-              setHrAttempts(prev => [...prev, { endpoint: 'getHeartRateRaw', attempted: String(day), found: !!rawRows }]);
-              if (Array.isArray(rawRows) && rawRows.length) {
-                // normalize into samples array
-                setHr({ samples: rawRows });
-              }
-            } catch (e) {
-              console.warn('getHeartRateRaw failed', e);
-            }
+        if (!hrNormalized || !(hrNormalized.samples && hrNormalized.samples.length)) {
+          try {
+            const rawRows = await monitoringAPI.getHeartRateRaw(day).catch(() => null);
+            setHrAttempts(prev => [...prev, { endpoint: 'getHeartRateRaw', attempted: String(day), found: !!rawRows }]);
+            if (Array.isArray(rawRows) && rawRows.length) setHr({ samples: rawRows });
+          } catch (e) {
+            console.warn('getHeartRateRaw failed', e);
           }
+        }
         let enriched = match ? { ...match } : null;
         if (currentWeight && currentWeight.day) {
-          // If viewing the day equal to latest weight day, surface weight_kg
-            if (String(currentWeight.day) === String(day)) {
-              enriched = enriched || { day };
-              if (currentWeight.weight_kg != null) enriched.weight_kg = currentWeight.weight_kg;
-              if (currentWeight.bmi != null) enriched.bmi = currentWeight.bmi;
-            }
+          if (String(currentWeight.day) === String(day)) {
+            enriched = enriched || { day };
+            if (currentWeight.weight_kg != null) enriched.weight_kg = currentWeight.weight_kg;
+            if (currentWeight.bmi != null) enriched.bmi = currentWeight.bmi;
+          }
         }
         setDailySummary(enriched || match || null);
       } catch (e) {
@@ -205,6 +175,183 @@ const DayDetail = () => {
     load();
     return () => { mounted = false; };
   }, [day]);
+
+  // Sleep entry form state
+  const [sleepStartInput, setSleepStartInput] = useState('');
+  const [sleepEndInput, setSleepEndInput] = useState('');
+  const [sleepDurationInput, setSleepDurationInput] = useState(''); // in minutes
+  const [sleepScoreInput, setSleepScoreInput] = useState('');
+  // separate date/time parts for nicer picking
+  const [sleepStartDate, setSleepStartDate] = useState(day || '');
+  const [sleepStartTime, setSleepStartTime] = useState('');
+  const [sleepEndDate, setSleepEndDate] = useState(day || '');
+  const [sleepEndTime, setSleepEndTime] = useState('');
+  const [savingSleep, setSavingSleep] = useState(false);
+  const [saveSleepError, setSaveSleepError] = useState(null);
+
+  const handleSaveSleep = async (e) => {
+    e && e.preventDefault && e.preventDefault();
+    setSavingSleep(true);
+    setSaveSleepError(null);
+    try {
+      // compose start/end from separate date/time parts when provided
+      const composedStart = sleepStartInput || (sleepStartDate && sleepStartTime ? `${sleepStartDate}T${sleepStartTime}` : null);
+      const composedEnd = sleepEndInput || (sleepEndDate && sleepEndTime ? `${sleepEndDate}T${sleepEndTime}` : null);
+      // normalize inputs
+      const payload = {
+        day,
+        sleep_start: composedStart || null,
+        sleep_end: composedEnd || null,
+        // convert minutes to seconds when provided as minutes
+        sleep_duration_seconds: sleepDurationInput ? Math.round(Number(sleepDurationInput) * 60) : null,
+        sleep_score: sleepScoreInput ? Number(sleepScoreInput) : null,
+      };
+      // attempt API create if available
+      let created = null;
+      if (sleepsAPI && typeof sleepsAPI.createSleep === 'function') {
+        try {
+          const res = await sleepsAPI.createSleep(payload);
+          // expect res.sleep or created object; adapt if API returns raw
+          created = res && (res.sleep || res.data || res);
+        } catch (err) {
+          console.warn('createSleep API failed', err);
+          // continue to fallback
+        }
+      }
+      if (created) {
+        // update UI: append to sleepEvents so chart shows it
+        const createdRow = (created.sleep || created);
+        const row = {
+          sleep_id: createdRow.sleep_id ?? createdRow.sleep_id ?? null,
+          timestamp: createdRow.sleep_start || payload.sleep_start,
+          event: 'manual_entry',
+          duration: payload.sleep_duration_seconds || createdRow.sleep_duration_seconds || null,
+          _created: true,
+          raw: createdRow,
+        };
+        setSleepEvents(prev => [...prev, row]);
+        setLocalSleepSaved({ source: 'api', created });
+      } else {
+        // fallback: store a local synthetic sleep event and show message
+        const row = {
+          timestamp: payload.sleep_start || (payload.sleep_end || `${day}T00:00:00`),
+          event: 'manual_entry_local',
+          duration: payload.sleep_duration_seconds || (payload.sleep_end && payload.sleep_start ? Math.round((new Date(payload.sleep_end) - new Date(payload.sleep_start))/1000) : null),
+          _created: true,
+          raw: payload,
+        };
+        setSleepEvents(prev => [...prev, row]);
+        setLocalSleepSaved({ source: 'local', payload });
+      }
+      // clear inputs
+      setSleepStartInput('');
+      setSleepStartDate(day || '');
+      setSleepStartTime('');
+      setSleepEndInput('');
+      setSleepEndDate(day || '');
+      setSleepEndTime('');
+      setSleepDurationInput('');
+      setSleepScoreInput('');
+    } catch (err) {
+      console.error('Save sleep failed', err);
+      setSaveSleepError(String(err?.message || err));
+    } finally {
+      setSavingSleep(false);
+    }
+  };
+
+  const handleDeleteSleep = async (sleepId) => {
+    if (!sleepId) return;
+    try {
+      await sleepsAPI.deleteSleep(sleepId).catch(() => { throw new Error('delete failed') });
+      setSleepEvents(prev => prev.filter(s => s.sleep_id !== sleepId));
+    } catch (err) {
+      console.error('Delete sleep failed', err);
+      // fallback: remove locally
+      setSleepEvents(prev => prev.filter(s => s.sleep_id !== sleepId));
+    }
+  };
+
+  const startEdit = (item) => {
+    setEditingSleepId(item.sleep_id || item.raw?.sleep_id || null);
+    // split existing ISO-like datetime into date and time parts for nicer inputs
+    const rawStart = item.raw?.sleep_start || item.timestamp || '';
+    const rawEnd = item.raw?.sleep_end || '';
+    const split = (iso) => {
+      if (!iso) return { date: '', time: '' };
+      try {
+        const dt = new Date(String(iso));
+        if (Number.isNaN(dt.getTime())) return { date: '', time: '' };
+        const date = dt.toISOString().slice(0,10);
+        const hh = String(dt.getHours()).padStart(2,'0');
+        const mm = String(dt.getMinutes()).padStart(2,'0');
+        return { date, time: `${hh}:${mm}` };
+      } catch (e) {
+        return { date: '', time: '' };
+      }
+    };
+    const s = split(rawStart);
+    const e = split(rawEnd);
+    setEditForm({
+      sleep_start: rawStart || '',
+      sleep_end: rawEnd || '',
+      sleep_start_date: s.date,
+      sleep_start_time: s.time,
+      sleep_end_date: e.date,
+      sleep_end_time: e.time,
+      sleep_duration_minutes: item.duration ? Math.round(item.duration/60) : '',
+      sleep_score: item.raw?.sleep_score ?? '',
+      _localKey: item.key ?? item.sleep_id ?? item.timestamp,
+    });
+  };
+
+  const saveEdit = async () => {
+    const sleepId = editingSleepId;
+    if (!sleepId) return;
+    try {
+      // prefer composed date+time parts when available in editForm
+      const composedStart = editForm.sleep_start || (editForm.sleep_start_date && editForm.sleep_start_time ? `${editForm.sleep_start_date}T${editForm.sleep_start_time}` : null);
+      const composedEnd = editForm.sleep_end || (editForm.sleep_end_date && editForm.sleep_end_time ? `${editForm.sleep_end_date}T${editForm.sleep_end_time}` : null);
+      const payload = {
+        sleep_start: composedStart || null,
+        sleep_end: composedEnd || null,
+        sleep_duration_seconds: editForm.sleep_duration_minutes ? Math.round(Number(editForm.sleep_duration_minutes) * 60) : null,
+        sleep_score: editForm.sleep_score ? Number(editForm.sleep_score) : null,
+      };
+      const res = await sleepsAPI.updateSleep(sleepId, payload).catch(() => null);
+      if (res && res.sleep) {
+        const updated = res.sleep;
+        setSleepEvents(prev => prev.map(s => (s.sleep_id === sleepId ? { ...s, timestamp: updated.sleep_start, duration: updated.sleep_duration_seconds, raw: updated } : s)));
+      } else {
+        // fallback local update
+        setSleepEvents(prev => prev.map(s => (s.sleep_id === sleepId ? { ...s, timestamp: payload.sleep_start || s.timestamp, duration: payload.sleep_duration_seconds || s.duration, raw: { ...(s.raw||{}), ...payload } } : s)));
+      }
+    } catch (err) {
+      console.error('Update sleep failed', err);
+    } finally {
+      setEditingSleepId(null);
+      setEditForm({});
+    }
+  };
+
+  // auto-compute duration (minutes) when both start and end are present
+  useEffect(() => {
+    // derive full ISO strings from either combined inputs or separate date/time parts
+    const startIso = sleepStartInput || (sleepStartDate && sleepStartTime ? `${sleepStartDate}T${sleepStartTime}` : null);
+    const endIso = sleepEndInput || (sleepEndDate && sleepEndTime ? `${sleepEndDate}T${sleepEndTime}` : null);
+    if (!startIso || !endIso) return;
+    try {
+      const s = new Date(startIso);
+      const e = new Date(endIso);
+      if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return;
+      let deltaMs = e.getTime() - s.getTime();
+      if (deltaMs <= 0) deltaMs += 24 * 60 * 60 * 1000; // assume next day
+      const mins = Math.round(deltaMs / 60000);
+      if (Number.isFinite(mins)) setSleepDurationInput(String(mins));
+    } catch (err) {
+      // ignore parse errors
+    }
+  }, [sleepStartInput, sleepEndInput, sleepStartDate, sleepStartTime, sleepEndDate, sleepEndTime]);
 
   // Normalize and prepare chart data for heart rate samples (hook must run on every render)
   const hrChartData = useMemo(() => {
@@ -554,9 +701,6 @@ const DayDetail = () => {
           ) : (
             <div style={{ color: '#64748b' }}>No daily summary found for this day.</div>
           )}
-        </div>
-    <div className="card" style={{ padding: 16 }}>
-          <h3 style={{ marginTop: 0 }}>Heart Rate</h3>
           {hrChartData && hrChartData.length ? (
             <>
             <div style={{ width: '100%', height: 220 }}>
@@ -691,7 +835,7 @@ const DayDetail = () => {
           )}
         </div>
 
-  <div className="card" style={{ padding: 16 }}>
+        <div className="card" style={{ padding: 16 }}>
           <h3 style={{ marginTop: 0 }}>Sleep Events</h3>
           {Array.isArray(sleepEvents) && sleepEvents.length ? (
             (() => {
@@ -768,7 +912,17 @@ const DayDetail = () => {
                         onMouseEnter={() => setSleepTooltip({ item: it })}
                         onMouseLeave={() => setSleepTooltip(null)}
                         style={{ position: 'absolute', left: `${it.left}%`, width: `${Math.max(0.3, it.width)}%`, top: 10, height: 36, background: it.color, borderRadius: 4, opacity: 0.98, display: 'flex', alignItems: 'center', paddingLeft: 8, color: '#021018', fontWeight: 700, fontSize: 12, cursor: 'default', boxShadow: '0 1px 4px rgba(0,0,0,0.3)' }}>
-                        <div style={{ textShadow: 'none', color: '#021018' }}>{it.ev.replace('_', ' ')}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'space-between', gap: 8 }}>
+                          <div style={{ textShadow: 'none', color: '#021018' }}>{it.ev.replace('_', ' ')}</div>
+                          <div style={{ display: 'flex', gap: 6, paddingRight: 6 }}>
+                            {(it._created || it.raw?.sleep_id || it.sleep_id) && (
+                              <>
+                                <button onClick={() => startEdit(it)} style={{ background: 'transparent', border: 'none', color: '#021018', cursor: 'pointer' }}>✎</button>
+                                <button onClick={() => handleDeleteSleep(it.sleep_id || it.raw?.sleep_id)} style={{ background: 'transparent', border: 'none', color: '#021018', cursor: 'pointer' }}>🗑</button>
+                              </>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     ))}
                     {/* tooltip */}
@@ -793,11 +947,82 @@ const DayDetail = () => {
                       })()
                     )}
                   </div>
+                  {/* inline edit form */}
+                  {editingSleepId && (
+                    <div style={{ marginTop: 8, background: '#071028', padding: 8, borderRadius: 6 }}>
+                      <div style={{ color: '#94a3b8', marginBottom: 6 }}>Edit sleep (id: {editingSleepId})</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 12, color: '#94a3b8' }}>Start date</label>
+                          <input type="date" value={editForm.sleep_start_date || ''} onChange={(e) => setEditForm(f => ({ ...f, sleep_start_date: e.target.value }))} style={{ width: '100%', padding: 8, background: '#021026', color: '#e6eef8', borderRadius: 4 }} />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 12, color: '#94a3b8' }}>Start time</label>
+                          <input type="time" value={editForm.sleep_start_time || ''} onChange={(e) => setEditForm(f => ({ ...f, sleep_start_time: e.target.value }))} style={{ width: '100%', padding: 8, background: '#021026', color: '#e6eef8', borderRadius: 4 }} />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 12, color: '#94a3b8' }}>End date</label>
+                          <input type="date" value={editForm.sleep_end_date || ''} onChange={(e) => setEditForm(f => ({ ...f, sleep_end_date: e.target.value }))} style={{ width: '100%', padding: 8, background: '#021026', color: '#e6eef8', borderRadius: 4 }} />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 12, color: '#94a3b8' }}>End time</label>
+                          <input type="time" value={editForm.sleep_end_time || ''} onChange={(e) => setEditForm(f => ({ ...f, sleep_end_time: e.target.value }))} style={{ width: '100%', padding: 8, background: '#021026', color: '#e6eef8', borderRadius: 4 }} />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 12, color: '#94a3b8' }}>Duration (min)</label>
+                          <input value={editForm.sleep_duration_minutes || ''} onChange={(e) => setEditForm(f => ({ ...f, sleep_duration_minutes: e.target.value }))} placeholder="Duration (min)" style={{ width: '100%', padding: 8, background: '#021026', color: '#e6eef8', borderRadius: 4 }} />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 12, color: '#94a3b8' }}>Sleep score</label>
+                          <input value={editForm.sleep_score || ''} onChange={(e) => setEditForm(f => ({ ...f, sleep_score: e.target.value }))} placeholder="Sleep score" style={{ width: '100%', padding: 8, background: '#021026', color: '#e6eef8', borderRadius: 4 }} />
+                        </div>
+                      </div>
+                      <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                        <button onClick={saveEdit} className="liquid-button prev">Save</button>
+                        <button onClick={() => { setEditingSleepId(null); setEditForm({}); }} className="liquid-button">Cancel</button>
+                      </div>
+                    </div>
+                  )}
                   <div style={{ marginTop: 8, color: '#94a3b8', fontSize: 12 }}>Events: {items.length}</div>
                 </div>
               );
             })()
-          ) : (<div style={{ color: '#64748b' }}>No sleep events for this day.</div>)}
+          ) : (
+            <div style={{ color: '#64748b' }}>
+              <div>No sleep events for this day.</div>
+              <div style={{ marginTop: 12 }}>
+                <div style={{ marginBottom: 8, color: '#94a3b8' }}>Add a manual sleep session for {day}:</div>
+                <form onSubmit={handleSaveSleep} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: '#94a3b8' }}>Start date</label>
+                    <input type="date" value={sleepStartDate} onChange={(e) => setSleepStartDate(e.target.value)} style={{ width: '100%', padding: 8, background: '#071028', color: '#e6eef8', border: '1px solid rgba(148,163,184,0.06)', borderRadius: 4 }} />
+                    <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginTop: 6 }}>Start time</label>
+                    <input type="time" value={sleepStartTime} onChange={(e) => setSleepStartTime(e.target.value)} style={{ width: '100%', padding: 8, background: '#071028', color: '#e6eef8', border: '1px solid rgba(148,163,184,0.06)', borderRadius: 4 }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: '#94a3b8' }}>End date</label>
+                    <input type="date" value={sleepEndDate} onChange={(e) => setSleepEndDate(e.target.value)} style={{ width: '100%', padding: 8, background: '#071028', color: '#e6eef8', border: '1px solid rgba(148,163,184,0.06)', borderRadius: 4 }} />
+                    <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginTop: 6 }}>End time</label>
+                    <input type="time" value={sleepEndTime} onChange={(e) => setSleepEndTime(e.target.value)} style={{ width: '100%', padding: 8, background: '#071028', color: '#e6eef8', border: '1px solid rgba(148,163,184,0.06)', borderRadius: 4 }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: '#94a3b8' }}>Duration (minutes)</label>
+                    <input value={sleepDurationInput} onChange={(e) => setSleepDurationInput(e.target.value)} placeholder="480" style={{ width: '100%', padding: 8, background: '#071028', color: '#e6eef8', border: '1px solid rgba(148,163,184,0.06)', borderRadius: 4 }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: '#94a3b8' }}>Sleep score (0-100)</label>
+                    <input value={sleepScoreInput} onChange={(e) => setSleepScoreInput(e.target.value)} placeholder="85" style={{ width: '100%', padding: 8, background: '#071028', color: '#e6eef8', border: '1px solid rgba(148,163,184,0.06)', borderRadius: 4 }} />
+                  </div>
+                  <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <button type="submit" className="liquid-button prev" disabled={savingSleep}>{savingSleep ? 'Saving...' : 'Save sleep'}</button>
+                    <button type="button" onClick={() => { setSleepStartInput(''); setSleepEndInput(''); setSleepDurationInput(''); setSleepScoreInput(''); }} className="liquid-button">Clear</button>
+                    <div style={{ color: '#94a3b8', fontSize: 13 }}>{saveSleepError ? `Error: ${saveSleepError}` : localSleepSaved ? `Saved (${localSleepSaved.source})` : ''}</div>
+                  </div>
+                </form>
+                <div style={{ marginTop: 8, color: '#94a3b8', fontSize: 12 }}>Note: this will attempt to POST to the backend (/api/sleeps). If the backend doesn't accept inserts, the entry will be saved locally in the UI only.</div>
+              </div>
+            </div>
+          )}
         </div>
 
         <BodyMetricsCard day={day} />

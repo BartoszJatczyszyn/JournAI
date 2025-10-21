@@ -10,6 +10,7 @@ import Volume1RMScatter from '../components/Volume1RMScatter';
 import Sparkline from '../components/Sparkline';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
+import Top5ByMetric from '../components/Top5ByMetric';
 
 // Gym analytics view: tonnage, templates/sessions counts, exercise progress & forecasts
 const Gym = () => {
@@ -250,6 +251,12 @@ const Gym = () => {
             </div>
           </div>
         </div>
+
+        {/* Top-5 for Gym (fitness_equipment) */}
+        <Top5ByMetric activities={latestActivities.filter(a => {
+          const s = (a.sport || '').toLowerCase();
+          return s === 'fitness_equipment' || s === 'fitness-equipment' || s === 'fitness equipment' || s === 'gym';
+        })} sportLabel="Gym" />
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="md:col-span-2 card">
