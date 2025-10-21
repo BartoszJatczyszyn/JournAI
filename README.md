@@ -93,22 +93,30 @@ Health data mount:
 - Make sure your Garmin export sits in `HealthData/` at the repo root
 
 ## GarminDb setup helper (optional)
-Want to quickly configure GarminDb and fetch your export? Use the interactive helper:
+Want to quickly configure GarminDb and fetch your export? Use the interactive helper script.
 
 - Location: `AI/Diary-AI-BE/scripts/cli/setup_garmindb.py`
-- What it does:
-  - Installs/updates the `garmindb` package
-  - Creates `~/.GarminDb/GarminConnectConfig.json` with your credentials and start dates
-  - Optionally stores the password in a separate file with secure permissions
-  - Can immediately run: `--all --download --import --analyze` (and optionally `--latest`)
-- Usage examples:
-  - Interactive (recommended):
-       python AI/Diary-AI-BE/scripts/cli/setup_garmindb.py
-  - Non-interactive quick setup:
-       python AI/Diary-AI-BE/scripts/cli/setup_garmindb.py --username you@example.com --start-date 11/01/2024 --latest
-  - Force upgrade of garmindb first:
-       python AI/Diary-AI-BE/scripts/cli/setup_garmindb.py --upgrade
-- Note: The default base directory for downloads is `HealthData` under your home-relative path (as per the script config). Ensure your repository’s `HealthData/` contains the export you want to migrate.
+- Key points (short):
+  - Requires Python >= 3.8.
+  - Installs or upgrades `garmindb` (use `--upgrade`).
+  - Writes config to `~/.GarminDb/GarminConnectConfig.json` (backups existing file).
+  - Saves password to `~/.GarminDb/password.txt` (attempts to set chmod 600).
+  - Defaults: `download_all_activities=3000`, `base_dir=HealthData` (relative_to_home = true).
+  - Can run an import immediately (`--full` or confirm); the script runs `garmindb_cli.py` from the environment's scripts directory with `--all --download --import --analyze` (adds `--latest` when requested).
+
+Selected options: `--username`, `--password`, `--start-date` (MM/DD/YYYY), `--individual-dates`, `--download-all-activities`, `--full`, `--latest`, `--upgrade`.
+
+Examples:
+
+  - Interactive:
+
+      python AI/Diary-AI-BE/scripts/cli/setup_garmindb.py
+
+  - Quick (no prompts):
+
+      python AI/Diary-AI-BE/scripts/cli/setup_garmindb.py --username you@example.com --start-date 11/01/2024 --latest
+
+Note: if the script cannot find `garmindb_cli.py` in the environment's scripts directory, the import step will not run — the configuration will still be saved.
 
 ## Running migrations (importing your Garmin data)
 You can migrate all data or targeted subsets. After starting Docker services:
