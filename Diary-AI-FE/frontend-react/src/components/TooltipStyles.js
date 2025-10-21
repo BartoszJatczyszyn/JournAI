@@ -7,7 +7,8 @@ import React from 'react';
 const TooltipStyles = () => (
   <style>{`
     .custom-tooltip {
-      background: var(--glass-bg);
+      /* Follow global variables for consistency */
+      background: var(--tooltip-bg);
       border: 1px solid var(--glass-border);
       backdrop-filter: blur(12px) saturate(120%);
       -webkit-backdrop-filter: blur(12px) saturate(120%);
@@ -20,6 +21,7 @@ const TooltipStyles = () => (
       line-height: 1.35;
       pointer-events: none;
     }
+    .dark .custom-tooltip { background: var(--tooltip-bg); }
     .custom-tooltip .tooltip-label { font-weight: 600; margin: 0 0 8px 0; color: var(--text-primary); }
     .custom-tooltip .tooltip-metric { color: var(--text-muted); }
     .custom-tooltip .tooltip-number { font-weight: 600; color: var(--text-primary); }

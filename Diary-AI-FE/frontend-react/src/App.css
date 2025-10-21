@@ -4,6 +4,13 @@
   --glass-shadow: 0 10px 30px rgba(2, 6, 23, 0.12);
   --text-primary: #1e293b;
   --text-muted: #64748b;
+  /* Tooltip surface variables (global control) */
+  --tooltip-bg: linear-gradient(180deg, rgba(255,255,255,0.90), rgba(255,255,255,0.80));
+  --tooltip-arrow-bg: rgba(255,255,255,0.85);
+
+  /* Chart hover band (cursor) */
+  --chart-cursor-fill: rgba(2, 6, 23, 0.12); /* subtle darken on light */
+  --chart-cursor-stroke: rgba(2, 6, 23, 0.18);
 
   /* Spacing scale */
   --space-1: 4px;
@@ -73,6 +80,12 @@
   --glass-shadow: 0 8px 32px rgba(2, 6, 23, 0.35);
   --text-primary: #e5e7eb;
   --text-muted: #a1a1aa;
+  /* Dark tooltip surface: switch to dark glass for contrast on light chart regions */
+  --tooltip-bg: linear-gradient(180deg, rgba(15,23,42,0.75), rgba(15,23,42,0.60));
+  --tooltip-arrow-bg: rgba(15,23,42,0.68);
+  /* Dark chart hover band (clearly darker than background) */
+  --chart-cursor-fill: rgba(2, 6, 23, 0.46);
+  --chart-cursor-stroke: rgba(2, 6, 23, 0.56);
 }
 
 /* macOS Liquid Glass UI */
@@ -155,12 +168,10 @@
   background: rgba(255,255,255,0.35);
   border-color: var(--glass-border);
 }
-
 /* Ghost keeps only glass surface with subtle border */
 .btn.btn { padding: var(--control-padding-y) var(--control-padding-x); }
 .btn-sm { padding: 8px 12px; border-radius: 10px; font-size: 0.875rem; }
 .btn-lg { padding: 12px 18px; border-radius: 14px; font-size: 1rem; }
-.btn-block { display: inline-flex; width: 100%; }
 
 /* Button spacing inside groups */
 .btn + .btn { margin-left: var(--space-3); }
@@ -171,14 +182,12 @@ input[type="text"], input[type="number"], input[type="date"], input[type="time"]
 input[type="email"], input[type="password"], select, textarea {
   width: 100%;
   background: linear-gradient(180deg, rgba(255,255,255,0.70), rgba(255,255,255,0.40));
-  color: var(--text-primary);
   border: 1px solid var(--glass-border);
   border-radius: var(--control-radius);
   padding: var(--control-padding-y) var(--control-padding-x);
   min-height: 40px;
   box-shadow: 0 1px 0 rgba(255,255,255,0.6) inset, 0 6px 18px rgba(2,6,23,0.10);
   backdrop-filter: blur(12px) saturate(120%);
-  -webkit-backdrop-filter: blur(12px) saturate(120%);
   transition: box-shadow .2s ease, border-color .2s ease, background .2s ease;
 }
 /* Size variants for controls */
@@ -199,15 +208,6 @@ input:focus, select:focus, textarea:focus {
 }
 
 /* Cards */
-.card {
-  border-radius: 16px;
-  background: radial-gradient(120% 100% at 0% -20%, rgba(255,255,255,0.55), rgba(255,255,255,0.30)),
-              linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0.15));
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
-  backdrop-filter: blur(14px) saturate(120%);
-  -webkit-backdrop-filter: blur(14px) saturate(120%);
-}
 .card-header { border-bottom: 1px solid rgba(15,23,42,0.06); padding: var(--space-5) var(--space-5); }
 .card-title { margin: 0; font-size: 1rem; font-weight: 700; }
 .card-subtitle { margin: 4px 0 0; font-size: .85rem; color: var(--text-muted); }
@@ -439,7 +439,8 @@ input, select, textarea,
 
 /* Recharts default tooltip styling to match glass theme */
 .recharts-default-tooltip {
-  background: var(--glass-bg) !important;
+  /* Use global tooltip surface */
+  background: var(--tooltip-bg) !important;
   border: 1px solid var(--glass-border) !important;
   color: var(--text-primary) !important;
   border-radius: 10px !important;
@@ -447,7 +448,15 @@ input, select, textarea,
   backdrop-filter: blur(12px) saturate(120%) !important;
   -webkit-backdrop-filter: blur(12px) saturate(120%) !important;
   box-shadow: var(--glass-shadow) !important;
+  z-index: 1000;
 }
+/* Recharts hover cursor (highlight band) */
+.recharts-tooltip-cursor {
+  fill: var(--chart-cursor-fill) !important;
+  stroke: var(--chart-cursor-stroke) !important;
+  stroke-width: 0 !important;
+}
+/* Dark handled via variable override */
 
 /* Chart responsive styles */
 .recharts-responsive-container {
@@ -642,7 +651,7 @@ input, select, textarea,
 .tooltip-glass.tooltip-glass {
   position: relative;
   z-index: 1000;
-  background: var(--glass-bg);
+  background: var(--tooltip-bg);
   border: 1px solid var(--glass-border);
   backdrop-filter: blur(12px) saturate(120%);
   -webkit-backdrop-filter: blur(12px) saturate(120%);
@@ -665,6 +674,14 @@ input, select, textarea,
   border-radius: inherit;
 }
 
+/* Tone down the sheen on dark for better legibility */
+.dark .custom-tooltip.custom-tooltip::before,
+.dark .tooltip-glass.tooltip-glass::before {
+  background:
+    radial-gradient(140px 100px at 10% -10%, rgba(255,255,255,0.18), transparent 60%),
+    linear-gradient(to bottom, rgba(255,255,255,0.04), transparent 30%);
+}
+
 /* Tooltip text helpers */
 .custom-tooltip .tooltip-label { font-weight: 600; margin: 0 0 8px 0; color: var(--text-primary); }
 .custom-tooltip .tooltip-metric { color: var(--text-muted); }
@@ -675,7 +692,12 @@ input, select, textarea,
 .dark .custom-tooltip.custom-tooltip,
 .dark .tooltip-glass.tooltip-glass {
   color: var(--text-primary);
+  background: var(--tooltip-bg);
 }
+
+/* Ensure single-class custom tooltips (e.g., Sleep.js CustomTooltip) pick up refined glass */
+.custom-tooltip { background: var(--tooltip-bg); }
+.dark .custom-tooltip { background: var(--tooltip-bg); }
 
 /* Pure CSS hover tooltips via data-tooltip attribute */
 [data-tooltip] { position: relative; cursor: help; }
@@ -688,7 +710,7 @@ input, select, textarea,
   white-space: pre-wrap;
   max-width: 280px;
   z-index: 1000;
-  background: var(--glass-bg);
+  background: var(--tooltip-bg);
   border: 1px solid var(--glass-border);
   backdrop-filter: blur(12px) saturate(120%);
   -webkit-backdrop-filter: blur(12px) saturate(120%);
@@ -705,10 +727,11 @@ input, select, textarea,
   transform: translateX(-50%);
   width: 10px;
   height: 10px;
-  background: var(--glass-bg);
+  background: var(--tooltip-arrow-bg);
   border-left: 1px solid var(--glass-border);
   border-top: 1px solid var(--glass-border);
   transform-origin: center;
   rotate: 45deg;
   z-index: 999;
 }
+/* Dark handled via variables */

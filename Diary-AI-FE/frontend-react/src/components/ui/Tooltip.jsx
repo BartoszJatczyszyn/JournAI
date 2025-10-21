@@ -28,10 +28,8 @@ const Tooltip = ({ children, content, placement = 'top', delay = 250, maxWidth =
     const isTop = placement === 'top';
     const isBottom = placement === 'bottom';
     const isLeft = placement === 'left';
-    const isRight = placement === 'right';
     const base = {
       position: 'absolute', zIndex: 1000, maxWidth,
-      background: 'linear-gradient(180deg, rgba(255,255,255,0.65), rgba(255,255,255,0.30))',
       border: '1px solid var(--glass-border)',
       backdropFilter: 'blur(12px) saturate(120%)',
       WebkitBackdropFilter: 'blur(12px) saturate(120%)',
