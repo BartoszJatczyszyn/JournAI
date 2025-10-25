@@ -19,6 +19,10 @@ ENV/
 tmp_rovodev_*
 *.swp
 *~
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.idea/
 
 # OS
 .DS_Store
@@ -42,7 +46,7 @@ Diary-AI-FE/frontend-react/yarn-*.log*
 Diary-AI-FE/frontend-react/pnpm-debug.log*
 
 # Backend models (kept on host, mounted in container)
-Diary-AI-BE/scripts/analytics/models/*.joblib
+Diary-AI-BE/app/analytics/models/*.joblib
 
 # ML model artifacts (general)
 *.joblib
@@ -51,13 +55,13 @@ Diary-AI-BE/scripts/analytics/models/*.joblib
 .python-version
 
 # Temporary synthetic data / helper scripts (ignore)
-Diary-AI-BE/scripts/temp_fill_daily_journal.py
-Diary-AI-BE/scripts/temp_quick_check_journal.py
-Diary-AI-BE/scripts/temp_list_journal_columns.py
+Diary-AI-BE/app/temp_fill_daily_journal.py
+Diary-AI-BE/app/temp_quick_check_journal.py
+Diary-AI-BE/app/temp_list_journal_columns.py
 # Deprecated aliases
-Diary-AI-BE/scripts/fill_daily_journal_temp.py
-Diary-AI-BE/scripts/_quick_check_journal.py
-Diary-AI-BE/scripts/_list_journal_columns.py
+Diary-AI-BE/app/fill_daily_journal_temp.py
+Diary-AI-BE/app/_quick_check_journal.py
+Diary-AI-BE/app/_list_journal_columns.py
 
 # Archive folder
 archive/

@@ -13,6 +13,7 @@ Highlights:
 
 Table of contents:
 - Quick start
+- Shell scripts (CLI helpers)
 - Project layout
 - Configuration
 - GarminDb setup helper (optional)
@@ -23,6 +24,80 @@ Table of contents:
 - Utilities
 - Troubleshooting
 - FAQ
+
+## Shell scripts (CLI helpers)
+
+Your command-line sidekicks — think droids in Star Wars: helpful, loyal, and occasionally verbose. These live in the `AI/` folder unless noted.
+
+### start_all.sh — “Make it so.”
+- What it does: Builds and starts Docker services (Postgres + Backend, optionally LLM), waits for the backend to be healthy, and can launch the React dev server on the first free port 3000–3010.
+- Usage:
+  ```bash
+  ./start_all.sh [--with-frontend] [--llm] [--workers N] [--first-boot-setup] [--yes] [--help]
+  ```
+- Notable flags:
+  - `--with-frontend` — also starts the React dev server locally
+  - `--llm` — starts the optional LLM service
+  - `--workers|-w N` — sets `UVICORN_WORKERS` for the backend container
+  - `--first-boot-setup` — force the GarminDb setup prompt even if already done
+  - `--yes|-y` — auto-accept the GarminDb setup prompt
+- Under the hood: chooses `docker compose` (or `docker-compose`), optionally runs `./setup_garmindb.sh` on first boot, starts `db` and `backend`, waits for `http://localhost:5002/api/health`, then optionally launches the frontend.
+
+Pop-culture vibe: Like Tony Stark hitting the big “Run everything” button in the lab.
+
+### stop_all.sh — “Order 66.”
+- What it does: Stops Docker services and cleans up local React/Python processes; checks common ports and reports their status.
+- Usage:
+  ```bash
+  ./stop_all.sh
+  ```
+- Details: Runs `docker compose down` (when available), then gracefully stops processes matching `react-scripts`, `app.cli.start_backend`, and friends.
+
+### full_reset.sh — “The Thanos Snap (with backups recommended).”
+- What it does: End-to-end reset. Optionally refreshes Garmin data via a one-off Python container, tears down the stack (with or without dropping the DB volume), rebuilds images, starts Postgres + backend, runs the full migration inside the backend container, and can start the frontend.
+- Usage:
+  ```bash
+  ./full_reset.sh [--with-frontend] [--llm] [--no-cache] [--skip-garmindb] [--garmindb-latest] [--preserve-db|--no-drop-db] [--workers N] [--help]
+  ```
+- Defaults: Drops the DB volume unless `--preserve-db` or `--no-drop-db` is provided.
+- Migration: Executes `python run_migration.py --subset all` inside the backend container.
+- Garmin step: When not skipped, runs `garmindb_cli.py` in a temporary Python 3.13 container with host mounts for config/cache/data.
+- Danger: Without `--preserve-db`, your Postgres volume is removed. Backup first if you care about the current data.
+
+Perfect for fresh starts or big refactors. Use responsibly, like crossing the streams in Ghostbusters.
+
+### setup_venv.sh — “Assemble the Avengers (Python edition).”
+- What it does: Creates/refreshes a local virtualenv at `AI/.venv` using Python 3.13 (via pyenv if available), then installs `AI/requirements.txt`.
+- Usage:
+  ```bash
+  ./setup_venv.sh
+  ```
+- Notes: Prefers pyenv-managed 3.13.x; falls back to `python3.13` if present. Handy for running local CLIs without Docker.
+
+### setup_garmindb.sh — “Call the courier.”
+- What it does: Ensures the venv exists and runs `Diary-AI-BE/app/cli/setup_garmindb.py`, installing `garmindb` and its parsing deps if needed.
+- Usage:
+  ```bash
+  ./setup_garmindb.sh [flags forwarded to the Python CLI]
+  ```
+- Typical forward flags: `--username`, `--password`, `--start-date`, `--full`, `--latest`, `--upgrade`. See the “GarminDb setup helper” section below for details.
+
+### cleanup_repo.sh — “Spring cleaning montage.”
+- What it does: Removes `__pycache__`, frontend `build/`, stray logs, `.DS_Store`, and a legacy wrapper.
+- Usage:
+  ```bash
+  ./cleanup_repo.sh            # interactive confirm
+  ./cleanup_repo.sh --yes      # no prompt
+  ```
+
+### Diary-AI-BE/app/setup_python_env.sh — “For advanced pyenv wranglers.”
+- Location: `AI/Diary-AI-BE/app/setup_python_env.sh`
+- What it does: Manages Python via pyenv for the project, optionally uninstalling all pyenv versions (with confirmation), installing a target version, creating `AI/.venv`, and installing requirements.
+- Usage:
+  ```bash
+  bash AI/Diary-AI-BE/app/setup_python_env.sh [--force] [--python X.Y.Z]
+  ```
+- Heads-up: This script interacts with pyenv installations; read its prompts and output carefully.
 
 ## Quick start
 
@@ -78,7 +153,7 @@ Health data mount:
 ## GarminDb setup helper (optional)
 Want to quickly configure GarminDb and fetch your export? Use the interactive helper script.
 
-- Location: `AI/Diary-AI-BE/scripts/cli/setup_garmindb.py`
+- Location: `AI/Diary-AI-BE/app/cli/setup_garmindb.py`
 - Key points (short):
   - Requires Python >= 3.8.
   - Installs or upgrades `garmindb` (use `--upgrade`).
@@ -93,25 +168,27 @@ Examples:
 
   - Interactive:
 
-      python AI/Diary-AI-BE/scripts/cli/setup_garmindb.py
+  python AI/Diary-AI-BE/app/cli/setup_garmindb.py
 
   - Quick (no prompts):
 
-      python AI/Diary-AI-BE/scripts/cli/setup_garmindb.py --username you@example.com --start-date 11/01/2024 --latest
+  python AI/Diary-AI-BE/app/cli/setup_garmindb.py --username you@example.com --start-date 11/01/2024 --latest
 
 Note: if the script cannot find `garmindb_cli.py` in the environment's scripts directory, the import step will not run — the configuration will still be saved.
 
 ## Running migrations (importing your Garmin data)
 You can migrate all data or targeted subsets. After starting Docker services:
-- Full migration:
-   docker compose exec backend python run_migration.py --subset all
-- Only sleep data:
-   docker compose exec backend python run_migration.py --subset sleep
+- Full migration (new path):
+  docker compose exec backend python -m app.migrations.cli.run_migration --subset all
+- Only sleep data (new path):
+  docker compose exec backend python -m app.migrations.cli.run_migration --subset sleep
 - Available subsets: all, daily, sleep, rhr, stress, hr, rr, activities, weight, journal, stats
-If dependencies are missing (in local dev), run the setup helper:
-   python AI/Diary-AI-BE/setup_migration.py
-Then run:
-   python AI/Diary-AI-BE/run_migration.py --subset all
+Backwards-compatible legacy entrypoints still work:
+  docker compose exec backend python run_migration.py --subset all
+If dependencies are missing (in local dev), run the setup helper (new path):
+  python -m app.migrations.cli.setup_migration
+Legacy path (still works):
+  python AI/Diary-AI-BE/setup_migration.py
 
 Note: No Infinity Stones required—just patience while large exports crunch.
 
@@ -178,9 +255,16 @@ Notes:
 - If you still want to try it, the old quick-start instructions were: download the GGUF model to `AI/models`, start the stack with `./start_all.sh --llm`, and test the endpoints `GET /api/llm/health` and `POST /api/llm/chat` against `http://localhost:8080/v1`.
 
 ## Utilities
-- Daily journal filler CLI: `AI/Diary-AI-BE/scripts/cli/fill_daily_journal.py`
-  - Example: `python AI/Diary-AI-BE/scripts/cli/fill_daily_journal.py --days 300 --commit`
-  - Backward compatible wrapper also available: `python AI/temp_dailyJournal`
+- Daily journal filler CLI: `AI/Diary-AI-BE/app/cli/fill_daily_journal.py`
+  - Example: `python AI/Diary-AI-BE/app/cli/fill_daily_journal.py --days 300 --commit`
+  - Note: The old compatibility wrapper `AI/temp_dailyJournal` has been removed. Please use the CLI path above.
+
+### Start backend locally via CLI (optional)
+For a quick local run without Docker (with auto-reload, etc.):
+
+  python -m app.cli.start_backend --reload --port 5002 --workers 1
+
+This uses the same checks and startup flow as the Docker image. You can still run uvicorn directly if you prefer (see FAQ).
 
 ## Frontend (React)
 Location: AI/Diary-AI-FE/frontend-react
@@ -194,6 +278,26 @@ It will open the dashboard at http://localhost:3000 (or the next free port) and 
 
 Environment for development:
 - .env.development.local sets REACT_APP_API_URL=http://localhost:5002
+
+## Dev linting and hooks
+
+Python linters/hooks are set up via Ruff + Flake8 and pre-commit.
+
+Quick setup:
+
+1) Install dev tools (in your active Python env):
+
+  python -m pip install -r AI/Diary-AI-BE/app/dev_requirements.txt
+
+2) Install git hooks:
+
+  pre-commit install
+
+3) (Optional) Run on entire repo once:
+
+  pre-commit run --all-files
+
+Configuration lives in `pyproject.toml` (Ruff/Black/Flake8) and `.pre-commit-config.yaml`.
 
 ## Troubleshooting
 - Backend isn’t coming up?
@@ -210,7 +314,9 @@ Environment for development:
 
 ## FAQ
 - Can I run without Docker?
-  - Yes. Use Python 3.13, install backend requirements, configure `config.env`, run `uvicorn scripts.backend_api_enhanced:app --port 5002` from `AI/Diary-AI-BE/scripts`, and run migrations.
+  - Yes. Use Python 3.13, install backend requirements, configure `config.env`, and run either:
+    - Preferred: `uvicorn app.backend_api_enhanced:app --port 5002`
+  - Legacy (still works): `uvicorn scripts.backend_api_enhanced:app --port 5002` from `AI/Diary-AI-BE/app` (prior layout)
 - Where does my data live?
   - In PostgreSQL (docker volume `pg_data`). Your raw export is mounted read-only at `/app/HealthData`.
 - Is this production-ready?

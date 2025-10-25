@@ -454,6 +454,7 @@ const Sleep = () => {
   ), [timeseriesAsc, phasesMode]);
 
   // --- New: compute last sleep phase before wake for each session ---
+  // Prefer backend-provided session fields, fall back to events only if missing
   const lastPreWakeSeries = useMemo(() => {
     const mapStageValue = (s) => {
       const st = String(s || '').toLowerCase();
@@ -463,12 +464,52 @@ const Sleep = () => {
       if (st.includes('awake') || st.includes('wake')) return { v: 4, label: 'Awake' };
       return { v: 0, label: '' };
     };
+    const mapNumToLabel = (n) => {
+      const v = Number(n);
+      if (Number.isNaN(v)) return null;
+      if (v === 1) return 'Deep';
+      if (v === 2) return 'Light';
+      if (v === 3) return 'REM';
+      if (v === 4) return 'Awake';
+      return null;
+    };
 
     return timeseriesAsc.map(row => {
-        // Prefer garmin_sleep_events (migrated Postgres table) when present
-        const evs = Array.isArray(row?.garmin_sleep_events)
-          ? row.garmin_sleep_events
-          : (Array.isArray(row?.sleep_events) ? row.sleep_events : (Array.isArray(row?.events) ? row.events : null));
+      // 1) Prefer explicit label from backend
+      if (row?.last_sleep_phase_label) {
+        const label = String(row.last_sleep_phase_label);
+        const mv = mapStageValue(label);
+        return { x: row.day, phaseValue: mv.v || null, phaseLabel: mv.label || label };
+      }
+      // 2) Prefer explicit pre-wake label
+      if (row?.last_pre_wake_phase_label) {
+        const label = String(row.last_pre_wake_phase_label);
+        const mv = mapStageValue(label);
+        return { x: row.day, phaseValue: mv.v || null, phaseLabel: mv.label || label };
+      }
+      // 3) Map numeric codes
+      if (row?.last_pre_wake_phase != null) {
+        const label = mapNumToLabel(row.last_pre_wake_phase);
+        if (label) {
+          const mv = mapStageValue(label);
+          return { x: row.day, phaseValue: mv.v || null, phaseLabel: mv.label || label };
+        }
+      }
+      if (row?.last_sleep_phase != null) {
+        // could be string label or numeric code
+        const asStr = String(row.last_sleep_phase);
+        const mv = mapStageValue(asStr);
+        if (mv.v || mv.label) return { x: row.day, phaseValue: mv.v || null, phaseLabel: mv.label || null };
+        const lbl = mapNumToLabel(asStr);
+        if (lbl) {
+          const mv2 = mapStageValue(lbl);
+          return { x: row.day, phaseValue: mv2.v || null, phaseLabel: mv2.label || lbl };
+        }
+      }
+      // 4) Last resort: infer from events
+      const evs = Array.isArray(row?.garmin_sleep_events)
+        ? row.garmin_sleep_events
+        : (Array.isArray(row?.sleep_events) ? row.sleep_events : (Array.isArray(row?.events) ? row.events : null));
       if (!evs || !evs.length) return { x: row.day, phaseValue: null, phaseLabel: null };
       const toMs = (e) => e && e.timestamp ? new Date(e.timestamp).getTime() : (e && e.ts ? new Date(e.ts).getTime() : (typeof e.t === 'number' ? e.t : null));
       const mapped = evs
@@ -478,12 +519,11 @@ const Sleep = () => {
         .sort((a,b) => a.t - b.t);
       if (!mapped.length) return { x: row.day, phaseValue: null, phaseLabel: null };
       let last = mapped[mapped.length - 1];
-      // if last is an awake/wake event, pick the previous stage when possible
       if ((last.name || '').includes('awake') || (last.name || '').includes('wake')) {
         if (mapped.length >= 2) last = mapped[mapped.length - 2];
       }
       const mv = mapStageValue(last.name);
-      return { x: row.day, phaseValue: mv.v, phaseLabel: mv.label };
+      return { x: row.day, phaseValue: mv.v || null, phaseLabel: mv.label || null };
     });
   }, [timeseriesAsc]);
 

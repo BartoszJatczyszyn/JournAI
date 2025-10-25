@@ -14,11 +14,19 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Colors for pretty output
+GREEN="\033[1;32m"
+YELLOW="\033[1;33m"
+RED="\033[1;31m"
+NC="\033[0m"
+
 WITH_FRONTEND=0
 NO_CACHE=0
 RUN_GARMINDb=1  # can be disabled with --skip-garmindb
 START_LLM=0
 PRESERVE_DB=0  # when 1, do not drop DB volume; only (re)start services and run migrations
+UVICORN_WORKERS=""
+GARMINDb_MODE="full"  # "full" (default) or "latest"; override with --garmindb-latest
 
 for arg in "$@"; do
   case "$arg" in
@@ -26,7 +34,12 @@ for arg in "$@"; do
     --llm) START_LLM=1 ; shift ;;
     --no-cache) NO_CACHE=1 ; shift ;;
     --skip-garmindb) RUN_GARMINDb=0 ; shift ;;
+    --garmindb-latest) GARMINDb_MODE="latest" ; shift ;;
     --preserve-db|--no-drop-db) PRESERVE_DB=1 ; shift ;;
+    --workers|-w)
+      shift
+      if [[ -z "${1:-}" ]]; then echo "--workers requires a number"; exit 1; fi
+      UVICORN_WORKERS="$1"; shift ;;
     --help|-h)
       grep '^#' "$0" | sed 's/^# \{0,1\}//'
       exit 0
@@ -35,61 +48,61 @@ for arg in "$@"; do
   esac
 done
 
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-BLUE='\033[0;34m'
-NC='\033[0m'
-
 # (0) Optionally: fetch/refresh Garmin data via garmindb_cli.py
 # ---------------------------------------------------------------
 # The script may run:
 #   garmindb_cli.py --all --download --import --analyze --latest
 # Assumptions:
-#   - Script might be located at ./garmindb_cli.py or Diary-AI-BE/scripts/cli/garmindb_cli.py
+#   - Script might be located at ./garmindb_cli.py or Diary-AI-BE/app/cli/garmindb_cli.py
 #   - If not present, we warn and continue.
 #   - Can be skipped via --skip-garmindb
 
 if [ $RUN_GARMINDb -eq 1 ]; then
-  echo -e "${BLUE}📥 Running initial garmindb step (download/import/analyze/latest) using project venv if available...${NC}"
+  echo "Running initial garmindb step inside Docker (no local venv)..."
 
-  # Prefer project venv Python regardless of installed packages
-  get_project_python() {
-    if [ -x "${SCRIPT_DIR}/.venv/bin/python" ]; then echo "${SCRIPT_DIR}/.venv/bin/python"; return 0; fi
-    if [ -x "${SCRIPT_DIR}/../AI/.venv/bin/python" ]; then echo "${SCRIPT_DIR}/../AI/.venv/bin/python"; return 0; fi
-    return 1
-  }
-
+  # Run GarminDb in a temporary Python container, with host config/cache mounted for persistence
   GCLI_STATUS=0
-  PROJ_PY="$(get_project_python || echo '')"
-  if [ -n "$PROJ_PY" ]; then
-    echo -e "${BLUE}▶️  Using project Python: $PROJ_PY${NC}"
-    set +e
-    "$PROJ_PY" -m pip install -q --disable-pip-version-check garmindb fitparse fitfile fitdecode idbutils >/dev/null 2>&1
-    set -e
-    echo -e "${BLUE}▶️  $PROJ_PY -m garmindb --all --download --import --analyze --latest${NC}"
-    set +e; "$PROJ_PY" -m garmindb --all --download --import --analyze --latest; GCLI_STATUS=$?; set -e
-  else
-    # Fallback: try whatever is globally available
-    if command -v garmindb_cli.py >/dev/null 2>&1; then
-      echo -e "${BLUE}▶️  garmindb_cli.py --all --download --import --analyze --latest${NC}"
-      set +e; garmindb_cli.py --all --download --import --analyze --latest; GCLI_STATUS=$?; set -e
-    elif command -v garmindb >/dev/null 2>&1; then
-      echo -e "${BLUE}▶️  garmindb --all --download --import --analyze --latest${NC}"
-      set +e; garmindb --all --download --import --analyze --latest; GCLI_STATUS=$?; set -e
-    else
-      echo -e "${YELLOW}⚠️  garmindb command not found (skipping step). Install: pip install garmindb or use --skip-garmindb.${NC}"
-      GCLI_STATUS=0
-    fi
+  GARMIN_CONFIG_DIR="${HOME}/.GarminDb"
+  mkdir -p "$GARMIN_CONFIG_DIR" || true
+
+  # Optional: mount pip cache to speed up repeated runs
+  PIP_CACHE_DIR="${HOME}/.cache/pip"
+  mkdir -p "$PIP_CACHE_DIR" || true
+
+  # Mount HealthData so downloads persist on host and are visible to backend compose (../HealthData -> /app/HealthData)
+  HEALTHDATA_DIR="${HOME}/HealthData"
+  mkdir -p "$HEALTHDATA_DIR" || true
+
+  # Note: using --interactive when attached to a TTY so prompts (first-time setup) work
+  DOCKER_INTERACTIVE=""
+  if [ -t 0 ]; then DOCKER_INTERACTIVE="-it"; fi
+
+  DOCKER_IMAGE="python:3.13.5-slim"
+  # Build garmindb args
+  GDB_ARGS="--all --download --import --analyze --latest"
+  if [ "$GARMINDb_MODE" = "latest" ]; then
+    GDB_ARGS="$GDB_ARGS --latest"
   fi
+  RUN_CMD='pip install --no-input --disable-pip-version-check -q garmindb fitfile tcxfile fitparse fitdecode idbutils \
+    && garmindb_cli.py '"$GDB_ARGS"''
+
+  echo "docker run $DOCKER_INTERACTIVE --rm -v $GARMIN_CONFIG_DIR:/root/.GarminDb -v $PIP_CACHE_DIR:/root/.cache/pip $DOCKER_IMAGE sh -lc \"$RUN_CMD\""
+  set +e
+  docker run $DOCKER_INTERACTIVE --rm \
+    -v "$GARMIN_CONFIG_DIR:/root/.GarminDb" \
+    -v "$PIP_CACHE_DIR:/root/.cache/pip" \
+    -v "$HEALTHDATA_DIR:/root/HealthData" \
+    "$DOCKER_IMAGE" sh -lc "$RUN_CMD"
+  GCLI_STATUS=$?
+  set -e
 
   if [ $GCLI_STATUS -ne 0 ]; then
-    echo -e "${RED}⚠️  garmindb exited with code $GCLI_STATUS (continuing reset).${NC}"
+    echo "garmindb exited with code $GCLI_STATUS (continuing reset)."
   else
-    echo -e "${GREEN}✅ garmindb step completed (or skipped without error)${NC}"
+    echo "garmindb step completed (or skipped without error)"
   fi
 else
-  echo -e "${YELLOW}⏭  Skipping garmindb step (used --skip-garmindb)${NC}"
+  echo "Skipping garmindb step (used --skip-garmindb)"
 fi
 
 # Detect docker compose
@@ -98,88 +111,93 @@ if command -v docker &>/dev/null; then
 elif command -v docker-compose &>/dev/null; then
   DC='docker-compose'
 else
-  echo -e "${RED}❌ docker / docker-compose not found${NC}"; exit 1
+  echo "docker / docker-compose not found"; exit 1
 fi
 
 # 1. Stop and remove the stack (+ volumes unless preserved)
 if [ $PRESERVE_DB -eq 1 ]; then
-  echo -e "${BLUE}🧹 Stopping containers without removing DB volume (preserving existing data)...${NC}"
+  echo "Stopping containers without removing DB volume (preserving existing data)..."
   $DC down || true
 else
-  echo -e "${BLUE}🧹 Stopping containers and removing volumes (database will be cleared)...${NC}"
+  echo "Stopping containers and removing volumes (database will be cleared)..."
   $DC down -v || true
 fi
 
 # 2. (Optional) remove dangling images
 if docker images -f dangling=true -q | grep -q .; then
-  echo -e "${YELLOW}🗑  Removing dangling images...${NC}"
+  echo "Removing dangling images..."
   docker rmi $(docker images -f dangling=true -q) || true
 fi
 
 # 3. Build fresh images
-echo -e "${BLUE}🏗  Building backend images...${NC}"
+echo "Building backend images..."
 if [ $NO_CACHE -eq 1 ]; then
   $DC build --no-cache --pull
 else
   $DC build --pull
 fi
 
-echo -e "${BLUE}🐘 Starting the db service (so we can run migrations)...${NC}"
+echo "Starting the db service (so we can run migrations)..."
 $DC up -d db
 
 # 4. Wait for Postgres healthy (healthcheck in compose)
-echo -e "${YELLOW}⏳ Waiting for Postgres to be healthy...${NC}"
+echo "Waiting for Postgres to be healthy..."
 for i in {1..30}; do
   status=$(docker inspect -f '{{ .State.Health.Status }}' journal_ai_db 2>/dev/null || echo 'unknown')
   if [ "$status" = "healthy" ]; then
-    echo -e "${GREEN}✅ Postgres is ready${NC}"; break
+    echo "Postgres is ready"; break
   fi
   sleep 2
   if [ $i -eq 30 ]; then
-    echo -e "${RED}❌ Postgres did not reach healthy state${NC}"; exit 1
+    echo "Postgres did not reach healthy state"; exit 1
   fi
 done
 
 # 5. Start backend (and optional LLM)
-echo -e "${BLUE}🚀 Starting backend...${NC}"
-$DC up -d backend
+echo "Starting backend..."
+if [[ -n "$UVICORN_WORKERS" ]]; then
+  echo "Using UVICORN_WORKERS=${UVICORN_WORKERS}"
+  UVICORN_WORKERS="$UVICORN_WORKERS" $DC up -d backend
+else
+  $DC up -d backend
+fi
 if [ $START_LLM -eq 1 ]; then
-  echo -e "${BLUE}🧠 Starting LLM service...${NC}"
+  echo "Starting LLM service..."
   $DC up -d llm || true
 fi
 
 # 6. Wait until backend responds
-BACKEND_URL="http://localhost:5002/api/stats"
-echo -e "${YELLOW}⏳ Waiting for backend (${BACKEND_URL})...${NC}"
+BACKEND_URL="http://localhost:5002/api/health"
+echo "Waiting for backend (${BACKEND_URL})..."
 for i in {1..60}; do
   if curl -s "$BACKEND_URL" >/dev/null 2>&1; then
-    echo -e "${GREEN}✅ Backend is up${NC}"; break
+    echo "Backend is up"; break
   fi
   sleep 1
   if [ $i -eq 60 ]; then
-    echo -e "${RED}❌ Backend did not respond within 60s${NC}"; exit 1
+    echo "Backend did not respond within 60s"; exit 1
   fi
 done
 
 # 7. Run migration inside backend container
-echo -e "${BLUE}📦 Running migration (run_migration.py)...${NC}"
+echo "Running migration (run_migration.py)..."
 set +e
 docker exec journal_ai_backend python run_migration.py --subset all
 MIG_STATUS=$?
 set -e
 if [ $MIG_STATUS -ne 0 ]; then
-  echo -e "${RED}❌ Migration failed (code $MIG_STATUS) — check logs: docker compose logs backend${NC}"
+  echo "Migration failed (code $MIG_STATUS) — check logs: docker compose logs backend"
   exit $MIG_STATUS
 fi
 
-echo -e "${GREEN}✅ Migration finished successfully${NC}"
+echo "Migration finished successfully"
 
 # 8. (Optional) start frontend locally
 if [ $WITH_FRONTEND -eq 1 ]; then
-  echo -e "${BLUE}🌐 Starting React frontend locally...${NC}"
+  echo "Starting React frontend locally..."
   FE_DIR="$SCRIPT_DIR/Diary-AI-FE/frontend-react"
   if [ ! -d "$FE_DIR" ]; then
-    echo -e "${RED}❌ Frontend directory does not exist: $FE_DIR${NC}"; exit 1
+    echo "Frontend directory does not exist: $FE_DIR"; exit 1
   fi
   pushd "$FE_DIR" >/dev/null
   if [ ! -d node_modules ]; then

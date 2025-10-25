@@ -1,0 +1,39 @@
+[importlinter]
+root_package = app
+
+[contracts]
+
+[[contracts.layers]]
+name = Clean architecture layering
+layers = [
+    "domain",
+    "application",
+    "presentation",
+    "infrastructure",
+]
+
+# Allowed directions: each layer can depend only on layers to its left.
+# domain can depend on nobody.
+# application can depend on domain.
+# presentation can depend on application and domain.
+# infrastructure can depend on domain and (optionally) lib/db under app.
+
+[[contracts.forbidden]]
+name = Application must not import infrastructure
+source_modules = [
+    "app.application",
+]
+forbidden_modules = [
+    "app.infrastructure",
+]
+
+[[contracts.forbidden]]
+name = Domain must not import application or infrastructure or presentation
+source_modules = [
+    "app.domain",
+]
+forbidden_modules = [
+    "app.application",
+    "app.infrastructure",
+    "app.presentation",
+]

@@ -40,6 +40,8 @@ services:
       DB_NAME: ${DB_NAME:-diary}
       DB_USER: ${DB_USER:-diary_user}
       DB_PASSWORD: ${DB_PASSWORD:-diary123}
+      # Uvicorn workers (2 for dev; set 4+ in production)
+      WORKERS: ${UVICORN_WORKERS:-2}
       # Additional optional vars
       PYTHONUNBUFFERED: 1
       # LLM connection (llama.cpp server)
@@ -57,7 +59,7 @@ services:
       - "${HOST_PORT_BACKEND:-5002}:5002"
     volumes:
       - ./Diary-AI-BE/config.env.example:/app/config.env:ro
-      - ./Diary-AI-BE/scripts/models:/app/scripts/analytics/models
+      - ./Diary-AI-BE/app/models:/app/app/analytics/models
       - ../HealthData:/app/HealthData:ro
     restart: unless-stopped
 

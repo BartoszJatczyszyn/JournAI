@@ -2,84 +2,103 @@
 set -euo pipefail
 
 # start_all.sh — start services using Docker Compose
-# By default: runs the stack with `docker compose up -d --build` and waits for the backend.
-# Optionally: pass --with-frontend to start a local React dev server as well.
+# Flags:
+#   --with-frontend        Start local React dev server
+#   --llm                  Start LLM service
+#   --workers|-w N         Set backend worker count
+#   --first-boot-setup     Force GarminDb setup prompt even if already done
+#   --yes|-y               Auto-accept GarminDb setup prompt
+#   --help|-h              Show usage
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR" || exit 1
 
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-BLUE='\033[0;34m'
-NC='\033[0m'
-
 WITH_FRONTEND=0
 WITH_LLM=0
+UVICORN_WORKERS=""
+FORCE_SETUP=0
+SKIP_SETUP_PROMPT=0
+
 while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --with-frontend) WITH_FRONTEND=1; shift ;;
-        --llm) WITH_LLM=1; shift ;;
-        --help|-h) echo "Usage: $0 [--with-frontend] [--llm]"; exit 0 ;;
-        *) echo "Unknown option: $1"; exit 1 ;;
-    esac
+  case "$1" in
+    --with-frontend) WITH_FRONTEND=1; shift ;;
+    --llm) WITH_LLM=1; shift ;;
+    --workers|-w) shift; [[ -z "${1:-}" ]] && { echo "--workers requires a number"; exit 1; }; UVICORN_WORKERS="$1"; shift ;;
+    --first-boot-setup) FORCE_SETUP=1; shift ;;
+    --yes|-y) SKIP_SETUP_PROMPT=1; shift ;;
+    --help|-h)
+      echo "Usage: $0 [--with-frontend] [--llm] [--workers N] [--first-boot-setup] [--yes]"; exit 0 ;;
+    *) echo "Unknown option: $1"; exit 1 ;;
+  esac
 done
 
-echo -e "${BLUE}🔧 Starting services via Docker Compose...${NC}"
+# Select docker compose command
+docker_cmd() {
+  if command -v docker &>/dev/null; then echo "docker compose"; return 0; fi
+  if command -v docker-compose &>/dev/null; then echo "docker-compose"; return 0; fi
+  echo "docker or docker-compose not found" >&2; return 1
+}
 
-# Prefer `docker compose` (compose v2). If not available, fall back to `docker-compose`.
-if command -v docker &>/dev/null; then
-    DOCKER_CMD="docker compose"
-elif command -v docker-compose &>/dev/null; then
-    DOCKER_CMD="docker-compose"
-else
-    echo -e "${RED}❌ docker or docker-compose not found. Install Docker.${NC}"
-    exit 1
-fi
+DOCKER_CMD=$(docker_cmd) || exit 1
 
-echo -e "${GREEN}✅ Using: $DOCKER_CMD${NC}"
+# First-boot GarminDb setup (optional)
+SETUP_FLAG_FILE="$SCRIPT_DIR/.first_boot_setup_done"
+maybe_run_setup() {
+  local do_setup=0
+  if [[ $FORCE_SETUP -eq 1 || ! -f "$SETUP_FLAG_FILE" ]]; then do_setup=1; fi
+  if [[ $do_setup -eq 1 ]]; then
+    local reply
+    if [[ $SKIP_SETUP_PROMPT -eq 1 ]]; then
+      reply="y"
+    else
+      read -r -p "Run GarminDb setup now? [Y/n] " reply
+    fi
+    reply=${reply:-Y}
+    if [[ "$reply" =~ ^[Yy]$ ]]; then
+      if [[ -x "$SCRIPT_DIR/setup_garmindb.sh" ]]; then
+        "$SCRIPT_DIR/setup_garmindb.sh" || echo "GarminDb setup failed (you can re-run: ./setup_garmindb.sh)"
+        [[ $FORCE_SETUP -eq 0 ]] && touch "$SETUP_FLAG_FILE"
+      else
+        echo "Missing setup script: $SCRIPT_DIR/setup_garmindb.sh"
+      fi
+    else
+      [[ $FORCE_SETUP -eq 0 ]] && touch "$SETUP_FLAG_FILE"
+    fi
+  fi
+}
 
-echo -e "${BLUE}📦 Building and starting services (detached)...${NC}"
+maybe_run_setup
+
+# Build and start services
 SERVICES=(db backend)
-if [ "$WITH_LLM" -eq 1 ]; then
-  SERVICES+=(llm)
+[[ "$WITH_LLM" -eq 1 ]] && SERVICES+=(llm)
+if [[ -n "$UVICORN_WORKERS" ]]; then
+  (UVICORN_WORKERS="$UVICORN_WORKERS" $DOCKER_CMD up -d --build "${SERVICES[@]}") || { echo "Error starting docker compose"; exit 1; }
+else
+  ($DOCKER_CMD up -d --build "${SERVICES[@]}") || { echo "Error starting docker compose"; exit 1; }
 fi
-($DOCKER_CMD up -d --build "${SERVICES[@]}") || { echo -e "${RED}❌ Error while starting docker compose${NC}"; exit 1; }
 
-# Wait for backend (health endpoint)
-echo -e "${YELLOW}⏳ Waiting for backend at http://localhost:5002/api/stats ...${NC}"
+echo "Waiting for backend (http://localhost:5002/api/health) ..."
 for i in {1..60}; do
-    if curl -s http://localhost:5002/api/stats >/dev/null 2>&1; then
-        echo -e "${GREEN}✅ Backend ready at http://localhost:5002${NC}"
-        break
-    fi
-    sleep 1
-    if [ $i -eq 60 ]; then
-        echo -e "${RED}❌ Backend did not respond within 60s. Check container logs: $DOCKER_CMD logs <backend>${NC}"
-        exit 1
-    fi
+  if curl -sf "http://localhost:5002/api/health" >/dev/null 2>&1; then
+    echo "Backend ready at http://localhost:5002"; break
+  fi
+  sleep 1
+  [[ $i -eq 60 ]] && { echo "Backend did not respond within 60s"; exit 1; }
 done
 
-if [ "$WITH_FRONTEND" -eq 1 ]; then
-    echo -e "${BLUE}🚀 Starting local React dev server (optional)...${NC}"
-    FE_DIR="$SCRIPT_DIR/Diary-AI-FE/frontend-react"
-    cd "$FE_DIR"
-    # choose the first free port 3000-3010
-    for p in {3000..3010}; do
-        if ! lsof -Pi :$p -sTCP:LISTEN -t >/dev/null; then
-            FRONTEND_PORT=$p
-            break
-        fi
-    done
-    echo -e "${GREEN}🌐 Frontend will be available at: http://localhost:${FRONTEND_PORT}${NC}"
-    if [ ! -d node_modules ]; then
-        echo -e "${BLUE}📦 Installing frontend dependencies...${NC}"
-        npm install
-    fi
-    echo -e "${YELLOW}ℹ️  To stop the frontend press Ctrl+C${NC}"
-    trap 'echo -e "${YELLOW}\n🛑 Stopping local frontend...${NC}"; pkill -f "react-scripts" || true; exit 0' SIGINT SIGTERM
-    PORT=$FRONTEND_PORT npm start
+if [[ "$WITH_FRONTEND" -eq 1 ]]; then
+  FE_DIR="$SCRIPT_DIR/Diary-AI-FE/frontend-react"
+  cd "$FE_DIR"
+  # pick free port 3000-3010
+  for p in {3000..3010}; do
+    if ! lsof -Pi :$p -sTCP:LISTEN -t >/dev/null; then FRONTEND_PORT=$p; break; fi
+  done
+  echo "Frontend: http://localhost:${FRONTEND_PORT}"
+  if [[ ! -d node_modules ]]; then npm install; fi
+  trap 'pkill -f "react-scripts" || true; exit 0' SIGINT SIGTERM
+  PORT=$FRONTEND_PORT npm start
 else
-    echo -e "${GREEN}✅ Services started via Docker Compose. Backend should be available at http://localhost:5002${NC}"
-    echo -e "${YELLOW}ℹ️  If you also want a local frontend, run: ./start_all.sh --with-frontend${NC}"
+  echo "Services started. Backend: http://localhost:5002"
+  echo "To start the frontend: ./start_all.sh --with-frontend"
 fi

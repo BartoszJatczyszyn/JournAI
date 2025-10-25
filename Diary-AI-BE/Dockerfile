@@ -31,13 +31,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY Diary-AI-BE/requirements.txt ./requirements.txt
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Copy backend scripts
-COPY Diary-AI-BE/scripts ./scripts
-COPY Diary-AI-BE/backend_api_enhanced.py ./backend_api_enhanced.py
+# Copy backend code (app package)
+COPY Diary-AI-BE/app ./app
 COPY Diary-AI-BE/run_migration.py ./run_migration.py
 COPY Diary-AI-BE/config.env.example ./config.env.example
 # Drop heavy model artifacts from image (mounted as volume at runtime)
-RUN rm -rf ./scripts/analytics/models/* || true
+RUN rm -rf ./app/analytics/models/* || true
 
 # Non-root user for security
 RUN useradd -m appuser && chown -R appuser:appuser /app
@@ -45,10 +44,11 @@ USER appuser
 
 ENV PORT=5002 \
     HOST=0.0.0.0 \
-    APP_MODULE=scripts.backend_api_enhanced:app \
-    PYTHONPATH=/app/scripts
+    APP_MODULE=app.backend_api_enhanced:app \
+    PYTHONPATH=/app/app \
+    WORKERS=2
 
 EXPOSE 5002
 
-# Entry: start uvicorn FastAPI server
-ENTRYPOINT ["uvicorn", "scripts.backend_api_enhanced:app", "--host", "0.0.0.0", "--port", "5002"]
+# Entry: start uvicorn FastAPI server with configurable workers (default 2)
+ENTRYPOINT ["sh", "-c", "uvicorn app.backend_api_enhanced:app --host 0.0.0.0 --port ${PORT:-5002} --workers ${WORKERS:-2}"]

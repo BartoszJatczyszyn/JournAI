@@ -1,0 +1,101 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import date
+from typing import Any, Dict
+
+from db import execute_query, async_execute_query
+
+
+@dataclass
+class JournalService:
+    
+    def get_entry(self, day: date) -> Dict[str, Any] | None:
+        query = "SELECT * FROM daily_journal WHERE day = %s"
+        entry = execute_query(query, (day,), fetch_one=True)
+        if entry and entry.get("day"):
+            try:
+                entry["day"] = entry["day"].isoformat()
+            except Exception:
+                pass
+        return entry
+
+    def get_latest(self, create_if_missing: bool = True) -> Dict[str, Any]:
+        today = date.today()
+        current = self.get_entry(today)
+        if current:
+            return {"day": current.get("day"), "entry": current, "is_today": True, "created": False}
+        latest_row = execute_query(
+            "SELECT * FROM daily_journal ORDER BY day DESC LIMIT 1", (), fetch_one=True
+        )
+        if latest_row and latest_row.get("day"):
+            try:
+                latest_row["day"] = latest_row["day"].isoformat()
+            except Exception:
+                pass
+            return {"day": latest_row.get("day"), "entry": latest_row, "is_today": False, "created": False}
+        if create_if_missing:
+            self.upsert_entry(today, {})
+            stub = self.get_entry(today)
+            return {
+                "day": stub.get("day") if stub else today.isoformat(),
+                "entry": stub or {"day": today.isoformat()},
+                "is_today": True,
+                "created": True,
+            }
+        raise ValueError("no journal entries yet")
+
+    def upsert_entry(self, day: date, data: Dict[str, Any]) -> bool:
+        """Upsert entry using ON CONFLICT(day) DO UPDATE with dynamic fields."""
+        if not data:
+            # Insert empty row to ensure existence
+            query = "INSERT INTO daily_journal(day) VALUES(%s) ON CONFLICT(day) DO NOTHING"
+            return bool(execute_query(query, (day,), fetch_all=False))
+
+        # Build dynamic upsert
+        columns = ["day"] + list(data.keys())
+        values = [day] + list(data.values())
+
+        placeholders = ", ".join(["%s"] * len(columns))
+        col_list = ", ".join(columns)
+        set_clause = ", ".join([f"{k} = EXCLUDED.{k}" for k in data.keys()])
+
+        query = (
+            f"INSERT INTO daily_journal ({col_list}) VALUES ({placeholders}) "
+            f"ON CONFLICT(day) DO UPDATE SET {set_clause}"
+        )
+        return bool(execute_query(query, tuple(values), fetch_all=False))
+
+
+@dataclass
+class AsyncJournalService:
+    
+    async def get_entry(self, day: date) -> Dict[str, Any] | None:
+        query = "SELECT * FROM daily_journal WHERE day = %s"
+        entry = await async_execute_query(query, (day,), fetch_one=True)
+        if entry and entry.get("day"):
+            try:
+                entry["day"] = entry["day"].isoformat()
+            except Exception:
+                pass
+        return entry
+
+    async def upsert_entry(self, day: date, data: Dict[str, Any]) -> bool:
+        if not data:
+            query = "INSERT INTO daily_journal(day) VALUES(%s) ON CONFLICT(day) DO NOTHING"
+            res = await async_execute_query(query, (day,), fetch_all=False)
+            return bool(res)
+        columns = ["day"] + list(data.keys())
+        values = [day] + list(data.values())
+        placeholders = ", ".join(["%s"] * len(columns))
+        col_list = ", ".join(columns)
+        set_clause = ", ".join([f"{k} = EXCLUDED.{k}" for k in data.keys()])
+        query = (
+            f"INSERT INTO daily_journal ({col_list}) VALUES ({placeholders}) "
+            f"ON CONFLICT(day) DO UPDATE SET {set_clause}"
+        )
+        res = await async_execute_query(query, tuple(values), fetch_all=False)
+        return bool(res)
+
+
+__all__ = ["JournalService", "AsyncJournalService"]

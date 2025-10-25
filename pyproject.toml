@@ -1,0 +1,53 @@
+[tool.black]
+line-length = 120
+# Target Python version referenced in README (local non-Docker dev)
+target-version = ["py313"]
+include = "\.(py|pyi)$"
+exclude = [
+  "^node_modules/",
+  "^.venv/",
+  "^venv/",
+  "^Diary-AI-FE/frontend-react/build/",
+  "^.git/",
+  "^models/",
+]
+
+[tool.ruff]
+line-length = 120
+# Lint Python files only; ruff will discover files automatically.
+include = ["**/*.py", "**/*.pyi"]
+exclude = [
+  ".git",
+  "__pycache__",
+  "build",
+  "dist",
+  "node_modules",
+  ".venv",
+  "venv",
+  "Diary-AI-FE/frontend-react/build",
+]
+
+[tool.ruff.lint]
+# Enable common rulesets: pycodestyle (E), pyflakes (F), isort (I)
+select = ["E", "F", "I"]
+# Ignore a couple of style conflicts with Black
+ignore = ["E203", "E266", "E501", "W503"]
+
+[tool.ruff.lint.isort]
+# Keep imports tidy
+combine-as-imports = true
+force-sort-within-sections = true
+
+[tool.flake8]
+max-line-length = 120
+extend-ignore = ["E203", "W503"]
+exclude = [
+  ".git",
+  "__pycache__",
+  "build",
+  "dist",
+  "node_modules",
+  ".venv",
+  "venv",
+  "Diary-AI-FE/frontend-react/build",
+]
