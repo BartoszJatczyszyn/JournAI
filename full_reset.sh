@@ -192,6 +192,17 @@ fi
 
 echo "Migration finished successfully"
 
+# 7b. Apply Strength (Gym) schema + seed inside backend container
+echo "Applying Strength schema (tables, views) and seeding exercises..."
+set +e
+docker exec journal_ai_backend python -m app.migrations.apply_strength_schema
+STR_STATUS=$?
+set -e
+if [ $STR_STATUS -ne 0 ]; then
+  echo "Strength schema apply failed (code $STR_STATUS) — check logs: docker compose logs backend"
+  exit $STR_STATUS
+fi
+
 # 8. (Optional) start frontend locally
 if [ $WITH_FRONTEND -eq 1 ]; then
   echo "Starting React frontend locally..."

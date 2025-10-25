@@ -177,6 +177,7 @@ const Gym = () => {
             <option value={365}>Last 1 year</option>
           </select>
           <Button as={Link} to="/gym/workouts" variant="primary">Open Workouts</Button>
+          <Button as={Link} to="/strength/workout/new" variant="secondary">New Strength Workout</Button>
         </div>
       </div>
 

@@ -25,6 +25,7 @@ from app.blueprints import (
     insights_router,
     journal_router,
     llm_router,
+    strength_router,
     predictions_router,
     sleeps_router,
     trends_router,
@@ -145,6 +146,7 @@ app.include_router(sleeps_router, prefix="/api")
 app.include_router(trends_router, prefix="/api")
 app.include_router(journal_router, prefix="/api")
 app.include_router(gym_router, prefix="/api")
+app.include_router(strength_router, prefix="/api")
 app.include_router(llm_router, prefix="/api")
 app.include_router(weight_router, prefix="/api")
 

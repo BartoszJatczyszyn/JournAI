@@ -22,6 +22,9 @@ import Hiking from './pages/Hiking';
 import Swimming from './pages/Swimming';
 import Gym from './pages/Gym';
 import GymWorkouts from './pages/GymWorkouts';
+import StrengthWorkoutForm from './pages/StrengthWorkoutForm';
+import ExerciseAnalysis from './pages/ExerciseAnalysis';
+import MuscleGroupAnalysis from './pages/MuscleGroupAnalysis';
 import Insights from './pages/Insights';
 import Settings from './pages/Settings';
 import Assistant from './pages/Assistant';
@@ -100,6 +103,9 @@ function App() {
                   <Route path="/swimming" element={<Swimming />} />
                   <Route path="/gym" element={<Gym />} />
                   <Route path="/gym/workouts" element={<GymWorkouts />} />
+                  <Route path="/strength/workout/new" element={<StrengthWorkoutForm />} />
+                  <Route path="/strength/exercise/:id" element={<ExerciseAnalysis />} />
+                  <Route path="/strength/muscle/:id" element={<MuscleGroupAnalysis />} />
                   <Route path="/insights" element={<Insights />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/assistant" element={<Assistant />} />

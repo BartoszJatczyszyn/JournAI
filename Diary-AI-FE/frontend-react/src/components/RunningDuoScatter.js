@@ -15,6 +15,7 @@ export default function RunningDuoScatter({ duo }) {
     step_length_vs_pace: { x:'Step Length (m)', y:'Avg Pace' },
     vertical_osc_vs_pace: { x:'Vertical Osc (cm?)', y:'Avg Pace' },
     ground_contact_vs_pace: { x:'Ground Contact (ms)', y:'Avg Pace' },
+    pace_vs_hr: { x:'Avg Pace', y:'Avg HR' },
   };
   const meta = labels[key] || { x:'X', y:'Y' };
   return (

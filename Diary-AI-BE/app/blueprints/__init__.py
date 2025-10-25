@@ -12,6 +12,7 @@ from presentation.routers import (
     trends_router,
     journal_router,
     gym_router,
+    strength_router,
     llm_router,
     weight_router,
 )
@@ -27,6 +28,7 @@ __all__ = [
     "trends_router",
     "journal_router",
     "gym_router",
+    "strength_router",
     "llm_router",
     "weight_router",
     

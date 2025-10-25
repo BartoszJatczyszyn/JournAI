@@ -11,6 +11,7 @@ from .core import router as core_router
 from .trends import router as trends_router
 from .journal import router as journal_router
 from .gym import router as gym_router
+from .strength import router as strength_router
 from .llm import router as llm_router
 from .weight import router as weight_router
 
@@ -25,6 +26,7 @@ __all__ = [
     "trends_router",
     "journal_router",
     "gym_router",
+    "strength_router",
     "llm_router",
     "weight_router",
 ]

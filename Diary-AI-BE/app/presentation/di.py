@@ -13,12 +13,14 @@ from application.services.llm_service import LLMService
 from application.services.admin_service import AdminService
 from application.services.core_service import CoreService
 from application.services.journal_analytics_service import JournalAnalyticsService
+from application.services.strength_service import StrengthService
 
 # Repositories (infrastructure)
 from infrastructure.repositories.activities_postgres import PostgresActivitiesRepository
 from infrastructure.repositories.sleeps_postgres import PostgresSleepsRepository
 from infrastructure.repositories.weight_postgres import PostgresWeightRepository
 from infrastructure.repositories.gym_postgres import PostgresGymRepository
+from infrastructure.repositories.strength_postgres import PostgresStrengthRepository
 
 
 class DIContainer:
@@ -41,10 +43,12 @@ class DIContainer:
         self._admin_service = None
         self._core_service = None
         self._journal_analytics_service = None
+        self._strength_service = None
         self._activities_repo = None
         self._sleeps_repo = None
         self._weight_repo = None
         self._gym_repo = None
+        self._strength_repo = None
 
     # Repositories
     def activities_repo(self) -> PostgresActivitiesRepository:
@@ -66,6 +70,11 @@ class DIContainer:
         if not self._gym_repo:
             self._gym_repo = PostgresGymRepository()
         return self._gym_repo
+
+    def strength_repo(self) -> PostgresStrengthRepository:
+        if not self._strength_repo:
+            self._strength_repo = PostgresStrengthRepository()
+        return self._strength_repo
 
     # Services
     def analytics_service(self) -> AnalyticsService:
@@ -122,6 +131,11 @@ class DIContainer:
         if not self._journal_analytics_service:
             self._journal_analytics_service = JournalAnalyticsService()
         return self._journal_analytics_service
+
+    def strength_service(self) -> StrengthService:
+        if not self._strength_service:
+            self._strength_service = StrengthService(self.strength_repo())
+        return self._strength_service
 
 
 di = DIContainer()

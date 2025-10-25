@@ -207,6 +207,39 @@ input:focus, select:focus, textarea:focus {
   background: rgba(255,255,255,0.08);
 }
 
+/* Improve readability of inputs in dark mode: white text and placeholders */
+.dark input, .dark select, .dark textarea,
+.dark .input-glass, .dark .select-glass, .dark .textarea-glass {
+  color: #ffffff;
+  border-color: rgba(148,163,184,0.35);
+  caret-color: #ffffff;
+}
+
+/* Placeholders: ensure high-contrast white-ish text in dark theme */
+.dark input::placeholder,
+.dark textarea::placeholder,
+.dark .input-glass::placeholder,
+.dark .textarea-glass::placeholder {
+  color: rgba(255,255,255,0.92);
+  opacity: 1; /* Firefox */
+}
+/* Vendor placeholder fallbacks */
+.dark input::-webkit-input-placeholder,
+.dark textarea::-webkit-input-placeholder { color: rgba(255,255,255,0.92); }
+.dark input::-moz-placeholder,
+.dark textarea::-moz-placeholder { color: rgba(255,255,255,0.92); }
+.dark input:-ms-input-placeholder,
+.dark textarea:-ms-input-placeholder { color: rgba(255,255,255,0.92); }
+.dark input::-ms-input-placeholder,
+.dark textarea::-ms-input-placeholder { color: rgba(255,255,255,0.92); }
+
+/* Focus ring: slightly brighter for dark background */
+.dark input:focus, .dark select:focus, .dark textarea:focus,
+.dark .input-glass:focus, .dark .select-glass:focus, .dark .textarea-glass:focus {
+  border-color: rgba(99,102,241,0.55);
+  box-shadow: 0 0 0 4px rgba(99,102,241,0.28), 0 6px 18px rgba(0,0,0,0.30);
+}
+
 /* Cards */
 .card-header { border-bottom: 1px solid rgba(15,23,42,0.06); padding: var(--space-5) var(--space-5); }
 .card-title { margin: 0; font-size: 1rem; font-weight: 700; }
