@@ -216,7 +216,7 @@ const SleepHistogram = ({
         )}
       </div>
 
-      <style jsx>{`
+  <style>{`
         /* tooltip styling unified in src/index.css */
       `}</style>
     </div>

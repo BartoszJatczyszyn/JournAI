@@ -111,35 +111,29 @@ class PostgresStrengthRepository(IStrengthRepository):
     # ------------- Workouts -------------
     def create_workout(self, payload: dict) -> dict:
         self.ensure_tables()
-        # Insert session
-        session_row = execute_query(
-            """
-            INSERT INTO workout_sessions(user_id, started_at, name, notes, duration_minutes)
-            VALUES(%s, COALESCE(%s, NOW()), %s, %s, %s)
-            RETURNING id, user_id, started_at, name, notes, duration_minutes
-            """,
-            (
-                payload.get("userId"),
-                payload.get("startedAt"),
-                payload.get("name"),
-                payload.get("notes"),
-                payload.get("durationMinutes"),
-            ),
+        activity_id = payload.get("activityId")
+        if not activity_id:
+            raise ValueError("activityId is required to attach strength logs to a Garmin activity")
+        # verify activity exists and is strength_training
+        a = execute_query(
+            "SELECT activity_id, start_time, name, sub_sport FROM garmin_activities WHERE activity_id=%s",
+            (activity_id,),
             fetch_one=True,
             fetch_all=False,
         )
-        session_id = session_row["id"]
-        # Insert logs + sets
+        if not a:
+            raise ValueError("Garmin activity not found")
+        # Insert logs + sets linked to garmin activity
         out_logs: list[dict] = []
         for idx, ex in enumerate(payload.get("exercises", []) or []):
             log_row = execute_query(
                 """
-                INSERT INTO exercise_logs(workout_session_id, exercise_definition_id, ord, notes)
+                INSERT INTO exercise_logs(garmin_activity_id, exercise_definition_id, ord, notes)
                 VALUES(%s,%s,%s,%s)
-                RETURNING id, workout_session_id, exercise_definition_id, ord, notes
+                RETURNING id, garmin_activity_id, exercise_definition_id, ord, notes
                 """,
                 (
-                    session_id,
+                    activity_id,
                     ex.get("exerciseDefinitionId"),
                     ex.get("order") or (idx + 1),
                     ex.get("notes"),
@@ -171,16 +165,21 @@ class PostgresStrengthRepository(IStrengthRepository):
             log_row["sets"] = out_sets
             out_logs.append(log_row)
 
-        session_row["exercises"] = out_logs
-        return session_row
+        return {"activity_id": activity_id, "start_time": a.get("start_time"), "name": a.get("name"), "sub_sport": a.get("sub_sport"), "exercises": out_logs}
 
     def get_workout(self, workout_id: int) -> Optional[dict]:
         self.ensure_tables()
-        ws = execute_query("SELECT * FROM workout_sessions WHERE id=%s", (workout_id,), fetch_one=True, fetch_all=False)
-        if not ws:
+        # Treat workout_id as garmin activity id
+        a = execute_query(
+            "SELECT activity_id, start_time, name, sub_sport FROM garmin_activities WHERE activity_id=%s",
+            (workout_id,),
+            fetch_one=True,
+            fetch_all=False,
+        )
+        if not a:
             return None
         logs = execute_query(
-            "SELECT * FROM exercise_logs WHERE workout_session_id=%s ORDER BY ord, id",
+            "SELECT * FROM exercise_logs WHERE garmin_activity_id=%s ORDER BY ord, id",
             (workout_id,),
             fetch_all=True,
         ) or []
@@ -191,50 +190,100 @@ class PostgresStrengthRepository(IStrengthRepository):
                 fetch_all=True,
             ) or []
             log["sets"] = sets
-        ws["exercises"] = logs
-        # Attach metrics
-        sess_metrics = execute_query(
-            "SELECT total_session_volume FROM v_workout_session_metrics WHERE workout_session_id=%s",
+        out = {"id": a.get("activity_id"), "start_time": a.get("start_time"), "name": a.get("name"), "sub_sport": a.get("sub_sport"), "exercises": logs}
+        # Attach metrics based on activity
+        am = execute_query(
+            "SELECT total_activity_volume FROM v_strength_activity_metrics WHERE garmin_activity_id=%s",
             (workout_id,),
             fetch_one=True,
             fetch_all=False,
         )
-        ws["metrics"] = {"totalVolume": (sess_metrics or {}).get("total_session_volume", 0)}
-        return ws
+        out["metrics"] = {"totalVolume": (am or {}).get("total_activity_volume", 0)}
+        return out
 
-    def list_workouts(self, *, limit: int = 50, offset: int = 0, user_id: str | None = None) -> list[dict]:
+    def list_workouts(self, *, limit: int = 50, offset: int = 0) -> list[dict]:
         self.ensure_tables()
-        if user_id:
-            rows = execute_query(
-                "SELECT * FROM workout_sessions WHERE user_id=%s ORDER BY started_at DESC LIMIT %s OFFSET %s",
-                (user_id, limit, offset),
-                fetch_all=True,
-            ) or []
-        else:
-            rows = execute_query(
-                "SELECT * FROM workout_sessions ORDER BY started_at DESC LIMIT %s OFFSET %s",
-                (limit, offset),
-                fetch_all=True,
-            ) or []
-        return rows
+        params: list = []
+        where = ["LOWER(COALESCE(sub_sport,'')) = 'strength_training'"]
+        sql = (
+            "SELECT activity_id AS id, start_time, name, sub_sport FROM garmin_activities "
+            + ("WHERE " + " AND ".join(where) if where else "") +
+            " ORDER BY start_time DESC LIMIT %s OFFSET %s"
+        )
+        params.extend([limit, offset])
+        return execute_query(sql, tuple(params), fetch_all=True) or []
+
+    def update_workout(self, workout_id: int, payload: dict) -> dict:
+        self.ensure_tables()
+        # Replace logs and sets for the garmin activity
+        execute_query("DELETE FROM exercise_sets WHERE exercise_log_id IN (SELECT id FROM exercise_logs WHERE garmin_activity_id=%s)", (workout_id,), fetch_all=False, fetch_one=False)
+        execute_query("DELETE FROM exercise_logs WHERE garmin_activity_id=%s", (workout_id,), fetch_all=False, fetch_one=False)
+
+        out_logs: list[dict] = []
+        for idx, ex in enumerate(payload.get("exercises", []) or []):
+            log_row = execute_query(
+                """
+                INSERT INTO exercise_logs(garmin_activity_id, exercise_definition_id, ord, notes)
+                VALUES(%s,%s,%s,%s)
+                RETURNING id, garmin_activity_id, exercise_definition_id, ord, notes
+                """,
+                (
+                    workout_id,
+                    ex.get("exerciseDefinitionId"),
+                    ex.get("order") or (idx + 1),
+                    ex.get("notes"),
+                ),
+                fetch_one=True,
+                fetch_all=False,
+            )
+            log_id = log_row["id"]
+            out_sets: list[dict] = []
+            for s in ex.get("sets", []) or []:
+                set_row = execute_query(
+                    """
+                    INSERT INTO exercise_sets(exercise_log_id, set_number, reps, weight, rpe, is_warmup)
+                    VALUES(%s,%s,%s,%s,%s,%s)
+                    RETURNING id, exercise_log_id, set_number, reps, weight, rpe, is_warmup
+                    """,
+                    (
+                        log_id,
+                        s.get("setNumber"),
+                        s.get("reps"),
+                        s.get("weight"),
+                        s.get("rpe"),
+                        bool(s.get("isWarmup", False)),
+                    ),
+                    fetch_one=True,
+                    fetch_all=False,
+                )
+                out_sets.append(set_row)
+            log_row["sets"] = out_sets
+            out_logs.append(log_row)
+
+        session = self.get_workout(workout_id) or {}
+        if session:
+            session["exercises"] = out_logs
+        return session
 
     def delete_workout(self, workout_id: int) -> bool:
         self.ensure_tables()
-        res = execute_query("DELETE FROM workout_sessions WHERE id=%s", (workout_id,), fetch_all=False, fetch_one=False)
-        return bool(res)
+        # Only delete attached strength logs; do not delete garmin activity
+        execute_query("DELETE FROM exercise_sets WHERE exercise_log_id IN (SELECT id FROM exercise_logs WHERE garmin_activity_id=%s)", (workout_id,), fetch_all=False, fetch_one=False)
+        execute_query("DELETE FROM exercise_logs WHERE garmin_activity_id=%s", (workout_id,), fetch_all=False, fetch_one=False)
+        return True
 
-    def last_exercise_log(self, exercise_definition_id: int, user_id: str) -> Optional[dict]:
+    def last_exercise_log(self, exercise_definition_id: int) -> Optional[dict]:
         self.ensure_tables()
+        params = [exercise_definition_id]
         row = execute_query(
-            """
-            SELECT el.id AS exercise_log_id, ws.started_at, ws.id AS workout_session_id
-            FROM exercise_logs el
-            JOIN workout_sessions ws ON ws.id = el.workout_session_id
-            WHERE el.exercise_definition_id = %s AND ws.user_id = %s
-            ORDER BY ws.started_at DESC
-            LIMIT 1
-            """,
-            (exercise_definition_id, user_id),
+            (
+                "SELECT el.id AS exercise_log_id, ga.start_time, ga.activity_id AS garmin_activity_id\n"
+                "FROM exercise_logs el\n"
+                "JOIN garmin_activities ga ON ga.activity_id = el.garmin_activity_id\n"
+                "WHERE el.exercise_definition_id = %s AND LOWER(COALESCE(ga.sub_sport,'')) = 'strength_training'"
+                " ORDER BY ga.start_time DESC LIMIT 1"
+            ),
+            tuple(params),
             fetch_one=True,
             fetch_all=False,
         )
@@ -249,34 +298,29 @@ class PostgresStrengthRepository(IStrengthRepository):
         return row
 
     # Additional convenience not in protocol: simple exercise stats
-    def exercise_stats(self, exercise_definition_id: int, user_id: Optional[str] = None) -> dict:
+    def exercise_stats(self, exercise_definition_id: int) -> dict:
         self.ensure_tables()
-        # Best e1RM and total volume per session (date = started_at::date)
-        params = [exercise_definition_id]
-        user_clause = ""
-        if user_id:
-            user_clause = " AND ws.user_id = %s"
-            params.append(user_id)
+        # Best e1RM and total volume per activity day
+        params: list = [exercise_definition_id]
         rows = execute_query(
             (
-                "SELECT ws.started_at::date AS day, m.best_e1rm, m.total_volume "
+                "SELECT COALESCE(ga.start_time, NOW())::date AS day, m.best_e1rm, m.total_volume "
                 "FROM v_exercise_log_metrics m "
-                "JOIN workout_sessions ws ON ws.id = m.workout_session_id "
-                "WHERE m.exercise_definition_id = %s" + user_clause + " ORDER BY ws.started_at"
+                "JOIN exercise_logs el ON el.id = m.exercise_log_id "
+                "JOIN garmin_activities ga ON ga.activity_id = el.garmin_activity_id "
+                "WHERE m.exercise_definition_id = %s ORDER BY ga.start_time"
             ),
             tuple(params),
             fetch_all=True,
         ) or []
         return {"series": rows}
 
-    def muscle_group_weekly_volume(self, muscle_group_id: int, weeks: int = 12, user_id: Optional[str] = None) -> list[dict]:
+    def muscle_group_weekly_volume(self, muscle_group_id: int, weeks: int = 12) -> list[dict]:
         self.ensure_tables()
         params = [muscle_group_id, weeks]
-        if user_id:
-            params.insert(1, user_id)
         sql = (
             """
-            SELECT date_trunc('week', ws.started_at)::date AS week,
+            SELECT date_trunc('week', ga.start_time)::date AS week,
                    SUM(
                      CASE WHEN e.primary_muscle_group_id = %s THEN m.total_volume
                           WHEN %s = ANY(e.secondary_muscle_group_ids) THEN m.total_volume * 0.3
@@ -284,26 +328,20 @@ class PostgresStrengthRepository(IStrengthRepository):
                    ) AS total_volume
             FROM v_exercise_log_metrics m
             JOIN exercise_definitions e ON e.id = m.exercise_definition_id
-            JOIN workout_sessions ws ON ws.id = m.workout_session_id
-            WHERE ws.started_at >= NOW() - INTERVAL %s
-            """
-            + (" AND ws.user_id = %s" if user_id else "") +
-            """
+            JOIN exercise_logs el ON el.id = m.exercise_log_id
+            JOIN garmin_activities ga ON ga.activity_id = el.garmin_activity_id
+            WHERE ga.start_time >= NOW() - INTERVAL %s AND LOWER(COALESCE(ga.sub_sport,'')) = 'strength_training'
             GROUP BY 1
             ORDER BY 1
             """
         )
-        # Build interval string safely (e.g., '12 weeks')
         interval = f"'{weeks} weeks'"
-        # We can't parametrize the interval keyword easily with psycopg; inline safe constructed string
         sql = sql.replace("%s\n            GROUP BY", interval + "\n            GROUP BY", 1)
-        return execute_query(sql, tuple(params if user_id else [muscle_group_id, muscle_group_id]), fetch_all=True) or []
+        return execute_query(sql, tuple([muscle_group_id, muscle_group_id]), fetch_all=True) or []
 
-    def exercise_contribution_last_month(self, muscle_group_id: int, days: int = 30, user_id: Optional[str] = None) -> list[dict]:
+    def exercise_contribution_last_month(self, muscle_group_id: int, days: int = 30) -> list[dict]:
         self.ensure_tables()
         params = [muscle_group_id]
-        if user_id:
-            params.append(user_id)
         sql = (
             """
             WITH vols AS (
@@ -312,11 +350,9 @@ class PostgresStrengthRepository(IStrengthRepository):
                      + SUM(CASE WHEN %s = ANY(e.secondary_muscle_group_ids) THEN m.total_volume * 0.3 ELSE 0 END) AS volume
               FROM v_exercise_log_metrics m
               JOIN exercise_definitions e ON e.id = m.exercise_definition_id
-              JOIN workout_sessions ws ON ws.id = m.workout_session_id
-              WHERE ws.started_at >= NOW() - INTERVAL %s
-        """
-            + (" AND ws.user_id = %s" if user_id else "") +
-            """
+              JOIN exercise_logs el ON el.id = m.exercise_log_id
+              JOIN garmin_activities ga ON ga.activity_id = el.garmin_activity_id
+              WHERE ga.start_time >= NOW() - INTERVAL %s AND LOWER(COALESCE(ga.sub_sport,'')) = 'strength_training'
               GROUP BY e.id, e.name
             )
             SELECT * FROM vols WHERE volume > 0 ORDER BY volume DESC LIMIT 100
@@ -324,27 +360,22 @@ class PostgresStrengthRepository(IStrengthRepository):
         )
         interval = f"'{days} days'"
         sql = sql.replace("%s\n              GROUP", interval + "\n              GROUP", 1)
-        return execute_query(sql, tuple(params if user_id else [muscle_group_id]), fetch_all=True) or []
+        return execute_query(sql, tuple([muscle_group_id]), fetch_all=True) or []
 
-    def weekly_training_frequency(self, muscle_group_id: int, weeks: int = 12, user_id: Optional[str] = None) -> list[dict]:
+    def weekly_training_frequency(self, muscle_group_id: int, weeks: int = 12) -> list[dict]:
         self.ensure_tables()
         params = [muscle_group_id]
-        if user_id:
-            params.append(user_id)
         sql = (
             """
-            SELECT date_trunc('week', ws.started_at)::date AS week,
-                   COUNT(DISTINCT ws.id) AS sessions
-            FROM workout_sessions ws
-            WHERE ws.started_at >= NOW() - INTERVAL %s
-        """
-            + (" AND ws.user_id = %s" if user_id else "") +
-            """
+            SELECT date_trunc('week', ga.start_time)::date AS week,
+                   COUNT(DISTINCT ga.activity_id) AS sessions
+            FROM garmin_activities ga
+            WHERE ga.start_time >= NOW() - INTERVAL %s AND LOWER(COALESCE(ga.sub_sport,'')) = 'strength_training'
             AND EXISTS (
               SELECT 1
               FROM exercise_logs el
               JOIN exercise_definitions e ON e.id = el.exercise_definition_id
-              WHERE el.workout_session_id = ws.id
+              WHERE el.garmin_activity_id = ga.activity_id
                 AND (e.primary_muscle_group_id = %s OR %s = ANY(e.secondary_muscle_group_ids))
             )
             GROUP BY 1
@@ -353,26 +384,17 @@ class PostgresStrengthRepository(IStrengthRepository):
         )
         interval = f"'{weeks} weeks'"
         sql = sql.replace("%s\n            AND EXISTS", interval + "\n            AND EXISTS", 1)
-        # parameters order: [muscle_group_id] + [user_id?] + [muscle_group_id, muscle_group_id]
-        final_params = []
-        if user_id:
-            final_params = [muscle_group_id, user_id, muscle_group_id, muscle_group_id]
-        else:
-            final_params = [muscle_group_id, muscle_group_id]
+        final_params = [muscle_group_id, muscle_group_id]
         return execute_query(sql, tuple(final_params), fetch_all=True) or []
 
-    def exercise_history(self, exercise_definition_id: int, limit: int = 20, user_id: Optional[str] = None) -> list[dict]:
+    def exercise_history(self, exercise_definition_id: int, limit: int = 20) -> list[dict]:
         self.ensure_tables()
         params = [exercise_definition_id]
-        if user_id:
-            params.append(user_id)
         rows = execute_query(
             (
-                "SELECT el.id AS exercise_log_id, ws.id AS workout_session_id, ws.started_at::date AS day "
-                "FROM exercise_logs el JOIN workout_sessions ws ON ws.id = el.workout_session_id "
-                "WHERE el.exercise_definition_id = %s"
-                + (" AND ws.user_id = %s" if user_id else "") +
-                " ORDER BY ws.started_at DESC LIMIT %s"
+                "SELECT el.id AS exercise_log_id, ga.activity_id AS garmin_activity_id, ga.start_time::date AS day "
+                "FROM exercise_logs el JOIN garmin_activities ga ON ga.activity_id = el.garmin_activity_id "
+                "WHERE el.exercise_definition_id = %s ORDER BY ga.start_time DESC LIMIT %s"
             ),
             tuple(params + [limit]),
             fetch_all=True,
@@ -385,6 +407,73 @@ class PostgresStrengthRepository(IStrengthRepository):
                 fetch_all=True,
             ) or []
         return rows
+
+    # -------- Analytics series --------
+    def exercise_e1rm_progress(self, exercise_definition_id: int) -> list[dict]:
+        self.ensure_tables()
+        params: list = [exercise_definition_id]
+        sql = (
+            "SELECT ga.start_time::date AS day, MAX(m.best_e1rm) AS best_e1rm "
+            "FROM v_exercise_log_metrics m \n"
+            "JOIN exercise_logs el ON el.id = m.exercise_log_id \n"
+            "JOIN garmin_activities ga ON ga.activity_id = el.garmin_activity_id \n"
+            "WHERE m.exercise_definition_id = %s GROUP BY 1 ORDER BY 1"
+        )
+        return execute_query(sql, tuple(params), fetch_all=True) or []
+
+    def workouts_volume_series(self, days: int = 90) -> list[dict]:
+        self.ensure_tables()
+        params: list = []
+        sql = (
+            """
+            SELECT ga.start_time::date AS day, COALESCE(v.total_activity_volume, 0) AS total_volume
+            FROM garmin_activities ga LEFT JOIN v_strength_activity_metrics v ON v.garmin_activity_id = ga.activity_id
+            WHERE LOWER(COALESCE(ga.sub_sport,'')) = 'strength_training' AND ga.start_time >= NOW() - INTERVAL %s
+            ORDER BY day
+            """
+        )
+        interval = f"'{days} days'"
+        sql = sql.replace("%s\n            ORDER BY", interval + "\n            ORDER BY", 1)
+        return execute_query(sql, None, fetch_all=True) or []
+
+    def all_exercises_e1rm_progress(self, days: int = 180) -> list[dict]:
+        self.ensure_tables()
+        params: list = []
+        sql = (
+            """
+            SELECT m.exercise_definition_id, ga.start_time::date AS day, MAX(m.best_e1rm) AS best_e1rm
+            FROM v_exercise_log_metrics m
+            JOIN exercise_logs el ON el.id = m.exercise_log_id
+            JOIN garmin_activities ga ON ga.activity_id = el.garmin_activity_id
+            WHERE ga.start_time >= NOW() - INTERVAL %s AND LOWER(COALESCE(ga.sub_sport,'')) = 'strength_training'
+            GROUP BY m.exercise_definition_id, day
+            ORDER BY m.exercise_definition_id, day
+            """
+        )
+        interval = f"'{days} days'"
+        sql = sql.replace("%s\n            GROUP BY", interval + "\n            GROUP BY", 1)
+        return execute_query(sql, None, fetch_all=True) or []
+
+    # Not in protocol: counts per day to support correlations
+    def daily_strength_counts(self, days: int = 90) -> list[dict]:
+        self.ensure_tables()
+        params: list = []
+        sql = (
+            """
+            SELECT ga.start_time::date AS day,
+                   COUNT(DISTINCT el.id) AS logs_count,
+                   COUNT(es.id) AS sets_count
+            FROM garmin_activities ga
+            LEFT JOIN exercise_logs el ON el.garmin_activity_id = ga.activity_id
+            LEFT JOIN exercise_sets es ON es.exercise_log_id = el.id
+            WHERE LOWER(COALESCE(ga.sub_sport,'')) = 'strength_training' AND ga.start_time >= NOW() - INTERVAL %s
+            GROUP BY 1
+            ORDER BY 1
+            """
+        )
+        interval = f"'{days} days'"
+        sql = sql.replace("%s\n            GROUP BY", interval + "\n            GROUP BY", 1)
+        return execute_query(sql, None, fetch_all=True) or []
 
     # Templates using gym_store bucket as generic JSON storage
     def list_templates(self) -> list[dict]:

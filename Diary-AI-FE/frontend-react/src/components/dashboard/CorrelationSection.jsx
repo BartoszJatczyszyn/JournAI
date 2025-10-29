@@ -1,6 +1,6 @@
 import React from 'react';
 import CorrelationMatrix from '../CorrelationMatrix';
-import { Button } from '../ui';
+import { Button } from 'shared/ui';
 
 const CorrelationSection = ({ correlationsCount, showFullMatrix, onToggleFull, topCorrelations, preparedCorrelations }) => {
   if (!correlationsCount || correlationsCount <= 0) return null;

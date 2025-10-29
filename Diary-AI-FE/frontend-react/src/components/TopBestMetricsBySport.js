@@ -1,8 +1,8 @@
 import React from 'react';
-import { activitiesAPI } from '../services';
+import { activitiesAPI } from 'features/activities/api';
 import LoadingSpinner from './LoadingSpinner';
 import ErrorMessage from './ErrorMessage';
-import { formatPaceMinPerKm } from '../utils/timeUtils';
+import { formatPaceMinPerKm, formatDuration } from '../utils/timeUtils';
 
 // Sports to render and their default ranking metric
 const SPORT_CONFIG = {
@@ -19,6 +19,7 @@ const METRIC_OPTIONS = [
   { value: 'duration', label: 'Duration (min)', defaultAsc: false },
   { value: 'pace', label: 'Avg Pace (min/km)', defaultAsc: true }, // lower is better
   { value: 'calories', label: 'Calories', defaultAsc: false },
+  { value: 'avg_hr', label: 'Avg HR (bpm)', defaultAsc: false },
 ];
 const DEFAULT_ASC_FOR = (metric) => (metric === 'pace');
 
@@ -73,6 +74,7 @@ function rankActivities(activities, sportKey, sortBy, asc) {
         if (metric === 'pace') return a.avg_pace != null && Number.isFinite(Number(a.avg_pace));
         if (metric === 'duration') return a.duration_min != null && Number.isFinite(Number(a.duration_min));
         if (metric === 'calories') return a.calories != null && Number.isFinite(Number(a.calories));
+        if (metric === 'avg_hr') return a.avg_hr != null && Number.isFinite(Number(a.avg_hr));
         // distance
         return a.distance_km != null && Number.isFinite(Number(a.distance_km));
       };
@@ -102,6 +104,7 @@ function rankActivities(activities, sportKey, sortBy, asc) {
       case 'pace': return a.avg_pace != null ? Number(a.avg_pace) : Infinity; // lower is better
       case 'duration': return a.duration_min != null ? Number(a.duration_min) : -Infinity;
       case 'calories': return a.calories != null ? Number(a.calories) : -Infinity;
+        case 'avg_hr': return a.avg_hr != null ? Number(a.avg_hr) : -Infinity;
       case 'distance':
       default: return a.distance_km != null ? Number(a.distance_km) : -Infinity;
     }
@@ -256,8 +259,8 @@ export default function TopBestMetricsBySport({ limit = 2000, defaultTopN = 5 })
                 {rows.map((a) => {
                   const d = a.start_time ? new Date(a.start_time) : null;
                   const dateStr = d && !isNaN(d.getTime()) ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}` : '-';
-                  const dist = a.distance_km != null ? `${Number(a.distance_km).toFixed(2)} km` : '-';
-                  const dur = a.duration_min != null ? `${Number(a.duration_min).toFixed(0)} min` : '-';
+                  const dist = a.distance_km != null ? `${Number(a.distance_km).toFixed(3)} km` : '-';
+                  const dur = a.duration_min != null ? formatDuration(a.duration_min, 'minutes') : '-';
                   const paceVal = a.avg_pace != null && Number.isFinite(Number(a.avg_pace)) ? Number(a.avg_pace) : null;
                   const paceStr = paceVal != null ? `${formatPaceMinPerKm(paceVal)} min/km` : '-';
                   const hr = a.avg_hr != null ? Number(a.avg_hr).toFixed(0) : '-';
@@ -266,6 +269,7 @@ export default function TopBestMetricsBySport({ limit = 2000, defaultTopN = 5 })
                   const distHighlight = pref.sortBy === 'distance' && a.distance_km != null;
                   const durHighlight = pref.sortBy === 'duration' && a.duration_min != null;
                   const calHighlight = pref.sortBy === 'calories' && a.calories != null;
+                  const hrHighlight = pref.sortBy === 'avg_hr' && a.avg_hr != null;
                   return (
                     <tr key={a.activity_id} className="border-b hover:bg-gray-50 dark:hover:bg-gray-800">
                       <Cell>{dateStr}</Cell>
@@ -279,7 +283,9 @@ export default function TopBestMetricsBySport({ limit = 2000, defaultTopN = 5 })
                       <Cell>
                         <span className={paceHighlight ? 'font-semibold text-green-600 dark:text-green-400' : ''}>{paceStr}</span>
                       </Cell>
-                      <Cell>{hr}</Cell>
+                      <Cell>
+                        <span className={hrHighlight ? 'font-semibold text-red-600 dark:text-red-400' : ''}>{hr}</span>
+                      </Cell>
                       <Cell>
                         <span className={calHighlight ? 'font-semibold text-amber-600 dark:text-amber-400' : ''}>{cal}</span>
                       </Cell>

@@ -203,6 +203,17 @@ if [ $STR_STATUS -ne 0 ]; then
   exit $STR_STATUS
 fi
 
+# 7c. Apply SQL migrations (timestamped .sql files under app/migrations)
+echo "Applying SQL migrations (.sql files)..."
+set +e
+docker exec journal_ai_backend python -m app.migrations.run_sql_migrations
+SQL_MIG_STATUS=$?
+set -e
+if [ $SQL_MIG_STATUS -ne 0 ]; then
+  echo "SQL migrations failed (code $SQL_MIG_STATUS) — check logs: docker compose logs backend"
+  exit $SQL_MIG_STATUS
+fi
+
 # 8. (Optional) start frontend locally
 if [ $WITH_FRONTEND -eq 1 ]; then
   echo "Starting React frontend locally..."

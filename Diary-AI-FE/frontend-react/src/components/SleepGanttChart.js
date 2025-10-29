@@ -248,7 +248,7 @@ const SleepGanttChart = ({
         </ComposedChart>
       </ResponsiveContainer>
 
-      <style jsx>{`
+  <style>{`
         /* Tooltip visuals unified in src/index.css — component keeps only small layout/color overrides below */
         :global(.sleep-gantt-chart .tooltip-number) { font-weight: 600; color: ${barColor}; }
         :global(.sleep-gantt-chart .tooltip-extra) { color: #ffffff; margin-top: 6px; font-size: 0.85rem; }

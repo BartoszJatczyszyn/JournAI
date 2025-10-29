@@ -63,7 +63,7 @@ const SleepTimingAnalysis = ({ timing, derivedTiming, timeseries, analysisParams
               </div>
             </div>
 
-            <style jsx>{`
+            <style>{`
               .timing-stats { display: grid; gap: 16px; }
               .timing-stat.enhanced { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: center; padding: 16px; border-radius: 12px; background: var(--card-bg, rgba(148,163,184,0.08)); border: 1px solid var(--glass-border, rgba(148,163,184,0.15)); box-shadow: var(--glass-shadow, 0 4px 20px rgba(0,0,0,0.08)); }
               .stat-left { display: flex; align-items: center; gap: 12px; }

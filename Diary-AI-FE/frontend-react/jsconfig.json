@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "baseUrl": "src",
+    "paths": {
+      "app/*": ["app/*"],
+      "features/*": ["features/*"],
+      "entities/*": ["entities/*"],
+      "widgets/*": ["widgets/*"],
+      "shared/*": ["shared/*"],
+      "components/*": ["components/*"],
+      "hooks/*": ["hooks/*"],
+      "utils/*": ["utils/*"],
+      "infrastructure/*": ["infrastructure/*"],
+      "context/*": ["app/providers/*"]
+    }
+  },
+  "exclude": ["node_modules", "build"]
+}

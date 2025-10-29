@@ -1,6 +1,6 @@
 import React from 'react';
-import useCurrentWeight from '../hooks/useCurrentWeight';
-import { healthAPI } from '../services';
+import { useCurrentWeight } from 'hooks';
+import { healthAPI } from '../features/health/api';
 import TrendSparkline from './TrendSparkline';
 
 function formatDelta(v) {

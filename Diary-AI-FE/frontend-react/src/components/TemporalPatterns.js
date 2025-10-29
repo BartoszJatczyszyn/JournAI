@@ -785,7 +785,7 @@ const TemporalPatterns = ({ data }) => {
         </div>
       )}
 
-      <style jsx>{`
+  <style>{`
         :root {
           --c-bg: #ffffff;
           --c-bg-subtle: #f8fafc;

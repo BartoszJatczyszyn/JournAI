@@ -57,7 +57,7 @@ const DataOverviewCard = ({ stats }) => {
           <div className="stat-label">Date Span</div>
         </div>
       </div>
-      <style jsx>{`
+  <style>{`
         .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:16px; }
         .stat-item { background:var(--card-alt-bg,#f8fafc); padding:12px 10px; border-radius:8px; text-align:center; }
         .dark .stat-item { background:#334155; }

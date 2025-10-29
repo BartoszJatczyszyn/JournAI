@@ -1,8 +1,7 @@
 import React from 'react';
 import RatingInput from './RatingInput';
 import TrendSparkline from './TrendSparkline';
-import useJournalContext from '../hooks/useJournalContext';
-import useJournalSync from '../hooks/useJournalSync';
+import { useJournalContext, useJournalSync } from 'hooks';
 
 // Numeric-only fields we keep as number inputs
 const numericFields = [

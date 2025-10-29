@@ -25,7 +25,7 @@ class ExerciseLogIn(BaseModel):
 
 
 class WorkoutSessionIn(BaseModel):
-    userId: str
+    activityId: int | None = None  # Garmin activity id for strength_training
     startedAt: str | None = None  # ISO timestamp; backend defaults to NOW()
     name: str | None = None
     notes: str | None = None
@@ -44,8 +44,8 @@ def search_exercises(query: str | None = Query(default=None), muscleGroupId: int
 
 
 @router.get("/workouts")
-def list_workouts(limit: int = 50, offset: int = 0, userId: str | None = None):
-    return ctl.list_workouts(limit=limit, offset=offset, user_id=userId)
+def list_workouts(limit: int = 50, offset: int = 0):
+    return ctl.list_workouts(limit=limit, offset=offset)
 
 
 @router.get("/workouts/{workout_id}")
@@ -60,6 +60,16 @@ def get_workout(workout_id: int):
 def create_workout(payload: WorkoutSessionIn):
     return ctl.create_workout(payload.model_dump())
 
+class WorkoutSessionUpdateIn(WorkoutSessionIn):
+    pass
+
+@router.put("/workouts/{workout_id}")
+def update_workout(workout_id: int, payload: WorkoutSessionUpdateIn):
+    updated = ctl.update_workout(workout_id, payload.model_dump())
+    if not updated:
+        raise HTTPException(status_code=404, detail="Workout not found")
+    return updated
+
 
 @router.delete("/workouts/{workout_id}")
 def delete_workout(workout_id: int):
@@ -70,29 +80,50 @@ def delete_workout(workout_id: int):
 
 
 @router.get("/exercises/{exercise_id}/suggestion")
-def suggestion(exercise_id: int, userId: str):
-    return ctl.suggestion_for_next(exercise_definition_id=exercise_id, user_id=userId) or {}
+def suggestion(exercise_id: int):
+    return ctl.suggestion_for_next(exercise_definition_id=exercise_id, user_id=None) or {}
 
 
 @router.get("/exercises/{exercise_id}/stats")
-def exercise_stats(exercise_id: int, userId: str | None = None):
-    return ctl.exercise_stats(exercise_definition_id=exercise_id, user_id=userId)
+def exercise_stats(exercise_id: int):
+    return ctl.exercise_stats(exercise_definition_id=exercise_id, user_id=None)
 
 @router.get("/muscle-groups/{muscle_group_id}/weekly-volume")
-def muscle_group_weekly(muscle_group_id: int, weeks: int = 12, userId: str | None = None):
-    return ctl.muscle_group_weekly_volume(muscle_group_id=muscle_group_id, weeks=weeks, user_id=userId)
+def muscle_group_weekly(muscle_group_id: int, weeks: int = 12):
+    return ctl.muscle_group_weekly_volume(muscle_group_id=muscle_group_id, weeks=weeks, user_id=None)
 
 @router.get("/muscle-groups/{muscle_group_id}/exercise-contribution")
-def exercise_contribution(muscle_group_id: int, days: int = 30, userId: str | None = None):
-    return ctl.exercise_contribution_last_month(muscle_group_id=muscle_group_id, days=days, user_id=userId)
+def exercise_contribution(muscle_group_id: int, days: int = 30):
+    return ctl.exercise_contribution_last_month(muscle_group_id=muscle_group_id, days=days, user_id=None)
 
 @router.get("/muscle-groups/{muscle_group_id}/weekly-frequency")
-def weekly_frequency(muscle_group_id: int, weeks: int = 12, userId: str | None = None):
-    return ctl.weekly_training_frequency(muscle_group_id=muscle_group_id, weeks=weeks, user_id=userId)
+def weekly_frequency(muscle_group_id: int, weeks: int = 12):
+    return ctl.weekly_training_frequency(muscle_group_id=muscle_group_id, weeks=weeks, user_id=None)
 
 @router.get("/exercises/{exercise_id}/history")
-def exercise_history(exercise_id: int, limit: int = 20, userId: str | None = None):
-    return ctl.exercise_history(exercise_definition_id=exercise_id, limit=limit, user_id=userId)
+def exercise_history(exercise_id: int, limit: int = 20):
+    return ctl.exercise_history(exercise_definition_id=exercise_id, limit=limit, user_id=None)
+
+# Analytics
+@router.get("/analytics/exercises/{exercise_id}/e1rm")
+def exercise_e1rm(exercise_id: int):
+    return ctl.exercise_e1rm_progress(exercise_definition_id=exercise_id, user_id=None)
+
+@router.get("/analytics/overview")
+def workouts_overview(days: int = 90):
+    return ctl.workouts_overview(days=days, user_id=None)
+
+@router.get("/analytics/exercises/{exercise_id}/summary")
+def exercise_summary(exercise_id: int, days: int = 180):
+    return ctl.exercise_summary(exercise_definition_id=exercise_id, days=days, user_id=None)
+
+@router.get("/analytics/top-progress")
+def top_progress(days: int = 90, limit: int = 5):
+    return ctl.top_progress(days=days, limit=limit, user_id=None)
+
+@router.get("/analytics/correlations")
+def correlations(days: int = 90):
+    return ctl.strength_correlations(days=days, user_id=None)
 
 # Templates
 class StrengthTemplate(BaseModel):

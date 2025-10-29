@@ -109,7 +109,7 @@ const MetricCard = ({
   <span className="trend-text">{(resolvedChange != null || trend != null) ? getTrendText() : '—'}</span>
     </div>
 
-      <style jsx>{`
+  <style>{`
         .metric-card {
           background: linear-gradient(135deg, var(--gradient-from) 0%, var(--gradient-to) 100%);
           color: white;

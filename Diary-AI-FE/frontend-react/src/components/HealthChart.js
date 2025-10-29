@@ -486,7 +486,7 @@ const HealthChart = ({
         {renderChart()}
       </ResponsiveContainer>
 
-      <style jsx>{`
+  <style>{`
         .health-chart {
           width: 100%;
         }

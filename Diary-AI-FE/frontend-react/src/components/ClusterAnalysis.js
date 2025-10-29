@@ -259,7 +259,7 @@ const ClusterAnalysis = ({ data }) => {
         </div>
       </div>
 
-      <style jsx>{`
+  <style>{`
         .cluster-analysis {
           display: flex;
           flex-direction: column;

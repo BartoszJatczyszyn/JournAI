@@ -1,5 +1,5 @@
 import React from 'react';
-import { RangeControls } from '../ui';
+import { RangeControls } from 'shared/ui';
 
 const DashboardHeader = ({ title = 'Health Dashboard', subtitle = 'Your comprehensive health overview with AI-powered insights', dateRange, onSelectDays, availableDays: _availableDays }) => {
   return (

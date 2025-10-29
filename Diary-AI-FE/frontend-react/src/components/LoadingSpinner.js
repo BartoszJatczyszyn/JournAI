@@ -26,7 +26,7 @@ const LoadingSpinner = ({
       </div>
       {message && <div className="loading-message">{message}</div>}
 
-      <style jsx>{`
+  <style>{`
         .loading-container {
           display: flex;
           flex-direction: column;
@@ -228,7 +228,7 @@ export const SkeletonLoader = ({
     className={`skeleton ${className}`}
     style={{ width, height, borderRadius }}
   >
-    <style jsx>{`
+  <style>{`
       .skeleton {
         background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
         background-size: 200% 100%;
@@ -263,7 +263,7 @@ export const CardSkeleton = () => (
       </div>
     </div>
 
-    <style jsx>{`
+  <style>{`
       .card-skeleton {
         padding: 24px;
       }

@@ -92,7 +92,7 @@ const ErrorMessage = ({
         </div>
       )}
 
-      <style jsx>{`
+  <style>{`
         .error-message {
           border: 1px solid;
           border-radius: 12px;
@@ -273,7 +273,7 @@ export const NoDataMessage = ({ message, icon = "📊" }) => (
       Data will appear here once it's available
     </div>
 
-    <style jsx>{`
+  <style>{`
       .no-data-message {
         display: flex;
         flex-direction: column;
@@ -336,7 +336,7 @@ export const ToastError = ({ message, onClose, autoClose = true }) => {
         </button>
       )}
 
-      <style jsx>{`
+  <style>{`
         .toast-error {
           position: fixed;
           top: 20px;

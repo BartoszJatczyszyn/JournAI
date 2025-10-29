@@ -22,6 +22,29 @@ class StrengthService:
     def __init__(self, repo: IStrengthRepository) -> None:
         self.repo = repo
 
+    # --- helpers ---
+    @staticmethod
+    def _linear_regression(points: list[tuple[float, float]]) -> dict:
+        # points: [(x,y)] ; requires at least 2
+        if not points or len(points) < 2:
+            return {"slope": 0.0, "intercept": 0.0, "r2": 0.0}
+        n = float(len(points))
+        sum_x = sum(p[0] for p in points)
+        sum_y = sum(p[1] for p in points)
+        sum_xy = sum(p[0]*p[1] for p in points)
+        sum_xx = sum(p[0]*p[0] for p in points)
+        denom = n*sum_xx - sum_x*sum_x
+        if denom == 0:
+            return {"slope": 0.0, "intercept": 0.0, "r2": 0.0}
+        slope = (n*sum_xy - sum_x*sum_y) / denom
+        intercept = (sum_y - slope*sum_x) / n
+        # r^2
+        mean_y = sum_y / n
+        ss_tot = sum((p[1]-mean_y)**2 for p in points)
+        ss_res = sum((p[1] - (slope*p[0] + intercept))**2 for p in points)
+        r2 = (1 - (ss_res/ss_tot)) if ss_tot else 0.0
+        return {"slope": float(slope), "intercept": float(intercept), "r2": float(r2)}
+
     # Catalog
     def list_muscle_groups(self) -> list[dict]:
         return self.repo.list_muscle_groups()
@@ -40,8 +63,11 @@ class StrengthService:
     def get_workout(self, workout_id: int) -> Optional[dict]:
         return self.repo.get_workout(workout_id)
 
-    def list_workouts(self, *, limit: int = 50, offset: int = 0, user_id: str | None = None) -> list[dict]:
-        return self.repo.list_workouts(limit=limit, offset=offset, user_id=user_id)
+    def list_workouts(self, *, limit: int = 50, offset: int = 0) -> list[dict]:
+        return self.repo.list_workouts(limit=limit, offset=offset)
+
+    def update_workout(self, workout_id: int, payload: dict) -> dict:
+        return self.repo.update_workout(workout_id, payload)
 
     def delete_workout(self, workout_id: int) -> bool:
         return self.repo.delete_workout(workout_id)
@@ -71,8 +97,8 @@ class StrengthService:
         return mg_map
 
     # Suggestions
-    def suggestion_for_next(self, *, exercise_definition_id: int, user_id: str) -> Optional[dict]:
-        last = self.repo.last_exercise_log(exercise_definition_id, user_id)
+    def suggestion_for_next(self, *, exercise_definition_id: int) -> Optional[dict]:
+        last = self.repo.last_exercise_log(exercise_definition_id)
         if not last or not last.get("sets"):
             return None
         # Aggregate basic pattern: detect typical scheme (same reps/weight across working sets)
@@ -103,42 +129,164 @@ class StrengthService:
                 "sets": sets_count,
                 "reps": reps,
                 "weight": weight,
-                "startedAt": last.get("started_at"),
+                "startedAt": last.get("started_at") or last.get("start_time"),
                 "avgReps": round(avg_reps, 2),
                 "avgRPE": round(avg_rpe, 2),
             },
             "suggestions": suggestions,
         }
 
-    def exercise_stats(self, exercise_definition_id: int, user_id: str | None = None) -> dict:
+    def exercise_stats(self, exercise_definition_id: int) -> dict:
         # type: ignore[attr-defined]
         if hasattr(self.repo, "exercise_stats"):
-            return self.repo.exercise_stats(exercise_definition_id, user_id)  # type: ignore[misc]
+            return self.repo.exercise_stats(exercise_definition_id)  # type: ignore[misc]
         return {"series": []}
 
-    def muscle_group_weekly_volume(self, muscle_group_id: int, weeks: int = 12, user_id: str | None = None) -> dict:
+    def muscle_group_weekly_volume(self, muscle_group_id: int, weeks: int = 12) -> dict:
         if hasattr(self.repo, "muscle_group_weekly_volume"):
-            rows = self.repo.muscle_group_weekly_volume(muscle_group_id, weeks, user_id)  # type: ignore[misc]
+            rows = self.repo.muscle_group_weekly_volume(muscle_group_id, weeks)  # type: ignore[misc]
             return {"series": rows}
         return {"series": []}
 
-    def exercise_contribution_last_month(self, muscle_group_id: int, days: int = 30, user_id: str | None = None) -> dict:
+    def exercise_contribution_last_month(self, muscle_group_id: int, days: int = 30) -> dict:
         if hasattr(self.repo, "exercise_contribution_last_month"):
-            rows = self.repo.exercise_contribution_last_month(muscle_group_id, days, user_id)  # type: ignore[misc]
+            rows = self.repo.exercise_contribution_last_month(muscle_group_id, days)  # type: ignore[misc]
             return {"series": rows}
         return {"series": []}
 
-    def weekly_training_frequency(self, muscle_group_id: int, weeks: int = 12, user_id: str | None = None) -> dict:
+    def weekly_training_frequency(self, muscle_group_id: int, weeks: int = 12) -> dict:
         if hasattr(self.repo, "weekly_training_frequency"):
-            rows = self.repo.weekly_training_frequency(muscle_group_id, weeks, user_id)  # type: ignore[misc]
+            rows = self.repo.weekly_training_frequency(muscle_group_id, weeks)  # type: ignore[misc]
             return {"series": rows}
         return {"series": []}
 
-    def exercise_history(self, exercise_definition_id: int, limit: int = 20, user_id: str | None = None) -> dict:
+    def exercise_history(self, exercise_definition_id: int, limit: int = 20) -> dict:
         if hasattr(self.repo, "exercise_history"):
-            rows = self.repo.exercise_history(exercise_definition_id, limit, user_id)  # type: ignore[misc]
+            rows = self.repo.exercise_history(exercise_definition_id, limit)  # type: ignore[misc]
             return {"items": rows}
         return {"items": []}
+
+    # Aggregated analytics for dashboard and charts
+    def exercise_e1rm_progress(self, exercise_definition_id: int) -> dict:
+        if hasattr(self.repo, "exercise_e1rm_progress"):
+            rows = self.repo.exercise_e1rm_progress(exercise_definition_id)  # type: ignore[misc]
+            return {"series": rows}
+        return {"series": []}
+
+    def workouts_volume_series(self, days: int = 90) -> dict:
+        if hasattr(self.repo, "workouts_volume_series"):
+            rows = self.repo.workouts_volume_series(days)  # type: ignore[misc]
+            return {"series": rows}
+        return {"series": []}
+
+    def exercise_summary(self, exercise_definition_id: int, days: int = 180) -> dict:
+        # Summarize progress using e1RM time series: slope (per point index), r2, last PR, last PR date
+        if hasattr(self.repo, "exercise_e1rm_progress"):
+            series = self.repo.exercise_e1rm_progress(exercise_definition_id)  # type: ignore[misc]
+        else:
+            series = []
+        ys = [float(row.get("best_e1rm") or 0) for row in series]
+        points = [(float(i), y) for i, y in enumerate(ys) if y > 0]
+        reg = self._linear_regression(points)
+        last_pr = 0.0
+        last_pr_date = None
+        if ys:
+            max_val = max(ys)
+            last_pr = float(max_val)
+            # find last occurrence date of max
+            for row in reversed(series):
+                if float(row.get("best_e1rm") or 0) == max_val:
+                    last_pr_date = row.get("day")
+                    break
+        return {
+            "points": len(points),
+            "slope": round(reg["slope"], 4),
+            "r2": round(reg["r2"], 4),
+            "lastPR": round(last_pr, 2),
+            "lastPRDate": last_pr_date,
+        }
+
+    def top_progress(self, days: int = 90, limit: int = 5) -> dict:
+        # Compute slope per exercise and return top ascending trends
+        if hasattr(self.repo, "all_exercises_e1rm_progress"):
+            rows = self.repo.all_exercises_e1rm_progress(days)  # type: ignore[misc]
+        else:
+            rows = []
+        # Group by exercise id
+        by_ex: dict[int, list[dict]] = {}
+        for r in rows:
+            ex_id = int(r.get("exercise_definition_id"))
+            by_ex.setdefault(ex_id, []).append(r)
+        # Build id->name map
+        names = {ex["id"]: ex["name"] for ex in self.repo.list_exercises()}
+        items = []
+        for ex_id, series in by_ex.items():
+            ys = [float(row.get("best_e1rm") or 0) for row in series]
+            points = [(float(i), y) for i, y in enumerate(ys) if y > 0]
+            if len(points) < 3:
+                continue
+            reg = self._linear_regression(points)
+            if reg["slope"] <= 0:
+                continue
+            max_val = max(ys) if ys else 0.0
+            last_date = None
+            if ys:
+                for row in reversed(series):
+                    if float(row.get("best_e1rm") or 0) == max_val:
+                        last_date = row.get("day")
+                        break
+            items.append({
+                "exerciseId": ex_id,
+                "name": names.get(ex_id, f"Exercise {ex_id}"),
+                "slope": round(float(reg["slope"]), 4),
+                "r2": round(float(reg["r2"]), 4),
+                "lastPR": round(float(max_val), 2),
+                "lastPRDate": last_date,
+                "points": len(points),
+            })
+        items.sort(key=lambda x: x["slope"], reverse=True)
+        return {"items": items[: max(1, int(limit))]}
+
+    def correlations(self, days: int = 90) -> dict:
+        # Correlate daily total strength volume with basic training load proxies: logs_count and sets_count
+        if hasattr(self.repo, "workouts_volume_series"):
+            vol = self.repo.workouts_volume_series(days)  # type: ignore[misc]
+        else:
+            vol = []
+        if hasattr(self.repo, "daily_strength_counts"):
+            counts = self.repo.daily_strength_counts(days)  # type: ignore[misc]
+        else:
+            counts = []
+        vmap = {str(r["day"]): float(r.get("total_volume") or 0) for r in vol}
+        cmap = {str(r["day"]): {"logs": int(r.get("logs_count") or 0), "sets": int(r.get("sets_count") or 0)} for r in counts}
+        # Build aligned arrays
+        xs_logs, ys_logs = [], []
+        xs_sets, ys_sets = [], []
+        for day, v in vmap.items():
+            c = cmap.get(day)
+            if not c:
+                continue
+            xs_logs.append(v)
+            ys_logs.append(float(c["logs"]))
+            xs_sets.append(v)
+            ys_sets.append(float(c["sets"]))
+        def pearson(x, y):
+            n = len(x)
+            if n < 2:
+                return 0.0
+            sx = sum(x); sy = sum(y)
+            sxx = sum(a*a for a in x); syy = sum(b*b for b in y); sxy = sum(a*b for a,b in zip(x,y))
+            denom = (n*sxx - sx*sx) * (n*syy - sy*sy)
+            if denom <= 0:
+                return 0.0
+            return float((n*sxy - sx*sy) / (denom ** 0.5))
+        return {
+            "volume_vs_logs": round(pearson(xs_logs, ys_logs), 3),
+            "volume_vs_sets": round(pearson(xs_sets, ys_sets), 3),
+            "points": min(len(xs_logs), len(xs_sets)),
+            "scatter_logs": [{"x": x, "y": y} for x,y in zip(xs_logs, ys_logs)],
+            "scatter_sets": [{"x": x, "y": y} for x,y in zip(xs_sets, ys_sets)],
+        }
 
     # Templates
     def list_templates(self) -> list[dict]:

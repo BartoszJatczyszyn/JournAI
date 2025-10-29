@@ -183,7 +183,7 @@ const CorrelationHeatmap = ({
           <div className="legend-hint">Click a cell to highlight a pair</div>
         </div>
       )}
-      <style jsx>{`
+  <style>{`
         .corr-heatmap.mini { display:flex; flex-direction:column; gap:8px; }
         .heatmap-header { display:flex; justify-content:space-between; align-items:center; }
         .heatmap-title { font-size:0.9rem; font-weight:700; color:#f8fafc; }

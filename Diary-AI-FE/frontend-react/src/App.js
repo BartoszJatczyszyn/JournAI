@@ -3,32 +3,34 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Toaster } from 'react-hot-toast';
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
-import Dashboard from './pages/Dashboard';
-import Analytics from './pages/Analytics';
-import Predictions from './pages/Predictions';
-import Sleep from './pages/Sleep';
-import Sleeps from './pages/Sleeps';
-import SleepDetail from './pages/SleepDetail';
-import Days from './pages/Days';
-import DayDetail from './pages/DayDetail';
-import Today from './pages/Today';
-import Stress from './pages/Stress';
-import Activity from './pages/Activity';
-import ActivityDetail from './pages/ActivityDetail';
-import Running from './pages/Running';
-import Walking from './pages/Walking';
-import Cycling from './pages/Cycling';
-import Hiking from './pages/Hiking';
-import Swimming from './pages/Swimming';
-import Gym from './pages/Gym';
-import GymWorkouts from './pages/GymWorkouts';
-import StrengthWorkoutForm from './pages/StrengthWorkoutForm';
-import ExerciseAnalysis from './pages/ExerciseAnalysis';
-import MuscleGroupAnalysis from './pages/MuscleGroupAnalysis';
-import Insights from './pages/Insights';
-import Settings from './pages/Settings';
-import Assistant from './pages/Assistant';
-import { HealthDataProvider } from './context/HealthDataContext';
+import Dashboard from './features/dashboard/pages/Dashboard';
+import Analytics from './features/analytics/pages/Analytics';
+import Predictions from './features/predictions/pages/Predictions';
+import Sleep from './features/sleep/pages/Sleep';
+import Sleeps from './features/sleep/pages/Sleeps';
+import SleepDetail from './features/sleep/pages/SleepDetail';
+import Days from './features/days/pages/Days';
+import DayDetail from './features/days/pages/DayDetail';
+import Today from './features/today/pages/Today';
+import Stress from './features/stress/pages/Stress';
+import Activity from './features/activities/pages/Activity';
+import ActivityDetail from './features/activities/pages/ActivityDetail';
+import Running from './features/running/pages/Running';
+import Walking from './features/walking/pages/Walking';
+import Cycling from './features/cycling/pages/Cycling';
+import Hiking from './features/hiking/pages/Hiking';
+import Swimming from './features/swimming/pages/Swimming';
+import Gym from './features/gym/pages/Gym';
+import GymWorkouts from './features/gym/pages/GymWorkouts';
+import GymWorkoutDetail from './features/gym/pages/GymWorkoutDetail';
+import StrengthWorkoutForm from './features/strength/pages/StrengthWorkoutForm';
+import StrengthAnalytics from './features/strength/pages/StrengthAnalytics';
+import ExerciseAnalysis from './features/strength/pages/ExerciseAnalysis';
+import MuscleGroupAnalysis from './features/strength/pages/MuscleGroupAnalysis';
+import Insights from './features/insights/pages/Insights';
+import Settings from './features/settings/pages/Settings';
+import Assistant from './features/assistant/pages/Assistant';
+import { HealthDataProvider } from './app/providers/HealthDataProvider';
 import './App.css';
 import TooltipStyles from './components/TooltipStyles';
 
@@ -103,7 +105,9 @@ function App() {
                   <Route path="/swimming" element={<Swimming />} />
                   <Route path="/gym" element={<Gym />} />
                   <Route path="/gym/workouts" element={<GymWorkouts />} />
+                  <Route path="/gym/workouts/:id" element={<GymWorkoutDetail />} />
                   <Route path="/strength/workout/new" element={<StrengthWorkoutForm />} />
+                  <Route path="/strength/analytics" element={<StrengthAnalytics />} />
                   <Route path="/strength/exercise/:id" element={<ExerciseAnalysis />} />
                   <Route path="/strength/muscle/:id" element={<MuscleGroupAnalysis />} />
                   <Route path="/insights" element={<Insights />} />

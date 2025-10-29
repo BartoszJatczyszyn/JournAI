@@ -52,13 +52,12 @@ const Tooltip = ({ children, content, delay = 350, placement = 'top', maxWidth =
             border: '1px solid var(--glass-border)',
             backdropFilter: 'blur(12px) saturate(120%)',
             WebkitBackdropFilter: 'blur(12px) saturate(120%)',
-            boxShadow: 'var(--glass-shadow)',
             padding: '8px 10px',
             borderRadius: 6,
             fontSize: '0.70rem',
             lineHeight: 1.3,
             maxWidth,
-            boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
+            boxShadow: 'var(--glass-shadow, 0 4px 14px rgba(0,0,0,0.25))',
             pointerEvents: 'none'
           }}
         >

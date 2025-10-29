@@ -54,6 +54,12 @@ const Sidebar = ({ isOpen, onClose }) => {
       description: 'Exercise & movement'
     },
     {
+      path: '/gym',
+      icon: '🏋️',
+      label: 'Strength',
+      description: 'Workouts & analytics'
+    },
+    {
       path: '/insights',
       icon: '💡',
       label: 'Personalized Insights',
@@ -124,7 +130,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         </div>
       </aside>
 
-      <style jsx>{`
+  <style>{`
         .sidebar-overlay {
           position: fixed;
           top: 0;

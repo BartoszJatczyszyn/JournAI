@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useHealthData } from '../context/HealthDataContext';
+import { useHealthData } from 'context/HealthDataContext';
 
 const Navbar = ({ onToggleSidebar, onToggleDarkMode, darkMode }) => {
   const { loading, refreshAllData } = useHealthData();
@@ -113,7 +113,7 @@ const Navbar = ({ onToggleSidebar, onToggleDarkMode, darkMode }) => {
         </div>
       </div>
 
-      <style jsx>{`
+  <style>{`
         .navbar {
           background: rgba(255,255,255,0.08);
           border-bottom: 1px solid var(--glass-border);

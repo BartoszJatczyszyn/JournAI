@@ -192,7 +192,7 @@ const CorrelationMatrix = ({ data = [], maxItems = 10, minAbs = 0.3, selectedMet
         ))}
       </div>
 
-      <style jsx>{`
+  <style>{`
         .correlation-matrix {
           width: 100%;
         }
