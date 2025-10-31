@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useHealthData } from 'context/HealthDataContext';
+import { useHealthData } from 'app/providers/HealthDataProvider';
 import { sleepsAPI } from '../api';
 import { mmToHHMM, circularMeanMinutes, windowAround, circularRollingMedian } from 'utils/timeUtils';
 

@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { RangeControls } from 'shared/ui';
-import { useHealthData } from 'context/HealthDataContext';
+import { useHealthData } from 'app/providers/HealthDataProvider';
 import LoadingSpinner from 'components/LoadingSpinner';
 import ErrorMessage from 'components/ErrorMessage';
 // HealthChart is not used in this file
 // import HealthChart from '../components/HealthChart';
 import MetricCard from 'components/MetricCard';
+import WeeklyTrendsStress from '../components/WeeklyTrends';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 const CustomTooltip = ({ active, payload, label }) => {
@@ -319,6 +320,24 @@ const Stress = () => {
         </div>
       )}
 
+      {/* Weekly Trends (moved just after overview as requested) */}
+      <div className="weekly-trends">
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">Weekly Trends</h3>
+          </div>
+          <div className="card-content">
+            {(() => {
+              // Derive how many recent weeks to show from selected range (days)
+              const d = Number(analysisParams.days || 0);
+              // Roughly convert days -> weeks, clamp between 4 and 26
+              const weeks = d > 0 ? Math.min(26, Math.max(4, Math.ceil(d / 7))) : 12;
+              return <WeeklyTrendsStress pageSize={weeks} />;
+            })()}
+          </div>
+        </div>
+      </div>
+
       {/* Daily Stress Patterns */}
       {dailyChartData.length > 0 && (
         <div className="daily-patterns">
@@ -543,6 +562,7 @@ const Stress = () => {
             <h3 className="card-title">Stress Level Guide</h3>
             <p className="card-subtitle">Understanding your stress measurements</p>
           </div>
+          {/* Weekly Trends moved above */}
           <div className="guide-content">
             <div className="stress-level low">
               <div className="level-range">0-25</div>

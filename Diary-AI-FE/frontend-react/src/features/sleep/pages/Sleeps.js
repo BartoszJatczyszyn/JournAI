@@ -1,29 +1,31 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { sleepsAPI } from '../../sleep/api';
+import WeeklyTrendsSleep from '../components/WeeklyTrends';
+import { RangeControls } from 'shared/ui';
 
 const Sleeps = () => {
   const [sleeps, setSleeps] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(25);
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  // intentionally unused in this view
-  void setStartDate; void setEndDate;
+  const [daysRange, setDaysRange] = useState(30);
   const [total, setTotal] = useState(null);
 
   const loadSleeps = React.useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
+      // compute date range like in Days.js
+      const end = new Date();
+      const start = new Date();
+      start.setDate(end.getDate() - daysRange + 1);
+      const toISO = (d) => d.toISOString().slice(0,10);
+      const fetchLimit = Math.max(28, daysRange + 7); // small cushion for multi-sleeps
 
       const data = await sleepsAPI.getLatestSleeps({
-        limit,
-        page,
-        startDate: startDate || undefined,
-        endDate: endDate || undefined,
+        limit: fetchLimit,
+        startDate: toISO(start),
+        endDate: toISO(end),
       });
 
       if (data && typeof data === 'object' && Array.isArray(data.sleeps)) {
@@ -40,26 +42,27 @@ const Sleeps = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, startDate, endDate]);
+  }, [daysRange]);
 
   useEffect(() => {
     loadSleeps();
   }, [loadSleeps]);
 
-  // Accept either seconds (default) or minutes and format as "Xh Ym" or "Ym"
+  // Format duration as H:MM. Accepts seconds by default or minutes when unit='minutes'.
   const formatDuration = (value, unit = 'seconds') => {
     if (value == null) return '-';
+    const num = Number(value);
+    if (Number.isNaN(num)) return '-';
     let minutes;
-    if (unit === 'seconds') {
-      minutes = Math.round(value / 60);
-    } else if (unit === 'minutes') {
-      minutes = Math.round(value);
-    } else {
-      minutes = Math.round(value);
-    }
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+    if (unit === 'seconds') minutes = Math.round(num / 60);
+    else if (unit === 'minutes') minutes = Math.round(num);
+    else minutes = Math.round(num);
+    if (!Number.isFinite(minutes)) return '-';
+    const abs = Math.abs(minutes);
+    const hours = Math.floor(abs / 60);
+    const mins = abs % 60;
+    const sign = minutes < 0 ? '-' : '';
+    return `${sign}${hours}:${String(mins).padStart(2, '0')}`;
   };
 
   const getScoreColor = (score) => {
@@ -191,18 +194,14 @@ const Sleeps = () => {
               {total != null ? `${total} sessions` : `${sleeps.length} shown`}
             </div>
           </div>
-          <div className="liquid-control flex items-center gap-2" title="Change page size">
-            <label className="text-sm" style={{ color: 'inherit' }}>Page Size</label>
-            <select
-              value={limit}
-              onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
-              className="page-size-select"
-              aria-label="Page size"
-            >
-              {[10, 25, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
-            </select>
-          </div>
+          <RangeControls days={daysRange} onChangeDays={setDaysRange} />
         </div>
+  </div>
+
+  {/* Weekly Trends */}
+  <div className="mb-6">
+    {/* Show number of weeks based on selected range (approx weeks) */}
+    <WeeklyTrendsSleep pageSize={Math.max(1, Math.round(daysRange / 7))} />
   </div>
 
   {/* Error Message */}
@@ -320,30 +319,7 @@ const Sleeps = () => {
         </div>
 
   {/* Pagination */}
-        {sleeps.length > 0 && (
-          <div className="flex items-center justify-between mt-6">
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              Page {page}
-              {total != null ? ` • Total: ${total} sessions` : ''}
-            </div>
-            <div className="flex gap-2">
-              <button
-                className="liquid-button prev"
-                disabled={page <= 1}
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-              >
-                Previous
-              </button>
-              <button
-                className="liquid-button next"
-                disabled={total != null && page * limit >= total}
-                onClick={() => setPage(p => p + 1)}
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
+        {/* Pagination removed in favor of range selection */}
   <style>{`
         .sleep-page { max-width: 1200px; margin: 0 auto; padding: 24px; }
         .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid #e2e8f0; }
@@ -385,16 +361,6 @@ const Sleeps = () => {
       border-color: rgba(255,255,255,0.12);
       color: #ffffff;
     }
-    .page-size-select {
-      appearance: none;
-      -webkit-appearance: none;
-      padding: 6px 8px;
-      border-radius: 8px;
-      background: rgba(255,255,255,0.06);
-      color: #f8fafc;
-      border: 1px solid rgba(255,255,255,0.08);
-    }
-    .dark .page-size-select { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.12); color: #ffffff; }
     /* Liquid style for pagination buttons */
     .liquid-button {
       padding: 8px 12px;

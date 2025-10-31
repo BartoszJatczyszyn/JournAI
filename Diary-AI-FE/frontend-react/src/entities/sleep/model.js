@@ -52,6 +52,10 @@ export function mapSleepItemDtoToModel(dto) {
   avg_sleep_rr: dto.avg_sleep_rr ?? dto.avg_respiration ?? dto.respiratory_rate ?? null,
   respiratory_rate: dto.avg_sleep_rr ?? dto.avg_respiration ?? dto.respiratory_rate ?? null,
   avg_sleep_stress: dto.avg_sleep_stress ?? dto.stress_avg ?? dto.stress ?? null,
+    // SpO2 (blood oxygen) metrics
+    avg_spo2: dto.avg_spo2 ?? dto.spo2_avg ?? dto.avg_spo2_pct ?? dto.spo2_avg_pct ?? null,
+    highest_spo2: dto.highest_spo2 ?? dto.spo2_highest ?? dto.max_spo2 ?? null,
+    lowest_spo2: dto.lowest_spo2 ?? dto.spo2_lowest ?? dto.min_spo2 ?? null,
   };
 }
 

@@ -180,7 +180,7 @@ export const useActivityAggregates = (activities, opts = {}) => {
   // Weekly grouping (last 8 weeks) for summary / average pace
   const weeklyGroups = useMemo(() => {
     // weekKey -> aggregate record including daily distance map
-    const map = new Map(); // key => { distance, steps, calories, durationMin, daily: Map<dateStr, {distance}> }
+  const map = new Map(); // key => { distance, steps, calories, durationMin, daily: Map<dateStr, {distance}>, … }
     activities.forEach(a => {
       if (!a.start_time) return;
       const dt = new Date(a.start_time);
@@ -192,7 +192,34 @@ export const useActivityAggregates = (activities, opts = {}) => {
       const week = 1 + Math.round(((tmp - firstThursday) / 86400000 - 3) / 7);
       const year = tmp.getUTCFullYear();
       const key = `${year}-W${String(week).padStart(2,'0')}`;
-      if (!map.has(key)) map.set(key, { distance:0, steps:null, calories:0, durationMin:0, daily:new Map(), hrWeighted:0, hrDuration:0, trainingLoad:null, trainingLoadDerived:0, derivedSamples:0, trainingEffectVals:[], anaerobicEffectVals:[], paceSum:0, paceCount:0 });
+      if (!map.has(key)) map.set(key, {
+        distance: 0,
+        steps: null,
+        calories: 0,
+        durationMin: 0,
+        daily: new Map(),
+        hrWeighted: 0,
+        hrDuration: 0,
+        trainingLoad: null,
+        trainingLoadDerived: 0,
+        derivedSamples: 0,
+        trainingEffectVals: [],
+        anaerobicEffectVals: [],
+        paceSum: 0,
+        paceCount: 0,
+        // sport-specific accumulators (duration-weighted)
+        spmWeighted: 0, spmDur: 0, // running steps/min cadence
+        gctWeighted: 0, gctDur: 0, // ground contact time (ms)
+        verticalRatioWeighted: 0, verticalRatioDur: 0, // vertical ratio/oscillation
+        speedKmhWeighted: 0, speedDur: 0, // cycling speed (km/h)
+        powerWeighted: 0, powerDur: 0, // cycling power (W)
+        cadenceRpmWeighted: 0, cadenceDur: 0, // cycling cadence (rpm)
+        elevationGainM: 0, // total elevation gain in meters
+        swolfWeighted: 0, swolfDur: 0, // swimming SWOLF
+        strokeRateWeighted: 0, strokeRateDur: 0, // swimming stroke rate (strokes/min)
+        // running step length (prefer weighting by steps, fallback to duration)
+        stepLenWeighted: 0, stepLenWeight: 0,
+      });
         const rec = map.get(key);
   const dist = Number(a.distance_km) || 0;
   rec.distance += dist;
@@ -217,6 +244,151 @@ export const useActivityAggregates = (activities, opts = {}) => {
         rec.hrWeighted += Number(a.avg_hr) * Number(a.duration_min);
         rec.hrDuration += Number(a.duration_min);
       }
+      // Duration to use as weight for averages (minutes)
+      const wDur = (durMin != null && Number.isFinite(durMin) && durMin > 0) ? durMin : 0;
+
+      // Running: steps per minute (cadence)
+      try {
+        let spm = toNumberSafe(
+          a.avg_steps_per_min
+          ?? a.avgStepsPerMin
+          ?? a.steps_per_min
+          ?? a.cadence_spm
+          ?? a.avg_run_cadence
+          ?? a.run_cadence
+          ?? a.avg_cadence
+          ?? a.average_cadence
+          ?? a.cadence
+        );
+        if (spm == null) {
+          const stepsVal = pickSteps(a) ?? findNumericFieldByPattern(a, ['step','steps','step_count','total_steps','daily_steps']);
+          if (stepsVal != null && wDur > 0) spm = Number(stepsVal) / wDur;
+        }
+        if (spm != null && Number.isFinite(spm) && wDur > 0) {
+          rec.spmWeighted += spm * wDur;
+          rec.spmDur += wDur;
+        }
+      } catch (e) { /* ignore cadence calc */ }
+
+      // Running: Ground Contact Time (ms)
+      try {
+        const gct = toNumberSafe(
+          a.avg_ground_contact_time_ms
+          ?? a.avg_ground_contact_time
+          ?? a.ground_contact_time
+          ?? a.gct
+          ?? findNumericFieldByPattern(a, ['ground[_A-Za-z]*contact','\bgct\b'])
+        );
+        if (gct != null && Number.isFinite(gct) && wDur > 0) {
+          rec.gctWeighted += gct * wDur;
+          rec.gctDur += wDur;
+        }
+      } catch (e) { /* ignore gct calc */ }
+
+      // Running: Vertical Ratio / Oscillation
+      try {
+        const vr = toNumberSafe(
+          a.avg_vertical_ratio
+          ?? a.vertical_ratio
+          ?? a.avg_vertical_oscillation
+          ?? a.vertical_oscillation
+          ?? a.avg_vertical_osc
+          ?? a.avg_vertical_ratio_pct
+          ?? findNumericFieldByPattern(a, ['vertical[_A-Za-z]*ratio','vertical[_A-Za-z]*osc'])
+        );
+        if (vr != null && Number.isFinite(vr) && wDur > 0) {
+          rec.verticalRatioWeighted += vr * wDur;
+          rec.verticalRatioDur += wDur;
+        }
+      } catch (e) { /* ignore vertical ratio */ }
+
+      // Cycling: Avg speed (km/h)
+      try {
+        let speedKmh = toNumberSafe(a.avg_speed_kmh ?? a.avg_speed_km_h ?? a.speed_kmh ?? a.avg_speed);
+        if ((speedKmh == null || !Number.isFinite(speedKmh))) {
+          const ms = toNumberSafe(a.avg_speed_ms ?? a.speed_ms);
+          if (ms != null && Number.isFinite(ms)) speedKmh = ms * 3.6;
+        }
+        if ((speedKmh == null || !Number.isFinite(speedKmh)) && dist > 0 && wDur > 0) {
+          speedKmh = dist / (wDur / 60.0);
+        }
+        if (speedKmh != null && Number.isFinite(speedKmh) && wDur > 0) {
+          rec.speedKmhWeighted += speedKmh * wDur;
+          rec.speedDur += wDur;
+        }
+      } catch (e) { /* ignore speed calc */ }
+
+      // Cycling: Power (W)
+      try {
+        const pwr = toNumberSafe(a.avg_power ?? a.power_avg ?? a.average_power ?? a.power ?? findNumericFieldByPattern(a, ['^np$','normalized[_A-Za-z]*power','\bpower\b']));
+        if (pwr != null && Number.isFinite(pwr) && wDur > 0) {
+          rec.powerWeighted += pwr * wDur;
+          rec.powerDur += wDur;
+        }
+      } catch (e) { /* ignore power */ }
+
+      // Cycling: Cadence (rpm)
+      try {
+        const rpm = toNumberSafe(a.avg_cadence ?? a.cadence_avg ?? a.cadence_rpm ?? a.cadence);
+        if (rpm != null && Number.isFinite(rpm) && wDur > 0) {
+          rec.cadenceRpmWeighted += rpm * wDur;
+          rec.cadenceDur += wDur;
+        }
+      } catch (e) { /* ignore cadence rpm */ }
+
+      // Cycling: Elevation gain (m)
+      try {
+        const elev = toNumberSafe(a.elevation_gain_m ?? a.elevation_gain ?? a.total_ascent ?? a.ascent ?? a.ascent_m);
+        if (elev != null && Number.isFinite(elev)) {
+          rec.elevationGainM += elev;
+        }
+      } catch (e) { /* ignore elevation */ }
+
+      // Swimming: SWOLF and Stroke Rate
+      try {
+        const swolf = toNumberSafe(a.swolf ?? a.avg_swolf ?? a.swim_swolf);
+        if (swolf != null && Number.isFinite(swolf) && wDur > 0) {
+          rec.swolfWeighted += swolf * wDur;
+          rec.swolfDur += wDur;
+        }
+      } catch (e) { /* ignore swolf */ }
+      try {
+        const srate = toNumberSafe(a.stroke_rate ?? a.avg_stroke_rate ?? a.strokes_per_min);
+        if (srate != null && Number.isFinite(srate) && wDur > 0) {
+          rec.strokeRateWeighted += srate * wDur;
+          rec.strokeRateDur += wDur;
+        }
+      } catch (e) { /* ignore stroke rate */ }
+
+      // Running: Step length (meters) from various possible fields; normalize units
+      try {
+        let stepLen = null;
+        let unit = 'm'; // 'm' | 'cm' | 'auto'
+        // Prefer explicit unit-suffixed fields first
+        if (a.avg_step_length_m != null) { stepLen = toNumberSafe(a.avg_step_length_m); unit = 'm'; }
+        else if (a.step_length_m != null) { stepLen = toNumberSafe(a.step_length_m); unit = 'm'; }
+        else if (a.avg_step_length_cm != null) { stepLen = toNumberSafe(a.avg_step_length_cm); unit = 'cm'; }
+        else if (a.step_length_cm != null) { stepLen = toNumberSafe(a.step_length_cm); unit = 'cm'; }
+        else if (a.avg_stride_length != null) { stepLen = toNumberSafe(a.avg_stride_length); unit = 'auto'; }
+        else if (a.stride_length != null) { stepLen = toNumberSafe(a.stride_length); unit = 'auto'; }
+        else if (a.avg_step_length != null) { stepLen = toNumberSafe(a.avg_step_length); unit = 'auto'; }
+        else {
+          // Fallback: scan generically for step/stride length fields
+          const guessed = findNumericFieldByPattern(a, ['step[_A-Za-z]*length','stride[_A-Za-z]*length']);
+          if (guessed != null) { stepLen = guessed; unit = 'auto'; }
+        }
+        if (stepLen != null && Number.isFinite(stepLen)) {
+          // Normalize to meters
+          if (unit === 'cm' || (unit === 'auto' && stepLen > 5)) stepLen = stepLen / 100.0;
+          // Prefer weighting by actual steps if available; else duration
+          const stepsVal = pickSteps(a) ?? findNumericFieldByPattern(a, ['step','steps','step_count','total_steps']);
+          const weight = Number.isFinite(Number(stepsVal)) && Number(stepsVal) > 0 ? Number(stepsVal) : wDur;
+          if (weight > 0) {
+            rec.stepLenWeighted += stepLen * weight;
+            rec.stepLenWeight += weight;
+          }
+        }
+      } catch (e) { /* ignore step length */ }
         // Support both snake_case and camelCase training load field names
         let tl = pickTrainingLoad(a);
         if (tl == null) {
@@ -315,7 +487,43 @@ export const useActivityAggregates = (activities, opts = {}) => {
   // If source provided per-activity paces, prefer their average for the week's avgPace
   const avgPaceFromSource = vals.paceCount ? (vals.paceSum / vals.paceCount) : null;
   const finalAvgPace = avgPaceFromSource != null ? avgPaceFromSource : avgPace;
-  return { week, distance: vals.distance, steps: vals.steps, calories: vals.calories, durationMin: vals.durationMin, avgPace: finalAvgPace, dailyDistanceSeries, avgHr, trainingLoad: trainingLoadFinal, trainingLoadSource, trainingEffect, anaerobicEffect, activeDaysCount };
+  // Compute weekly duration-weighted averages for sport-specific metrics
+  const avgStepsPerMin = vals.spmDur > 0 ? (vals.spmWeighted / vals.spmDur) : null;
+  const avgGctMs = vals.gctDur > 0 ? (vals.gctWeighted / vals.gctDur) : null;
+  const avgSpeedKmh = vals.speedDur > 0 ? (vals.speedKmhWeighted / vals.speedDur) : null;
+  const avgPowerW = vals.powerDur > 0 ? (vals.powerWeighted / vals.powerDur) : null;
+  const avgCadenceRpm = vals.cadenceDur > 0 ? (vals.cadenceRpmWeighted / vals.cadenceDur) : null;
+  const avgSwolf = vals.swolfDur > 0 ? (vals.swolfWeighted / vals.swolfDur) : null;
+  const avgStrokeRate = vals.strokeRateDur > 0 ? (vals.strokeRateWeighted / vals.strokeRateDur) : null;
+  const avgVerticalRatio = vals.verticalRatioDur > 0 ? (vals.verticalRatioWeighted / vals.verticalRatioDur) : null;
+  const avgStepLengthM = vals.stepLenWeight > 0 ? (vals.stepLenWeighted / vals.stepLenWeight) : null;
+
+  return {
+    week,
+    distance: vals.distance,
+    steps: vals.steps,
+    calories: vals.calories,
+    durationMin: vals.durationMin,
+    avgPace: finalAvgPace,
+    dailyDistanceSeries,
+    avgHr,
+    trainingLoad: trainingLoadFinal,
+    trainingLoadSource,
+    trainingEffect,
+    anaerobicEffect,
+    activeDaysCount,
+    // sport-specific weekly aggregates
+    avgStepsPerMin,
+    avgGctMs,
+    avgSpeedKmh,
+    avgPowerW,
+    avgCadenceRpm,
+    elevationGainM: vals.elevationGainM || 0,
+    avgSwolf,
+    avgStrokeRate,
+    avgVerticalRatio,
+    avgStepLengthM,
+  };
     });
     // Compute streak of consecutive weeks that have avgPace available (preferred)
     let streak = 0;

@@ -6,6 +6,7 @@ import TrendComparison from '../../../components/TrendComparison';
 // import SegmentedControl from '../components/SegmentedControl';
 // Sparkline no longer used for weekly distance/pace (replaced by enhanced charts)
 import WeeklyDistanceChart from '../../../components/WeeklyDistanceChart';
+import WeeklyTrendsRunning from '../components/WeeklyTrends';
 import WeeklyPaceChart from '../../../components/WeeklyPaceChart';
 import MetricCard from '../../../components/MetricCard';
 // CorrelationMatrix intentionally not imported here to avoid duplicate display; full styled list used instead
@@ -521,6 +522,63 @@ const Running = () => {
         </div>
       </div>
       <div className="page-content space-y-6">
+        <div className="card">
+          <div className="card-header"><h3 className="card-title">Weekly Trends</h3></div>
+          <div className="card-content"><WeeklyTrendsRunning activities={(() => {
+            // Enrich client activities with server metrics when available (cadence, GCT, vertical ratio, step length)
+            try {
+              const runs = Array.isArray(runningAnalysis?.runs) ? runningAnalysis.runs : null;
+              if (!runs || runs.length === 0) return runningActivities;
+              const byId = new Map();
+              const byTime = new Map();
+              runs.forEach(r => {
+                if (r == null) return;
+                const id = r.id ?? r.activity_id ?? r.activityId ?? null;
+                const t = r.start_time ?? r.started_at ?? r.date ?? null;
+                if (id != null) byId.set(String(id), r);
+                if (t) {
+                  try { const k = new Date(t).toISOString(); byTime.set(k, r); } catch (e) { /* ignore */ }
+                }
+              });
+              return runningActivities.map(a => {
+                let src = null;
+                const aid = a.activity_id ?? a.id ?? a.activityId ?? null;
+                if (aid != null && byId.has(String(aid))) src = byId.get(String(aid));
+                if (!src && a.start_time) {
+                  try { const k = new Date(a.start_time).toISOString(); if (byTime.has(k)) src = byTime.get(k); } catch (e) { /* ignore */ }
+                }
+                if (!src) return a;
+                // merge only relevant fields; keep originals if already present
+                const merged = { ...a };
+                const take = (kList) => {
+                  for (const k of kList) { if (src[k] != null) return src[k]; }
+                  return null;
+                };
+                merged.avg_steps_per_min = a.avg_steps_per_min ?? take(['avg_steps_per_min','avgStepsPerMin','steps_per_min']);
+                merged.avg_ground_contact_time = a.avg_ground_contact_time ?? take(['avg_ground_contact_time','avg_ground_contact_time_ms','gct']);
+                merged.avg_vertical_ratio = a.avg_vertical_ratio ?? take(['avg_vertical_ratio','avg_vertical_ratio_pct']);
+                merged.avg_vertical_oscillation = a.avg_vertical_oscillation ?? take(['avg_vertical_oscillation','vertical_oscillation']);
+                // Map various server-provided step length keys into a unified avg_step_length on the activity
+                merged.avg_step_length = a.avg_step_length ?? take([
+                  'avg_step_length',
+                  'avg_step_length_m',
+                  'avg_step_length_cm',
+                  'step_length',
+                  'step_length_m',
+                  'step_length_cm',
+                  'avg_stride_length',
+                  'stride_length'
+                ]);
+                // ascent/descent
+                merged.ascent = a.ascent ?? take(['ascent','total_ascent','elevation_gain','elevation_gain_m']);
+                merged.descent = a.descent ?? take(['descent','total_descent','elevation_loss','elevation_loss_m']);
+                return merged;
+              });
+            } catch (e) {
+              return runningActivities;
+            }
+          })()} /></div>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
                     <div className="md:col-span-2 flex flex-col gap-4">
             <MetricCard
@@ -533,7 +591,7 @@ const Running = () => {
               tooltip={`Sum of running distance over the selected ${periodDays}‑day window`}
             />
             <MetricCard
-              title={`Active Minutes (${periodDays}d)`}
+              title={`Active Duration (${periodDays}d)`}
               value={((periodTotals.durationMin || 0) / 60).toFixed(1)}
               unit="h"
               icon="⏱️"

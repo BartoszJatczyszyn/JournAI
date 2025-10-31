@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Button } from 'shared/ui';
 import { API_BASE_URL } from 'infrastructure/api';
-import { useHealthData } from 'context/HealthDataContext';
+import { useHealthData } from 'app/providers/HealthDataProvider';
 import LoadingSpinner from 'components/LoadingSpinner';
 import ErrorMessage from 'components/ErrorMessage';
 import HealthChart from 'components/HealthChart';

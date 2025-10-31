@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { useHealthData } from 'context/HealthDataContext';
+import { useHealthData } from 'app/providers/HealthDataProvider';
 import LoadingSpinner from '../../../components/LoadingSpinner';
 import ErrorMessage from '../../../components/ErrorMessage';
 import { Button } from 'shared/ui';
@@ -600,7 +600,9 @@ const Activity = () => {
   // Use shared formatter for durations (MM:SS or H:MM:SS)
   const formatHoursMinutes = (mins) => {
     try {
-      const out = formatDuration(mins);
+      // Explicitly treat the input as minutes to avoid the auto-detection
+      // heuristic (which sometimes interprets large minute values as seconds).
+      const out = formatDuration(mins, 'minutes');
       return out || '0:00';
     } catch (e) {
       return '0:00';
@@ -712,7 +714,7 @@ const Activity = () => {
           {/* Overview Metrics (Sleep-style) */}
           <div className="overview-metrics">
               <MetricCard
-              title={`Active Minutes (${displayLabel})`}
+              title={`Active Duration (${displayLabel})`}
               value={formatHoursMinutes(periodTotals.durationMin)}
               unit=""
               icon="⏱️"

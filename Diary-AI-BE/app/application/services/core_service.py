@@ -48,6 +48,24 @@ class CoreService:
           SELECT MAX(day) AS day
           FROM garmin_daily_summaries
           WHERE NOT (COALESCE(steps,0)=0 AND COALESCE(calories_burned,0)=0)
+        ),
+        hr_stats AS (
+          SELECT 
+            DATE(ts) AS day,
+            AVG(bpm) AS avg_hr,
+            MIN(bpm) AS min_hr,
+            MAX(bpm) AS max_hr,
+            STDDEV(bpm) AS hr_variability
+          FROM garmin_heart_rate_data
+          GROUP BY DATE(ts)
+        ),
+        rr_stats AS (
+          SELECT 
+            DATE(ts) AS day,
+            AVG(rr) AS avg_rr,
+            STDDEV(rr) AS rr_variability
+          FROM garmin_respiratory_rate_data
+          GROUP BY DATE(ts)
         )
         SELECT 
           g.day,
@@ -55,6 +73,23 @@ class CoreService:
           g.calories_burned AS calories,
           g.resting_heart_rate AS rhr,
           g.stress_avg,
+                    -- Pulse oximetry and body battery (from daily summaries)
+                    g.spo2_avg,
+                    g.body_battery_min,
+                    g.body_battery_max,
+          -- Distances
+          g.distance_meters,
+          g.activities_distance,
+          -- Activity minutes
+          g.moderate_activity_time,
+          g.vigorous_activity_time,
+          (COALESCE(g.moderate_activity_time,0) + COALESCE(g.vigorous_activity_time,0)) AS intensity_time,
+          -- Monitoring summaries
+          hr_stats.avg_hr,
+          hr_stats.min_hr,
+          hr_stats.max_hr,
+          rr_stats.avg_rr,
+          -- Sleep + journal
           COALESCE(s.sleep_score, 0) AS sleep_score,
           (s.sleep_duration_seconds/60.0) AS time_in_bed_minutes,
           d.mood,
@@ -63,6 +98,8 @@ class CoreService:
         JOIN last_valid_day lvd ON g.day <= lvd.day
         LEFT JOIN garmin_sleep_sessions s ON g.day = s.day
         LEFT JOIN daily_journal d ON g.day = d.day
+        LEFT JOIN hr_stats ON g.day = hr_stats.day
+        LEFT JOIN rr_stats ON g.day = rr_stats.day
         WHERE g.day >= lvd.day - (%s - 1) * INTERVAL '1 day'
         ORDER BY g.day DESC
         """
@@ -77,13 +114,32 @@ class CoreService:
                 "calories",
                 "rhr",
                 "stress_avg",
+                "spo2_avg",
+                "body_battery_min",
+                "body_battery_max",
                 "sleep_score",
                 "time_in_bed_minutes",
                 "mood",
                 "energy",
+                # New fields: default to None when missing (FE handles gracefully)
+                "distance_meters",
+                "activities_distance",
+                "moderate_activity_time",
+                "vigorous_activity_time",
+                "intensity_time",
+                "avg_hr",
+                "min_hr",
+                "max_hr",
+                "avg_rr",
             ]:
                 if item.get(k) is None:
-                    item[k] = 0 if k not in ("mood", "energy") else None
+                    # Keep NULL for optional metrics; preserve existing 0 defaults for base KPIs
+                    if k in ("mood", "energy"):
+                        item[k] = None
+                    elif k in ("distance_meters","activities_distance","moderate_activity_time","vigorous_activity_time","intensity_time","avg_hr","min_hr","max_hr","avg_rr","spo2_avg","body_battery_min","body_battery_max"):
+                        item[k] = None
+                    else:
+                        item[k] = 0
             if "energy_level" not in item:
                 item["energy_level"] = item.get("energy")
             for k, v in list(item.items()):

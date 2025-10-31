@@ -6,6 +6,7 @@ import { useStrengthBackend } from 'hooks';
 import { activitiesAPI } from '../../../infrastructure/api';
 import MetricCard from 'components/MetricCard';
 import TonnageTimeline from 'components/TonnageTimeline';
+import WeeklyTrendsGym from '../components/WeeklyTrends';
 import Volume1RMScatter from 'components/Volume1RMScatter';
 import Sparkline from 'components/Sparkline';
 import LoadingSpinner from 'components/LoadingSpinner';
@@ -240,6 +241,10 @@ const Gym = () => {
       </div>
 
       <div className="page-content space-y-6">
+        <div className="card">
+          <div className="card-header"><h3 className="card-title">Weekly Trends</h3></div>
+          <div className="card-content"><WeeklyTrendsGym /></div>
+        </div>
         {busy && <LoadingSpinner message="Loading activities..." />}
         {error && <ErrorMessage message={error} />}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6">

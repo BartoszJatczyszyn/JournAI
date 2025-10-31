@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Button } from 'shared/ui';
-import { useHealthData } from 'context/HealthDataContext';
+import { useHealthData } from 'app/providers/HealthDataProvider';
 import LoadingSpinner from '../../../components/LoadingSpinner';
 import ErrorMessage from '../../../components/ErrorMessage';
 import DashboardHeader from '../../../components/dashboard/DashboardHeader';

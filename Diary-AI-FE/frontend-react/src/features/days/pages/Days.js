@@ -5,6 +5,7 @@ import ErrorMessage from '../../../components/ErrorMessage';
 import { healthAPI2, journalAPI } from 'infrastructure/api';
 import { sleepsAPI } from 'features/sleep/api';
 import DayCard from '../../../components/DayCard';
+import WeeklyTrendsDays from '../components/WeeklyTrends';
 import CorrelationHeatmap from '../../../components/CorrelationHeatmap';
 import TopCorrelationPairs from '../../../components/TopCorrelationPairs';
 import { RangeControls } from 'shared/ui';
@@ -298,7 +299,7 @@ const Days = () => {
   if (error && rows.length === 0) return <ErrorMessage message={error} />;
 
   return (
-    <div className="sleep-page fade-in">
+  <div className="sleep-page fade-in">
       <div className="page-header" style={{ marginTop: 8, marginBottom: 24 }}>
         <div className="header-content">
           <h1 className="page-title">
@@ -348,6 +349,12 @@ const Days = () => {
             color="#34d399"
           />
         </div>
+      </div>
+
+      {/* Move Daily Metrics Weekly below header and metrics */}
+      <div className="card" style={{ marginBottom: 18 }}>
+        <div className="card-header"><h3 className="card-title">Daily Metrics Weekly</h3></div>
+        <div className="card-content"><WeeklyTrendsDays days={daysRange} /></div>
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden card" style={{ padding:16 }}>

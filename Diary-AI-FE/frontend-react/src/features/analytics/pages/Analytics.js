@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { RangeControls } from 'shared/ui';
 import Tooltip from 'components/Tooltip';
-import { useHealthData } from 'context/HealthDataContext';
+import { useHealthData } from 'app/providers/HealthDataProvider';
 // LoadingSpinner and ErrorMessage are not used in this file
 import CorrelationMatrix from 'components/CorrelationMatrix';
 import CorrelationHeatmap from 'components/CorrelationHeatmap';

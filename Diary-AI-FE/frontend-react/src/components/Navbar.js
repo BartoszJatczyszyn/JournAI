@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useHealthData } from 'context/HealthDataContext';
+import { useHealthData } from 'app/providers/HealthDataProvider';
 
 const Navbar = ({ onToggleSidebar, onToggleDarkMode, darkMode }) => {
   const { loading, refreshAllData } = useHealthData();

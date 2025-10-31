@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 // Link import removed (not used in this view)
 import { useActivityAggregates } from 'hooks';
 import WeeklyDistanceChart from '../../../components/WeeklyDistanceChart';
+import WeeklyTrendsHiking from '../components/WeeklyTrends';
 import WeeklyPaceChart from '../../../components/WeeklyPaceChart';
 import MetricCard from '../../../components/MetricCard';
 import PaceHrChart from '../../../components/PaceHrChart';
@@ -136,12 +137,16 @@ const Hiking = () => {
         </div>
       </div>
       <div className="page-content space-y-6">
+        <div className="card">
+          <div className="card-header"><h3 className="card-title">Weekly Trends</h3></div>
+          <div className="card-content"><WeeklyTrendsHiking activities={sportActivities} /></div>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
           <div className="md:col-span-2 flex flex-col gap-4">
             <MetricCard title={`Distance (${periodDays}d)`} value={(periodTotals.distance || 0).toFixed(2)} unit="km" icon="🥾" color="indigo" subtitle={`Avg ${avgPerDay.distance.toFixed(2)} km/day · ${displayedWeeks.length} w`} tooltip={`Sum of hiking distance over the selected ${periodDays}‑day window`} />
             <MetricCard title="Rolling Pace (4w)" value={(() => { const raw = weeklyGroups[weeklyGroups.length-1]?.rollingAvgPace4; const formatted = raw != null ? formatPaceMinPerKm(raw) : '-'; return raw != null ? `${formatted}` : '-'; })()} unit="Avg Pace" icon="🥾" color="green" subtitle={`Active days: ${aggregates.activeDays} · Streak ${weeklyGroups[weeklyGroups.length-1]?.streakUp ?? 0}`} tooltip={`Latest 4-week rolling pace (lower is better).`} />
             <MetricCard title={dateRangeMode==='explicit' ? 'Hikes (range)' : `Hikes (${periodDays}d)`} value={String(sportActivities.length)} unit="hikes" icon="🗻" color="blue" subtitle={`Avg ${ (sportActivities.length / Math.max(1, periodDays)).toFixed(2) } hikes/day`} tooltip={`Average hikes per day over the selected ${dateRangeMode==='explicit'?'explicit date range':periodDays+'‑day window'} (client-side)`} />
-            <MetricCard title={`Active Minutes (${periodDays}d)`} value={((periodTotals.durationMin || 0) / 60).toFixed(1)} unit="h" icon="⏱️" color="yellow" subtitle={`Avg ${((avgPerDay.durationMin || 0) / 60).toFixed(1)} h/day`} tooltip={`Sum of activity durations over the selected ${periodDays}‑day window (converted to hours)`} />
+            <MetricCard title={`Active Duration (${periodDays}d)`} value={((periodTotals.durationMin || 0) / 60).toFixed(1)} unit="h" icon="⏱️" color="yellow" subtitle={`Avg ${((avgPerDay.durationMin || 0) / 60).toFixed(1)} h/day`} tooltip={`Sum of activity durations over the selected ${periodDays}‑day window (converted to hours)`} />
           </div>
 
           <div className="card md:col-span-5">
